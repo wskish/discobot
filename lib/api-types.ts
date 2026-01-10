@@ -36,6 +36,7 @@ export interface Agent {
 	agentType: string; // references SupportedAgentType.id
 	systemPrompt?: string;
 	mcpServers?: MCPServer[];
+	isDefault?: boolean;
 }
 
 export interface MCPServerStdio {

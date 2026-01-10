@@ -146,6 +146,13 @@ class ApiClient {
 		return this.fetch<Agent>(`/agents/${id}/duplicate`, { method: "POST" });
 	}
 
+	async setDefaultAgent(id: string): Promise<Agent> {
+		return this.fetch<Agent>("/agents/default", {
+			method: "POST",
+			body: JSON.stringify({ agentId: id }),
+		});
+	}
+
 	async getAgentTypes(): Promise<{ agentTypes: SupportedAgentType[] }> {
 		return this.fetch("/agents/types");
 	}

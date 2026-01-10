@@ -2,6 +2,7 @@
 
 import {
 	Bot,
+	Check,
 	ChevronDown,
 	ChevronUp,
 	MoreHorizontal,
@@ -126,7 +127,7 @@ function AgentNode({
 	onConfigure?: () => void;
 }) {
 	const [menuOpen, setMenuOpen] = React.useState(false);
-	const { deleteAgent, duplicateAgent } = useAgents();
+	const { deleteAgent, duplicateAgent, setDefaultAgent } = useAgents();
 
 	const handleConfigure = () => {
 		if (onConfigure) {
@@ -140,6 +141,10 @@ function AgentNode({
 
 	const handleDelete = async () => {
 		await deleteAgent(agent.id);
+	};
+
+	const handleSetDefault = async () => {
+		await setDefaultAgent(agent.id);
 	};
 
 	return (
@@ -159,8 +164,11 @@ function AgentNode({
 			) : (
 				<Bot className="h-4 w-4 text-muted-foreground shrink-0" />
 			)}
-			<div className="flex-1 min-w-0">
-				<span className="text-sm truncate block">{agent.name}</span>
+			<div className="flex-1 min-w-0 flex items-center gap-1">
+				<span className="text-sm truncate">{agent.name}</span>
+				{agent.isDefault && (
+					<Check className="h-3 w-3 text-muted-foreground shrink-0" />
+				)}
 			</div>
 			<DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
 				<DropdownMenuTrigger asChild>
@@ -175,14 +183,30 @@ function AgentNode({
 						<MoreHorizontal className="h-4 w-4 text-muted-foreground" />
 					</button>
 				</DropdownMenuTrigger>
-				<DropdownMenuContent align="end" className="w-32">
-					<DropdownMenuItem onClick={handleConfigure}>
+				<DropdownMenuContent align="end" className="w-36">
+					<DropdownMenuItem
+						onSelect={handleSetDefault}
+						disabled={agent.isDefault}
+					>
+						{agent.isDefault ? (
+							<>
+								<Check className="h-4 w-4 mr-2" />
+								Default
+							</>
+						) : (
+							"Set Default"
+						)}
+					</DropdownMenuItem>
+					<DropdownMenuItem onSelect={handleConfigure}>
 						Configure
 					</DropdownMenuItem>
-					<DropdownMenuItem onClick={handleDuplicate}>
+					<DropdownMenuItem onSelect={handleDuplicate}>
 						Duplicate
 					</DropdownMenuItem>
-					<DropdownMenuItem onClick={handleDelete} className="text-destructive">
+					<DropdownMenuItem
+						onSelect={handleDelete}
+						className="text-destructive"
+					>
 						Delete
 					</DropdownMenuItem>
 				</DropdownMenuContent>

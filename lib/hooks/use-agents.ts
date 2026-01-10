@@ -32,6 +32,12 @@ export function useAgents() {
 		return agent;
 	};
 
+	const setDefaultAgent = async (id: string) => {
+		const agent = await api.setDefaultAgent(id);
+		await mutate();
+		return agent;
+	};
+
 	return {
 		agents: data || [],
 		isLoading,
@@ -40,6 +46,7 @@ export function useAgents() {
 		updateAgent,
 		deleteAgent,
 		duplicateAgent,
+		setDefaultAgent,
 		mutate,
 	};
 }

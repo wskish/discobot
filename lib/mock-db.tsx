@@ -193,6 +193,7 @@ const agents: Agent[] = [
 		name: "Code Assistant",
 		description: "General purpose coding helper",
 		agentType: "claude-code",
+		isDefault: true,
 	},
 	{
 		id: "agent-2",
@@ -501,6 +502,16 @@ export const db = {
 			mcpServers: original.mcpServers,
 		};
 		agents.push(agent);
+		return agent;
+	},
+
+	setDefaultAgent(id: string): Agent | null {
+		const agent = agents.find((a) => a.id === id);
+		if (!agent) return null;
+		// Clear isDefault from all agents, then set it on the target
+		for (const a of agents) {
+			a.isDefault = a.id === id;
+		}
 		return agent;
 	},
 
