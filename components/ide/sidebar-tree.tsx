@@ -1,5 +1,6 @@
 "use client";
 
+import { SiGithub } from "@icons-pack/react-simple-icons";
 import {
 	Archive,
 	ChevronDown,
@@ -8,7 +9,6 @@ import {
 	Eye,
 	EyeOff,
 	GitBranch,
-	Github,
 	HardDrive,
 	Loader2,
 	MoreHorizontal,
@@ -172,7 +172,7 @@ function WorkspaceNode({
 					)}
 					{workspace.sourceType === "git" ? (
 						isGitHub ? (
-							<Github className="h-4 w-4 shrink-0" />
+							<SiGithub className="h-4 w-4 shrink-0" />
 						) : (
 							<GitBranch className="h-4 w-4 text-orange-500 shrink-0" />
 						)

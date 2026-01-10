@@ -1,6 +1,7 @@
 "use client";
 
-import { AlertCircle, Check, GitBranch, Github, HardDrive } from "lucide-react";
+import { SiGithub } from "@icons-pack/react-simple-icons";
+import { AlertCircle, Check, GitBranch, HardDrive } from "lucide-react";
 import * as React from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -113,7 +114,7 @@ function validateInput(input: string): ValidationResult {
 function getInputIcon(type: InputType, className?: string) {
 	switch (type) {
 		case "github":
-			return <Github className={className} />;
+			return <SiGithub className={className} />;
 		case "git":
 			return <GitBranch className={cn(className, "text-orange-500")} />;
 		case "local":
