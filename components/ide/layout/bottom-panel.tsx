@@ -48,13 +48,14 @@ export function BottomPanel({
 }: BottomPanelProps) {
 	return (
 		<div className="flex flex-col overflow-hidden" style={style}>
-			{/* Bottom panel header */}
-			<div className="h-10 flex items-center justify-between px-2 bg-muted/30 border-b border-border shrink-0">
-				<div className="flex items-center gap-2">
+			{/* Header with view toggle and panel controls */}
+			<div className="h-10 flex items-center justify-between px-3 bg-muted/30 border-b border-border shrink-0">
+				{/* Left: Chat/Terminal toggle */}
+				<div className="flex items-center gap-1">
 					<Button
 						variant={view === "chat" ? "secondary" : "ghost"}
 						size="sm"
-						className="h-6 text-xs"
+						className="h-7 text-xs px-3"
 						onClick={() => onViewChange("chat")}
 					>
 						Chat
@@ -62,12 +63,14 @@ export function BottomPanel({
 					<Button
 						variant={view === "terminal" ? "secondary" : "ghost"}
 						size="sm"
-						className="h-6 text-xs"
+						className="h-7 text-xs px-3"
 						onClick={() => onViewChange("terminal")}
 					>
 						Terminal
 					</Button>
 				</div>
+
+				{/* Right: Panel controls (only when diff panel is open) */}
 				{showPanelControls && (
 					<PanelControls
 						state={panelState}
