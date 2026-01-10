@@ -41,6 +41,9 @@ interface MainContentProps {
 	messages: ChatMessage[];
 	sessionAgent: Agent | null;
 	sessionWorkspace: Workspace | null;
+
+	// Session actions
+	onCloseSession?: (saveChanges: boolean) => void;
 }
 
 export function MainContent({
@@ -57,6 +60,7 @@ export function MainContent({
 	messages,
 	sessionAgent,
 	sessionWorkspace,
+	onCloseSession,
 }: MainContentProps) {
 	const [bottomView, setBottomView] = React.useState<BottomView>("chat");
 	const [openFiles, setOpenFiles] = React.useState<FileNode[]>([]);
@@ -197,6 +201,7 @@ export function MainContent({
 					onFileSelect={handleFileSelect}
 					selectedFileId={activeFileId}
 					className="w-56"
+					onCloseSession={onCloseSession}
 				/>
 			)}
 		</>

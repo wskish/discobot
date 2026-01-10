@@ -8,9 +8,16 @@ import {
 	Filter,
 	Folder,
 	FolderOpen,
+	X,
 } from "lucide-react";
 import * as React from "react";
 import { Button } from "@/components/ui/button";
+import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import type { FileNode, Session } from "@/lib/api-types";
 import { cn } from "@/lib/utils";
 
@@ -19,14 +26,15 @@ interface FilePanelProps {
 	onFileSelect: (file: FileNode) => void;
 	selectedFileId: string | null;
 	className?: string;
+	onCloseSession?: (saveChanges: boolean) => void;
 }
 
-// ... existing code (unchanged) ...
 export function FilePanel({
 	session,
 	onFileSelect,
 	selectedFileId,
 	className,
+	onCloseSession,
 }: FilePanelProps) {
 	const [expandedIds, setExpandedIds] = React.useState<Set<string>>(new Set());
 	const [showChangedOnly, setShowChangedOnly] = React.useState(true);
@@ -145,6 +153,45 @@ export function FilePanel({
 					))
 				)}
 			</div>
+
+			{/* Close Session footer */}
+			{onCloseSession && (
+				<div className="px-3 py-2 border-t border-sidebar-border">
+					{changedCount > 0 ? (
+						<DropdownMenu>
+							<DropdownMenuTrigger asChild>
+								<Button
+									variant="outline"
+									size="sm"
+									className="w-full gap-2 text-xs"
+								>
+									<X className="h-3.5 w-3.5" />
+									Close Session
+									<ChevronDown className="h-3 w-3 ml-auto opacity-50" />
+								</Button>
+							</DropdownMenuTrigger>
+							<DropdownMenuContent align="end" className="w-48">
+								<DropdownMenuItem onSelect={() => onCloseSession(true)}>
+									Close & Push Changes
+								</DropdownMenuItem>
+								<DropdownMenuItem onSelect={() => onCloseSession(false)}>
+									Close without Saving
+								</DropdownMenuItem>
+							</DropdownMenuContent>
+						</DropdownMenu>
+					) : (
+						<Button
+							variant="outline"
+							size="sm"
+							className="w-full gap-2 text-xs"
+							onClick={() => onCloseSession(false)}
+						>
+							<X className="h-3.5 w-3.5" />
+							Close Session
+						</Button>
+					)}
+				</div>
+			)}
 		</div>
 	);
 }
