@@ -1,11 +1,11 @@
 "use client";
 
+import { SiGithub } from "@icons-pack/react-simple-icons";
 import {
 	Bot,
 	ChevronDown,
 	Copy,
 	GitBranch,
-	Github,
 	HardDrive,
 	MessageSquare,
 	Play,
@@ -29,6 +29,8 @@ import {
 } from "@/components/ai-elements/message";
 import {
 	Input,
+	PromptInputAttachment,
+	PromptInputAttachmentsPreview,
 	PromptInputSubmit,
 	PromptInputTextarea,
 	PromptInputToolbar,
@@ -83,7 +85,7 @@ function WorkspaceIcon({
 	className?: string;
 }) {
 	const type = getWorkspaceType(path);
-	if (type === "github") return <Github className={className} />;
+	if (type === "github") return <SiGithub className={className} />;
 	if (type === "git")
 		return <GitBranch className={cn("text-orange-500", className)} />;
 	return <HardDrive className={cn("text-blue-500", className)} />;
@@ -674,6 +676,7 @@ export function ChatPanel({
 					status={status}
 					className="max-w-full"
 				>
+					<PromptInputAttachmentsPreview />
 					<PromptInputTextarea
 						placeholder={
 							mode === "welcome"
@@ -687,6 +690,7 @@ export function ChatPanel({
 					/>
 					<PromptInputToolbar>
 						<PromptInputTools>
+							<PromptInputAttachment />
 							<ModelModeSelector />
 						</PromptInputTools>
 						<PromptInputSubmit
