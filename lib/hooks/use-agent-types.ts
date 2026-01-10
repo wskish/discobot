@@ -1,19 +1,22 @@
-"use client"
+"use client";
 
-import useSWR from "swr"
-import { api } from "../api-client"
-import type { SupportedAgentType } from "../api-types"
+import useSWR from "swr";
+import { api } from "../api-client";
+import type { SupportedAgentType } from "../api-types";
 
 interface AgentTypesResponse {
-  agentTypes: SupportedAgentType[]
+	agentTypes: SupportedAgentType[];
 }
 
 export function useAgentTypes() {
-  const { data, error, isLoading } = useSWR<AgentTypesResponse>("agent-types", () => api.getAgentTypes())
+	const { data, error, isLoading } = useSWR<AgentTypesResponse>(
+		"agent-types",
+		() => api.getAgentTypes(),
+	);
 
-  return {
-    agentTypes: data?.agentTypes || [],
-    isLoading,
-    error,
-  }
+	return {
+		agentTypes: data?.agentTypes || [],
+		isLoading,
+		error,
+	};
 }

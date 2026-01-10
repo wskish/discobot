@@ -1,73 +1,96 @@
-"use client"
+"use client";
 
-import * as React from "react"
-import { useTheme } from "next-themes"
-import { Bot } from "lucide-react"
-import type { Icon } from "@/lib/api-types"
+import { Bot } from "lucide-react";
+import { useTheme } from "next-themes";
+import * as React from "react";
+import type { Icon } from "@/lib/api-types";
 
 interface IconRendererProps {
-  icons?: Icon[]
-  className?: string
-  fallback?: React.ReactNode
+	icons?: Icon[];
+	className?: string;
+	fallback?: React.ReactNode;
+	size?: number;
 }
 
-export function IconRenderer({ icons, className, fallback }: IconRendererProps) {
-  const { resolvedTheme } = useTheme()
-  const [mounted, setMounted] = React.useState(false)
+export function IconRenderer({
+	icons,
+	className,
+	fallback,
+	size,
+}: IconRendererProps) {
+	const { resolvedTheme } = useTheme();
+	const [mounted, setMounted] = React.useState(false);
 
-  // Avoid hydration mismatch
-  React.useEffect(() => {
-    setMounted(true)
-  }, [])
+	// Avoid hydration mismatch
+	React.useEffect(() => {
+		setMounted(true);
+	}, []);
 
-  const icon = React.useMemo(() => {
-    if (!icons || icons.length === 0) return null
+	const sizeStyle = size
+		? { width: `${size}px`, height: `${size}px` }
+		: { width: "1em", height: "1em" };
 
-    const currentTheme = mounted ? resolvedTheme : "light"
+	const icon = React.useMemo(() => {
+		if (!icons || icons.length === 0) return null;
 
-    // Filter icons by current theme or no theme specified (universal)
-    const themeFilteredIcons = icons.filter((i) => !i.theme || i.theme === currentTheme)
+		const currentTheme = mounted ? resolvedTheme : "light";
 
-    // If no icons match the theme, fall back to all icons
-    const availableIcons = themeFilteredIcons.length > 0 ? themeFilteredIcons : icons
+		// Filter icons by current theme or no theme specified (universal)
+		const themeFilteredIcons = icons.filter(
+			(i) => !i.theme || i.theme === currentTheme,
+		);
 
-    // Prefer SVG icons as they scale well
-    const svgIcon = availableIcons.find((i) => i.mimeType === "image/svg+xml")
-    if (svgIcon) return svgIcon
+		// If no icons match the theme, fall back to all icons
+		const availableIcons =
+			themeFilteredIcons.length > 0 ? themeFilteredIcons : icons;
 
-    // Fall back to first available icon
-    return availableIcons[0]
-  }, [icons, resolvedTheme, mounted])
+		// Prefer SVG icons as they scale well
+		const svgIcon = availableIcons.find((i) => i.mimeType === "image/svg+xml");
+		if (svgIcon) return svgIcon;
 
-  if (!icon) {
-    return fallback ? <>{fallback}</> : <Bot className={className} />
-  }
+		// Fall back to first available icon
+		return availableIcons[0];
+	}, [icons, resolvedTheme, mounted]);
 
-  if (icon.mimeType === "image/svg+xml" && icon.src.startsWith("data:image/svg+xml,")) {
-    try {
-      // Decode the SVG from the data URI
-      const svgContent = decodeURIComponent(icon.src.replace("data:image/svg+xml,", ""))
-      return (
-        <span
-          className={className}
-          style={{ display: "inline-flex", width: "1em", height: "1em" }}
-          dangerouslySetInnerHTML={{
-            __html: svgContent.replace(/<svg/, '<svg style="width:100%;height:100%"'),
-          }}
-        />
-      )
-    } catch {
-      // Fall back to img if decoding fails
-    }
-  }
+	if (!icon) {
+		return fallback ? fallback : <Bot className={className} />;
+	}
 
-  // For base64 SVGs or other image types, use img tag
-  return (
-    <img
-      src={icon.src || "/placeholder.svg"}
-      alt=""
-      className={className}
-      style={{ width: "1em", height: "1em", objectFit: "contain" }}
-    />
-  )
+	if (
+		icon.mimeType === "image/svg+xml" &&
+		icon.src.startsWith("data:image/svg+xml,")
+	) {
+		try {
+			// Decode the SVG from the data URI
+			const svgContent = decodeURIComponent(
+				icon.src.replace("data:image/svg+xml,", ""),
+			);
+			return (
+				<span
+					className={className}
+					style={{ display: "inline-flex", ...sizeStyle }}
+					// biome-ignore lint/security/noDangerouslySetInnerHtml: SVG content is decoded from data URI icons, not user input
+					dangerouslySetInnerHTML={{
+						__html: svgContent.replace(
+							/<svg/,
+							'<svg style="width:100%;height:100%"',
+						),
+					}}
+				/>
+			);
+		} catch {
+			// Fall back to img if decoding fails
+		}
+	}
+
+	// For base64 SVGs or other image types, use img tag
+	return (
+		// biome-ignore lint/performance/noImgElement: Dynamic base64 icons cannot use Next.js Image optimization
+		<img
+			src={icon.src || "/placeholder.svg"}
+			alt=""
+			className={className}
+			style={{ ...sizeStyle, objectFit: "contain" }}
+		/>
+	);
 }
