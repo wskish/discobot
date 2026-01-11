@@ -245,7 +245,7 @@ export function TerminalView({
 				"\x1b[1;34m╭─────────────────────────────────────────────╮\x1b[0m",
 			);
 			term.writeln(
-				"\x1b[1;34m│\x1b[0m  \x1b[1;32mIDE Chat Terminal\x1b[0m                          \x1b[1;34m│\x1b[0m",
+				"\x1b[1;34m│\x1b[0m  \x1b[1;32mOctobot Terminal\x1b[0m                           \x1b[1;34m│\x1b[0m",
 			);
 			term.writeln(
 				"\x1b[1;34m│\x1b[0m  \x1b[90mFake SSH - Commands are simulated\x1b[0m          \x1b[1;34m│\x1b[0m",

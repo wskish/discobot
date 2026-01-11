@@ -10,8 +10,8 @@ const _geist = Geist({ subsets: ["latin"] });
 const _geistMono = Geist_Mono({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-	title: "IDE Chat",
-	description: "AI-powered IDE chat interface",
+	title: "Octobot",
+	description: "AI-powered coding agent interface",
 	generator: "v0.app",
 };
 

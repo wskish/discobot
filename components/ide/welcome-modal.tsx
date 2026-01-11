@@ -67,7 +67,7 @@ export function WelcomeModal({
 
 					<DialogHeader className="space-y-3">
 						<DialogTitle className="text-3xl font-bold tracking-tight">
-							Welcome to IDE Chat
+							Welcome to Octobot
 						</DialogTitle>
 						<DialogDescription className="text-base text-muted-foreground max-w-md mx-auto">
 							Get started by adding an AI coding agent. Choose from our

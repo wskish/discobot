@@ -111,7 +111,7 @@ export function Header({
 						<PanelLeft className="h-4 w-4" />
 					)}
 				</Button>
-				<span className="font-semibold shrink-0">IDE Chat</span>
+				<span className="font-semibold shrink-0">Octobot</span>
 				<Button
 					variant="ghost"
 					size="sm"
