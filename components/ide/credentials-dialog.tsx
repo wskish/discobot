@@ -22,6 +22,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { CredentialAuthType, CredentialInfo } from "@/lib/api-types";
+import { matchesProviderAlias } from "@/lib/config/provider-aliases";
 import { useCredentials } from "@/lib/hooks/use-credentials";
 import {
 	type ModelProvider,
@@ -81,7 +82,8 @@ function ProviderCombobox({
 			(p) =>
 				p.name.toLowerCase().includes(query) ||
 				p.id.toLowerCase().includes(query) ||
-				p.env?.some((e) => e.toLowerCase().includes(query))
+				p.env?.some((e) => e.toLowerCase().includes(query)) ||
+				matchesProviderAlias(p.id, query)
 		);
 	}, [providers, search]);
 
