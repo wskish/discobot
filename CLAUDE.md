@@ -1,10 +1,10 @@
-# IDE Chat - Coding Agent Guidelines
+# Octobot - Coding Agent Guidelines
 
 This document provides essential context for AI coding agents working on this project.
 
 ## Project Overview
 
-IDE Chat is an IDE-like chat interface for managing coding sessions with AI agents. It features:
+Octobot is an IDE-like chat interface for managing coding sessions with AI agents. It features:
 - Workspaces (local folders or git repos) containing sessions (chat threads)
 - Multiple AI agent configurations (Claude Code, OpenCode, Gemini CLI, etc.)
 - File diff viewer with tabbed browser
