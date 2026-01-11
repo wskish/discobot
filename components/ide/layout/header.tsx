@@ -5,10 +5,13 @@ import {
 	Bot,
 	GitBranch,
 	HardDrive,
+	Key,
 	PanelLeft,
 	PanelLeftClose,
 	Plus,
 } from "lucide-react";
+import * as React from "react";
+import { CredentialsDialog } from "@/components/ide/credentials-dialog";
 import { IconRenderer } from "@/components/ide/icon-renderer";
 import { ThemeToggle } from "@/components/ide/theme-toggle";
 import { Button } from "@/components/ui/button";
@@ -76,6 +79,8 @@ export function Header({
 	sessionWorkspace,
 	agentTypes = [],
 }: HeaderProps) {
+	const [credentialsOpen, setCredentialsOpen] = React.useState(false);
+
 	const getAgentIcons = (a: Agent) => {
 		const agentType = agentTypes.find((t) => t.id === a.agentType);
 		return agentType?.icons;
@@ -143,9 +148,23 @@ export function Header({
 					</>
 				)}
 			</div>
-			<div className="flex items-center gap-2 shrink-0">
+			<div className="flex items-center gap-1 shrink-0">
+				<Button
+					variant="ghost"
+					size="icon"
+					onClick={() => setCredentialsOpen(true)}
+					title="API Credentials"
+				>
+					<Key className="h-4 w-4" />
+					<span className="sr-only">API Credentials</span>
+				</Button>
 				<ThemeToggle />
 			</div>
+
+			<CredentialsDialog
+				open={credentialsOpen}
+				onOpenChange={setCredentialsOpen}
+			/>
 		</header>
 	);
 }

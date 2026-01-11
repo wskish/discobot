@@ -3,10 +3,22 @@ import { getApiBase } from "./api-config";
 import type {
 	Agent,
 	ChatMessage,
+	CodexAuthorizeResponse,
+	CodexExchangeRequest,
+	CodexExchangeResponse,
 	CreateAgentRequest,
+	CreateCredentialRequest,
 	CreateSessionRequest,
 	CreateWorkspaceRequest,
+	CredentialInfo,
 	FileNode,
+	GitHubCopilotDeviceCodeRequest,
+	GitHubCopilotDeviceCodeResponse,
+	GitHubCopilotPollRequest,
+	GitHubCopilotPollResponse,
+	OAuthAuthorizeResponse,
+	OAuthExchangeRequest,
+	OAuthExchangeResponse,
 	Session,
 	Suggestion,
 	SupportedAgentType,
@@ -182,6 +194,92 @@ class ApiClient {
 		const params = new URLSearchParams({ q: query });
 		if (type) params.set("type", type);
 		return this.fetch<Suggestion[]>(`/suggestions?${params}`);
+	}
+
+	// Credentials
+	async getCredentials(): Promise<CredentialInfo[]> {
+		return this.fetch<CredentialInfo[]>("/credentials");
+	}
+
+	async createCredential(data: CreateCredentialRequest): Promise<CredentialInfo> {
+		return this.fetch<CredentialInfo>("/credentials", {
+			method: "POST",
+			body: JSON.stringify(data),
+		});
+	}
+
+	async deleteCredential(providerId: string): Promise<void> {
+		await this.fetch(`/credentials/${providerId}`, { method: "DELETE" });
+	}
+
+	// Anthropic OAuth
+	async anthropicAuthorize(
+		mode: "max" | "console" = "max"
+	): Promise<OAuthAuthorizeResponse> {
+		return this.fetch<OAuthAuthorizeResponse>(
+			"/credentials/anthropic/authorize",
+			{
+				method: "POST",
+				body: JSON.stringify({ mode }),
+			}
+		);
+	}
+
+	async anthropicExchange(data: OAuthExchangeRequest): Promise<OAuthExchangeResponse> {
+		return this.fetch<OAuthExchangeResponse>(
+			"/credentials/anthropic/exchange",
+			{
+				method: "POST",
+				body: JSON.stringify(data),
+			}
+		);
+	}
+
+	// GitHub Copilot OAuth (device flow)
+	async githubCopilotDeviceCode(
+		data: GitHubCopilotDeviceCodeRequest = {}
+	): Promise<GitHubCopilotDeviceCodeResponse> {
+		return this.fetch<GitHubCopilotDeviceCodeResponse>(
+			"/credentials/github-copilot/device-code",
+			{
+				method: "POST",
+				body: JSON.stringify(data),
+			}
+		);
+	}
+
+	async githubCopilotPoll(
+		data: GitHubCopilotPollRequest
+	): Promise<GitHubCopilotPollResponse> {
+		return this.fetch<GitHubCopilotPollResponse>(
+			"/credentials/github-copilot/poll",
+			{
+				method: "POST",
+				body: JSON.stringify(data),
+			}
+		);
+	}
+
+	// Codex (ChatGPT) OAuth
+	async codexAuthorize(): Promise<CodexAuthorizeResponse> {
+		return this.fetch<CodexAuthorizeResponse>(
+			"/credentials/codex/authorize",
+			{
+				method: "POST",
+			}
+		);
+	}
+
+	async codexExchange(
+		data: CodexExchangeRequest
+	): Promise<CodexExchangeResponse> {
+		return this.fetch<CodexExchangeResponse>(
+			"/credentials/codex/exchange",
+			{
+				method: "POST",
+				body: JSON.stringify(data),
+			}
+		);
 	}
 }
 
