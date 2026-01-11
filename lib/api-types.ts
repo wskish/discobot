@@ -170,3 +170,101 @@ export interface Icons {
 	 */
 	icons?: Icon[];
 }
+
+export type CredentialAuthType = "api_key" | "oauth";
+
+export interface OAuthData {
+	access?: string;
+	refresh?: string;
+	expires?: number;
+}
+
+export interface Credential {
+	id: string;
+	name: string;
+	provider: string;
+	authType: CredentialAuthType;
+	/** API key for api_key auth type (stored server-side, not returned to client) */
+	apiKey?: string;
+	/** OAuth tokens for oauth auth type (stored server-side, not returned to client) */
+	oauthData?: OAuthData;
+	/** Whether the credential is configured */
+	isConfigured: boolean;
+	/** When the credential was last updated */
+	updatedAt?: string;
+}
+
+/** Client-safe credential (no secrets) */
+export interface CredentialInfo {
+	id: string;
+	name: string;
+	provider: string;
+	authType: CredentialAuthType;
+	isConfigured: boolean;
+	updatedAt?: string;
+}
+
+export interface CreateCredentialRequest {
+	provider: string;
+	authType: CredentialAuthType;
+	apiKey?: string;
+	oauthData?: OAuthData;
+}
+
+export interface OAuthExchangeRequest {
+	code: string;
+	verifier: string;
+}
+
+export interface OAuthExchangeResponse {
+	success: boolean;
+	error?: string;
+}
+
+export interface OAuthAuthorizeResponse {
+	url: string;
+	verifier: string;
+}
+
+// GitHub Copilot OAuth types
+export interface GitHubCopilotDeviceCodeRequest {
+	deploymentType?: "github.com" | "enterprise";
+	enterpriseUrl?: string;
+}
+
+export interface GitHubCopilotDeviceCodeResponse {
+	verificationUri: string;
+	userCode: string;
+	deviceCode: string;
+	interval: number;
+	expiresIn: number;
+	domain: string;
+}
+
+export interface GitHubCopilotPollRequest {
+	deviceCode: string;
+	domain: string;
+}
+
+export interface GitHubCopilotPollResponse {
+	status: "pending" | "success" | "error";
+	error?: string;
+}
+
+// Codex (ChatGPT) OAuth types
+export interface CodexAuthorizeResponse {
+	url: string;
+	verifier: string;
+	state: string;
+}
+
+export interface CodexExchangeRequest {
+	code: string;
+	verifier: string;
+}
+
+export interface CodexExchangeResponse {
+	success: boolean;
+	error?: string;
+	accountId?: string;
+}

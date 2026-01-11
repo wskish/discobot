@@ -3,8 +3,11 @@ import type {
 	Agent,
 	ChatMessage,
 	CreateAgentRequest,
+	CreateCredentialRequest,
 	CreateSessionRequest,
 	CreateWorkspaceRequest,
+	Credential,
+	CredentialInfo,
 	FileNode,
 	Session,
 	Suggestion,
@@ -308,6 +311,9 @@ const terminalHistory: { type: "input" | "output"; content: string }[] = [
 	},
 ];
 
+// Credentials storage (secrets stored server-side)
+const credentials: Credential[] = [];
+
 // Mock suggestions for autocomplete
 const mockSuggestions = [
 	{ value: "github.com/vercel/next.js", type: "repo" as const },
@@ -555,5 +561,82 @@ export const db = {
 				return s.value.toLowerCase().includes(lower);
 			})
 			.slice(0, 6);
+	},
+
+	// Credentials (returns safe info without secrets)
+	getCredentials(): CredentialInfo[] {
+		return credentials.map((c) => ({
+			id: c.id,
+			name: c.name,
+			provider: c.provider,
+			authType: c.authType,
+			isConfigured: c.isConfigured,
+			updatedAt: c.updatedAt,
+		}));
+	},
+
+	getCredential(providerId: string): Credential | null {
+		return credentials.find((c) => c.provider === providerId) || null;
+	},
+
+	getCredentialInfo(providerId: string): CredentialInfo | null {
+		const cred = credentials.find((c) => c.provider === providerId);
+		if (!cred) return null;
+		return {
+			id: cred.id,
+			name: cred.name,
+			provider: cred.provider,
+			authType: cred.authType,
+			isConfigured: cred.isConfigured,
+			updatedAt: cred.updatedAt,
+		};
+	},
+
+	createOrUpdateCredential(data: CreateCredentialRequest): CredentialInfo {
+		const existing = credentials.find((c) => c.provider === data.provider);
+		const now = new Date().toISOString();
+
+		if (existing) {
+			existing.authType = data.authType;
+			existing.apiKey = data.apiKey;
+			existing.oauthData = data.oauthData;
+			existing.isConfigured = true;
+			existing.updatedAt = now;
+			return {
+				id: existing.id,
+				name: existing.name,
+				provider: existing.provider,
+				authType: existing.authType,
+				isConfigured: existing.isConfigured,
+				updatedAt: existing.updatedAt,
+			};
+		}
+
+		const credential: Credential = {
+			id: `cred-${Date.now()}`,
+			name: data.provider,
+			provider: data.provider,
+			authType: data.authType,
+			apiKey: data.apiKey,
+			oauthData: data.oauthData,
+			isConfigured: true,
+			updatedAt: now,
+		};
+		credentials.push(credential);
+		return {
+			id: credential.id,
+			name: credential.name,
+			provider: credential.provider,
+			authType: credential.authType,
+			isConfigured: credential.isConfigured,
+			updatedAt: credential.updatedAt,
+		};
+	},
+
+	deleteCredential(providerId: string): boolean {
+		const index = credentials.findIndex((c) => c.provider === providerId);
+		if (index === -1) return false;
+		credentials.splice(index, 1);
+		return true;
 	},
 };
