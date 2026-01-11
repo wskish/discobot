@@ -10,7 +10,8 @@
 		"format": "biome format . --write",
 		"check": "biome check .",
 		"check:fix": "biome check . --write",
-		"typecheck": "tsc --noEmit"
+		"typecheck": "tsc --noEmit",
+		"refresh-models": "./scripts/refresh-models-data.sh"
 	},
 	"dependencies": {
 		"@ai-sdk/react": "^3.0.28",
