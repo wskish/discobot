@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown, ChevronRight, Sparkles, Zap } from "lucide-react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import * as React from "react";
 import {
 	Dialog,
@@ -12,6 +12,7 @@ import {
 import type { SupportedAgentType } from "@/lib/api-types";
 import { cn } from "@/lib/utils";
 import { IconRenderer } from "./icon-renderer";
+import { OctobotLogo } from "./octobot-logo";
 
 interface WelcomeModalProps {
 	open: boolean;
@@ -54,15 +55,9 @@ export function WelcomeModal({
 			>
 				{/* Header with gradient background */}
 				<div className="relative bg-gradient-to-br from-primary/10 via-primary/5 to-background px-8 py-10 text-center">
-					{/* Decorative elements */}
-					<div className="absolute top-4 left-6 text-primary/20">
-						<Sparkles className="h-6 w-6" />
-					</div>
-					<div className="absolute top-8 right-8 text-primary/15">
-						<Zap className="h-5 w-5" />
-					</div>
-					<div className="absolute bottom-6 left-12 text-primary/10">
-						<Zap className="h-4 w-4" />
+					{/* Logo */}
+					<div className="flex justify-center mb-4">
+						<OctobotLogo size={64} className="text-primary" />
 					</div>
 
 					<DialogHeader className="space-y-3">

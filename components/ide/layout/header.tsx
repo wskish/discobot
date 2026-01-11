@@ -13,6 +13,7 @@ import {
 import * as React from "react";
 import { CredentialsDialog } from "@/components/ide/credentials-dialog";
 import { IconRenderer } from "@/components/ide/icon-renderer";
+import { OctobotLogo } from "@/components/ide/octobot-logo";
 import { ThemeToggle } from "@/components/ide/theme-toggle";
 import { Button } from "@/components/ui/button";
 import type { Agent, SupportedAgentType, Workspace } from "@/lib/api-types";
@@ -111,7 +112,10 @@ export function Header({
 						<PanelLeft className="h-4 w-4" />
 					)}
 				</Button>
-				<span className="font-semibold shrink-0">Octobot</span>
+				<div className="flex items-center gap-1.5 shrink-0">
+					<OctobotLogo size={22} className="text-primary" />
+					<span className="font-semibold">Octobot</span>
+				</div>
 				<Button
 					variant="ghost"
 					size="sm"
