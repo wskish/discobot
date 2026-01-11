@@ -15,28 +15,28 @@ export async function POST(request: Request) {
 	if (!body.provider) {
 		return NextResponse.json(
 			{ error: "Provider is required" },
-			{ status: 400 }
+			{ status: 400 },
 		);
 	}
 
 	if (!body.authType) {
 		return NextResponse.json(
 			{ error: "Auth type is required" },
-			{ status: 400 }
+			{ status: 400 },
 		);
 	}
 
 	if (body.authType === "api_key" && !body.apiKey) {
 		return NextResponse.json(
 			{ error: "API key is required for api_key auth type" },
-			{ status: 400 }
+			{ status: 400 },
 		);
 	}
 
 	if (body.authType === "oauth" && !body.oauthData) {
 		return NextResponse.json(
 			{ error: "OAuth data is required for oauth auth type" },
-			{ status: 400 }
+			{ status: 400 },
 		);
 	}
 

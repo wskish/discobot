@@ -79,7 +79,7 @@ async function startOAuth(optionId: string): Promise<OAuthStartResult> {
 
 async function completeOAuth(
 	_code: string,
-	_verifier: string
+	_verifier: string,
 ): Promise<OAuthCompleteResult> {
 	// This is called after polling succeeds
 	// The actual polling and saving is done in the UI component
@@ -115,7 +115,7 @@ function ProviderLogo({ className }: { className?: string }) {
 		<img
 			src="/data/models-dev/logos/github-copilot.svg"
 			alt=""
-			className={className}
+			className={`${className} dark:invert`}
 			style={{ objectFit: "contain" }}
 			onError={() => setHasError(true)}
 		/>
@@ -146,9 +146,9 @@ export function GitHubCopilotOAuthFlow({
 	onCancel,
 }: GitHubCopilotOAuthFlowProps) {
 	const [step, setStep] = React.useState<FlowStep>("select");
-	const [deploymentType, setDeploymentType] = React.useState<
-		"github.com" | "enterprise"
-	>("github.com");
+	const [, setDeploymentType] = React.useState<"github.com" | "enterprise">(
+		"github.com",
+	);
 	const [enterpriseUrl, setEnterpriseUrl] = React.useState("");
 	const [deviceInfo, setDeviceInfo] = React.useState<{
 		verificationUri: string;
@@ -182,7 +182,7 @@ export function GitHubCopilotOAuthFlow({
 
 	const startDeviceFlow = async (
 		type: "github.com" | "enterprise",
-		entUrl?: string
+		entUrl?: string,
 	) => {
 		setIsLoading(true);
 		setError(null);
@@ -206,7 +206,7 @@ export function GitHubCopilotOAuthFlow({
 			window.open(result.verificationUri, "_blank");
 		} catch (err) {
 			setError(
-				err instanceof Error ? err.message : "Failed to start device flow"
+				err instanceof Error ? err.message : "Failed to start device flow",
 			);
 		} finally {
 			setIsLoading(false);
@@ -376,11 +376,7 @@ export function GitHubCopilotOAuthFlow({
 				{error && <p className="text-sm text-destructive">{error}</p>}
 
 				<div className="flex justify-end gap-2">
-					<Button
-						variant="outline"
-						size="sm"
-						onClick={() => setStep("select")}
-					>
+					<Button variant="outline" size="sm" onClick={() => setStep("select")}>
 						Back
 					</Button>
 					<Button

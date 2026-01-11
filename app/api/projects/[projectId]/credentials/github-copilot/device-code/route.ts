@@ -53,7 +53,7 @@ export async function POST(request: Request) {
 			console.error("Device code request failed:", response.status, errorText);
 			return NextResponse.json(
 				{ error: "Failed to initiate device authorization" },
-				{ status: 400 }
+				{ status: 400 },
 			);
 		}
 
@@ -73,7 +73,7 @@ export async function POST(request: Request) {
 		console.error("Device code error:", error);
 		return NextResponse.json(
 			{ error: error instanceof Error ? error.message : "Unknown error" },
-			{ status: 500 }
+			{ status: 500 },
 		);
 	}
 }

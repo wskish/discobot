@@ -1,6 +1,15 @@
 "use client";
 
-import { Check, ChevronDown, ChevronRight, Plus, Trash2 } from "lucide-react";
+import {
+	Check,
+	CheckCircle2,
+	ChevronDown,
+	ChevronRight,
+	Key,
+	Plus,
+	Search,
+	Trash2,
+} from "lucide-react";
 import * as React from "react";
 import { IconRenderer } from "@/components/ide/icon-renderer";
 import { Button } from "@/components/ui/button";
@@ -34,6 +43,13 @@ import type {
 	SupportedAgentType,
 } from "@/lib/api-types";
 import { useAgentTypes } from "@/lib/hooks/use-agent-types";
+import { useCredentials } from "@/lib/hooks/use-credentials";
+import {
+	getProviderLogoUrl,
+	type ModelProvider,
+	useModelsProviders,
+} from "@/lib/hooks/use-models-providers";
+import { cn } from "@/lib/utils";
 
 function parseCommandLine(input: string): { command: string; args: string[] } {
 	const tokens: string[] = [];
@@ -85,11 +101,193 @@ function parseCommandLine(input: string): { command: string; args: string[] } {
 	return { command, args };
 }
 
+function ProviderLogo({
+	providerId,
+	className,
+}: {
+	providerId: string;
+	className?: string;
+}) {
+	const [hasError, setHasError] = React.useState(false);
+	const logoUrl = getProviderLogoUrl(providerId);
+
+	if (hasError) {
+		return <Key className={className} />;
+	}
+
+	return (
+		<img
+			src={logoUrl}
+			alt=""
+			className={cn("object-contain dark:invert", className)}
+			onError={() => setHasError(true)}
+		/>
+	);
+}
+
+interface AuthProviderRowProps {
+	providerId: string;
+	provider?: ModelProvider;
+	isConfigured: boolean;
+	onConfigure: () => void;
+}
+
+function AuthProviderRow({
+	providerId,
+	provider,
+	isConfigured,
+	onConfigure,
+}: AuthProviderRowProps) {
+	const displayName = provider?.name ?? providerId;
+
+	return (
+		<div className="flex items-center justify-between gap-3 py-2 px-3 rounded-lg bg-muted/30 border">
+			<div className="flex items-center gap-3 min-w-0">
+				<div className="h-5 w-5 rounded flex items-center justify-center shrink-0 overflow-hidden bg-background">
+					<ProviderLogo providerId={providerId} className="h-4 w-4" />
+				</div>
+				<div className="min-w-0">
+					<div className="text-sm font-medium truncate">{displayName}</div>
+				</div>
+			</div>
+			<div className="flex items-center gap-2 shrink-0">
+				{isConfigured ? (
+					<div className="flex items-center gap-1.5 text-xs text-green-600 dark:text-green-500">
+						<CheckCircle2 className="h-3.5 w-3.5" />
+						Configured
+					</div>
+				) : (
+					<Button
+						variant="outline"
+						size="sm"
+						className="h-7 text-xs"
+						onClick={onConfigure}
+					>
+						Configure
+					</Button>
+				)}
+			</div>
+		</div>
+	);
+}
+
+// Component to show auth providers with optional search
+function AuthProvidersSection({
+	selectedType,
+	providers,
+	providersMap,
+	configuredProviderIds,
+	onOpenCredentials,
+}: {
+	selectedType: SupportedAgentType | null;
+	providers: ModelProvider[];
+	providersMap: Record<string, ModelProvider>;
+	configuredProviderIds: Set<string>;
+	onOpenCredentials?: (providerId?: string) => void;
+}) {
+	const [search, setSearch] = React.useState("");
+
+	// Reset search when selected type changes
+	// biome-ignore lint/correctness/useExhaustiveDependencies: intentional - reset search when type changes
+	React.useEffect(() => {
+		setSearch("");
+	}, [selectedType?.id]);
+
+	if (
+		!selectedType?.supportedAuthProviders ||
+		selectedType.supportedAuthProviders.length === 0
+	) {
+		return null;
+	}
+
+	// Handle '*' wildcard - show all providers with env vars
+	const isWildcard = selectedType.supportedAuthProviders.includes("*");
+	const allProviderIds = isWildcard
+		? providers.filter((p) => p.env && p.env.length > 0).map((p) => p.id)
+		: selectedType.supportedAuthProviders;
+
+	const showSearch = allProviderIds.length > 6;
+
+	// Filter providers by search
+	const filteredProviderIds =
+		showSearch && search.trim()
+			? allProviderIds.filter((id) => {
+					const provider = providersMap[id];
+					const query = search.toLowerCase();
+					return (
+						id.toLowerCase().includes(query) ||
+						provider?.name?.toLowerCase().includes(query) ||
+						provider?.env?.some((e) => e.toLowerCase().includes(query))
+					);
+				})
+			: allProviderIds;
+
+	return (
+		<div className="space-y-3">
+			<div className="flex items-center justify-between">
+				<Label>Authentication</Label>
+				{onOpenCredentials && (
+					<Button
+						variant="ghost"
+						size="sm"
+						className="h-7 text-xs gap-1.5"
+						onClick={() => {
+							onOpenCredentials();
+						}}
+					>
+						<Key className="h-3 w-3" />
+						Manage All
+					</Button>
+				)}
+			</div>
+
+			{showSearch && (
+				<div className="relative">
+					<Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+					<Input
+						value={search}
+						onChange={(e) => setSearch(e.target.value)}
+						placeholder="Search providers..."
+						className="pl-9 h-8"
+					/>
+				</div>
+			)}
+
+			<div className="space-y-2 max-h-[200px] overflow-y-auto">
+				{filteredProviderIds.length === 0 ? (
+					<div className="py-4 text-center text-sm text-muted-foreground">
+						No providers found
+					</div>
+				) : (
+					filteredProviderIds.map((providerId) => (
+						<AuthProviderRow
+							key={providerId}
+							providerId={providerId}
+							provider={providersMap[providerId]}
+							isConfigured={configuredProviderIds.has(providerId)}
+							onConfigure={() => {
+								if (onOpenCredentials) {
+									onOpenCredentials(providerId);
+								}
+							}}
+						/>
+					))
+				)}
+			</div>
+			<p className="text-xs text-muted-foreground">
+				Configure at least one provider to use this agent.
+			</p>
+		</div>
+	);
+}
+
 interface AddAgentDialogProps {
 	open: boolean;
 	onOpenChange: (open: boolean) => void;
 	onAdd: (agent: CreateAgentRequest) => Promise<void>;
 	editingAgent?: Agent | null;
+	onOpenCredentials?: (providerId?: string) => void;
+	preselectedAgentTypeId?: string | null;
 }
 
 function MCPServerEditor({
@@ -280,8 +478,12 @@ export function AddAgentDialog({
 	onOpenChange,
 	onAdd,
 	editingAgent,
+	onOpenCredentials,
+	preselectedAgentTypeId,
 }: AddAgentDialogProps) {
 	const { agentTypes, isLoading } = useAgentTypes();
+	const { credentials } = useCredentials();
+	const { providers, providersMap } = useModelsProviders();
 	const [selectedType, setSelectedType] =
 		React.useState<SupportedAgentType | null>(null);
 	const [name, setName] = React.useState("");
@@ -291,15 +493,54 @@ export function AddAgentDialog({
 	const [isSubmitting, setIsSubmitting] = React.useState(false);
 	const [advancedOpen, setAdvancedOpen] = React.useState(false);
 
+	// Auto-select agent type when preselectedAgentTypeId is provided
+	React.useEffect(() => {
+		if (preselectedAgentTypeId && agentTypes.length > 0 && !selectedType) {
+			const agentType = agentTypes.find((t) => t.id === preselectedAgentTypeId);
+			if (agentType) {
+				setSelectedType(agentType);
+				setName(agentType.name);
+				setDescription(agentType.description);
+			}
+		}
+	}, [preselectedAgentTypeId, agentTypes, selectedType]);
+
+	// Get configured provider IDs
+	const configuredProviderIds = React.useMemo(
+		() =>
+			new Set(credentials.filter((c) => c.isConfigured).map((c) => c.provider)),
+		[credentials],
+	);
+
+	// Check if at least one supported provider is configured
+	const hasConfiguredProvider = React.useMemo(() => {
+		if (!selectedType?.supportedAuthProviders?.length) return true; // No auth required
+
+		const isWildcard = selectedType.supportedAuthProviders.includes("*");
+		const supportedIds = isWildcard
+			? providers.filter((p) => p.env && p.env.length > 0).map((p) => p.id)
+			: selectedType.supportedAuthProviders;
+
+		return supportedIds.some((id) => configuredProviderIds.has(id));
+	}, [selectedType, providers, configuredProviderIds]);
+
 	React.useEffect(() => {
 		if (editingAgent && agentTypes.length > 0) {
-			setName(editingAgent.name);
-			setDescription(editingAgent.description);
-			setSystemPrompt(editingAgent.systemPrompt || "");
-			setMcpServers(editingAgent.mcpServers || []);
 			const type = agentTypes.find((t) => t.id === editingAgent.agentType);
 			if (type) setSelectedType(type);
+
+			// Only set name/description if they differ from the agent type defaults
+			const hasCustomName = editingAgent.name !== type?.name;
+			const hasCustomDescription =
+				editingAgent.description !== type?.description;
+			setName(hasCustomName ? editingAgent.name : "");
+			setDescription(hasCustomDescription ? editingAgent.description : "");
+			setSystemPrompt(editingAgent.systemPrompt || "");
+			setMcpServers(editingAgent.mcpServers || []);
+
 			if (
+				hasCustomName ||
+				hasCustomDescription ||
 				editingAgent.systemPrompt ||
 				(editingAgent.mcpServers && editingAgent.mcpServers.length > 0)
 			) {
@@ -307,13 +548,6 @@ export function AddAgentDialog({
 			}
 		}
 	}, [editingAgent, agentTypes]);
-
-	React.useEffect(() => {
-		if (selectedType && !name && !editingAgent) {
-			setName(selectedType.name);
-			setDescription(selectedType.description);
-		}
-	}, [selectedType, name, editingAgent]);
 
 	const handleReset = () => {
 		setSelectedType(null);
@@ -352,13 +586,13 @@ export function AddAgentDialog({
 	};
 
 	const handleSubmit = async () => {
-		if (!selectedType || !name.trim()) return;
+		if (!selectedType) return;
 
 		setIsSubmitting(true);
 		try {
 			await onAdd({
-				name: name.trim(),
-				description: description.trim(),
+				name: name.trim() || selectedType.name,
+				description: description.trim() || selectedType.description,
 				agentType: selectedType.id,
 				systemPrompt: systemPrompt.trim() || undefined,
 				mcpServers: mcpServers.length > 0 ? mcpServers : undefined,
@@ -442,25 +676,14 @@ export function AddAgentDialog({
 						</DropdownMenu>
 					</div>
 
-					<div className="space-y-2">
-						<Label htmlFor="agent-name">Name</Label>
-						<Input
-							id="agent-name"
-							value={name}
-							onChange={(e) => setName(e.target.value)}
-							placeholder="My Claude Agent"
-						/>
-					</div>
-
-					<div className="space-y-2">
-						<Label htmlFor="agent-description">Description</Label>
-						<Input
-							id="agent-description"
-							value={description}
-							onChange={(e) => setDescription(e.target.value)}
-							placeholder="A helpful coding assistant"
-						/>
-					</div>
+					{/* Auth Providers Section */}
+					<AuthProvidersSection
+						selectedType={selectedType}
+						providers={providers}
+						providersMap={providersMap}
+						configuredProviderIds={configuredProviderIds}
+						onOpenCredentials={onOpenCredentials}
+					/>
 
 					<Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
 						<CollapsibleTrigger asChild>
@@ -474,9 +697,14 @@ export function AddAgentDialog({
 									<ChevronRight className="h-4 w-4" />
 								)}
 								<span className="font-medium">Advanced Configuration</span>
-								{(systemPrompt || mcpServers.length > 0) && (
+								{(name ||
+									description ||
+									systemPrompt ||
+									mcpServers.length > 0) && (
 									<span className="text-xs text-muted-foreground ml-auto">
 										{[
+											name && "custom name",
+											description && "custom description",
 											systemPrompt && "custom prompt",
 											mcpServers.length > 0 &&
 												`${mcpServers.length} server${mcpServers.length > 1 ? "s" : ""}`,
@@ -488,6 +716,28 @@ export function AddAgentDialog({
 							</Button>
 						</CollapsibleTrigger>
 						<CollapsibleContent className="space-y-6 pt-4">
+							<div className="space-y-2">
+								<Label htmlFor="agent-name">Name</Label>
+								<Input
+									id="agent-name"
+									value={name}
+									onChange={(e) => setName(e.target.value)}
+									placeholder={selectedType?.name || "My Agent"}
+								/>
+							</div>
+
+							<div className="space-y-2">
+								<Label htmlFor="agent-description">Description</Label>
+								<Input
+									id="agent-description"
+									value={description}
+									onChange={(e) => setDescription(e.target.value)}
+									placeholder={
+										selectedType?.description || "A helpful coding assistant"
+									}
+								/>
+							</div>
+
 							<div className="space-y-2">
 								<Label htmlFor="system-prompt">Additional System Prompt</Label>
 								<Textarea
@@ -543,7 +793,12 @@ export function AddAgentDialog({
 					</Button>
 					<Button
 						onClick={handleSubmit}
-						disabled={!selectedType || !name.trim() || isSubmitting}
+						disabled={!selectedType || !hasConfiguredProvider || isSubmitting}
+						title={
+							!hasConfiguredProvider
+								? "Configure at least one auth provider"
+								: undefined
+						}
 					>
 						{submitButtonText}
 					</Button>

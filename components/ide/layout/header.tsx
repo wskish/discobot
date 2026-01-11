@@ -69,6 +69,10 @@ interface HeaderProps {
 	sessionAgent?: Agent | null;
 	sessionWorkspace?: Workspace | null;
 	agentTypes?: SupportedAgentType[];
+	// Credentials dialog props
+	credentialsOpen?: boolean;
+	onCredentialsOpenChange?: (open: boolean) => void;
+	credentialsInitialProviderId?: string | null;
 }
 
 export function Header({
@@ -78,8 +82,17 @@ export function Header({
 	sessionAgent,
 	sessionWorkspace,
 	agentTypes = [],
+	credentialsOpen: externalCredentialsOpen,
+	onCredentialsOpenChange: externalOnCredentialsOpenChange,
+	credentialsInitialProviderId,
 }: HeaderProps) {
-	const [credentialsOpen, setCredentialsOpen] = React.useState(false);
+	const [internalCredentialsOpen, setInternalCredentialsOpen] =
+		React.useState(false);
+
+	// Use external state if provided, otherwise use internal state
+	const credentialsOpen = externalCredentialsOpen ?? internalCredentialsOpen;
+	const setCredentialsOpen =
+		externalOnCredentialsOpenChange ?? setInternalCredentialsOpen;
 
 	const getAgentIcons = (a: Agent) => {
 		const agentType = agentTypes.find((t) => t.id === a.agentType);
@@ -164,6 +177,7 @@ export function Header({
 			<CredentialsDialog
 				open={credentialsOpen}
 				onOpenChange={setCredentialsOpen}
+				initialProviderId={credentialsInitialProviderId}
 			/>
 		</header>
 	);

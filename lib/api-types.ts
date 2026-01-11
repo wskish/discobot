@@ -68,6 +68,8 @@ export interface SupportedAgentType {
 	icons?: Icon[];
 	modes?: AgentMode[];
 	models?: AgentModel[];
+	/** Auth provider IDs this agent supports (e.g., "anthropic", "openai", "codex") */
+	supportedAuthProviders?: string[];
 }
 
 export interface AgentMode {

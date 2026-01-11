@@ -48,7 +48,7 @@ async function startOAuth(optionId: string): Promise<OAuthStartResult> {
 
 async function completeOAuth(
 	code: string,
-	verifier: string
+	verifier: string,
 ): Promise<OAuthCompleteResult> {
 	const result = await api.anthropicExchange({ code, verifier });
 	if (result.success) {
@@ -86,7 +86,7 @@ function ProviderLogo({ className }: { className?: string }) {
 		<img
 			src="/data/models-dev/logos/anthropic.svg"
 			alt=""
-			className={className}
+			className={`${className} dark:invert`}
 			style={{ objectFit: "contain" }}
 			onError={() => setHasError(true)}
 		/>
@@ -144,7 +144,7 @@ export function AnthropicOAuthFlow({
 		try {
 			const result = await anthropicAuthPlugin.completeOAuth(
 				code.trim(),
-				verifier
+				verifier,
 			);
 			if (result.success) {
 				onComplete();

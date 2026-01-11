@@ -32,7 +32,8 @@ export interface ModelInfo {
 
 export type ModelsApiData = Record<string, ModelProvider>;
 
-const REMOTE_URL = "https://models.dev/api.json";
+// REMOTE_URL kept for reference - currently using local data to avoid CORS
+// const REMOTE_URL = "https://models.dev/api.json";
 const LOCAL_FALLBACK_URL = "/data/models-dev/api.json";
 
 async function fetchModelsData(): Promise<ModelsApiData> {
@@ -53,7 +54,7 @@ export function useModelsProviders() {
 			revalidateOnFocus: false,
 			revalidateOnReconnect: true,
 			dedupingInterval: 60000, // Cache for 1 minute
-		}
+		},
 	);
 
 	const providers = data

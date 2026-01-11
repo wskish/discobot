@@ -37,9 +37,7 @@ export async function POST(request: Request) {
 	const pkce = await generatePKCE();
 
 	const baseUrl =
-		mode === "console"
-			? "https://console.anthropic.com"
-			: "https://claude.ai";
+		mode === "console" ? "https://console.anthropic.com" : "https://claude.ai";
 
 	const url = new URL(`${baseUrl}/oauth/authorize`);
 	url.searchParams.set("code", "true");
@@ -47,9 +45,12 @@ export async function POST(request: Request) {
 	url.searchParams.set("response_type", "code");
 	url.searchParams.set(
 		"redirect_uri",
-		"https://console.anthropic.com/oauth/code/callback"
+		"https://console.anthropic.com/oauth/code/callback",
 	);
-	url.searchParams.set("scope", "org:create_api_key user:profile user:inference");
+	url.searchParams.set(
+		"scope",
+		"org:create_api_key user:profile user:inference",
+	);
 	url.searchParams.set("code_challenge", pkce.challenge);
 	url.searchParams.set("code_challenge_method", "S256");
 	url.searchParams.set("state", pkce.verifier);

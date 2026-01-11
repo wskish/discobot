@@ -25,14 +25,13 @@ import type { CredentialAuthType, CredentialInfo } from "@/lib/api-types";
 import { matchesProviderAlias } from "@/lib/config/provider-aliases";
 import { useCredentials } from "@/lib/hooks/use-credentials";
 import {
-	type ModelProvider,
 	getProviderLogoUrl,
+	type ModelProvider,
 	useModelsProviders,
 } from "@/lib/hooks/use-models-providers";
 import {
 	getAuthTypesForProvider,
 	getOAuthFlowComponent,
-	hasAuthPlugin,
 } from "@/lib/plugins/auth";
 import { cn } from "@/lib/utils";
 
@@ -54,7 +53,7 @@ function ProviderLogo({
 		<img
 			src={logoUrl}
 			alt=""
-			className={cn("object-contain", className)}
+			className={cn("object-contain dark:invert", className)}
 			onError={() => setHasError(true)}
 		/>
 	);
@@ -83,10 +82,11 @@ function ProviderCombobox({
 				p.name.toLowerCase().includes(query) ||
 				p.id.toLowerCase().includes(query) ||
 				p.env?.some((e) => e.toLowerCase().includes(query)) ||
-				matchesProviderAlias(p.id, query)
+				matchesProviderAlias(p.id, query),
 		);
 	}, [providers, search]);
 
+	// biome-ignore lint/correctness/useExhaustiveDependencies: intentional - reset index when list changes
 	React.useEffect(() => {
 		setHighlightedIndex(0);
 	}, [filteredProviders.length]);
@@ -109,7 +109,7 @@ function ProviderCombobox({
 			case "ArrowDown":
 				e.preventDefault();
 				setHighlightedIndex((i) =>
-					Math.min(i + 1, filteredProviders.length - 1)
+					Math.min(i + 1, filteredProviders.length - 1),
 				);
 				break;
 			case "ArrowUp":
@@ -157,7 +157,7 @@ function ProviderCombobox({
 							type="button"
 							className={cn(
 								"w-full flex items-center gap-3 px-3 py-2 text-left hover:bg-muted/50 transition-colors",
-								index === highlightedIndex && "bg-muted"
+								index === highlightedIndex && "bg-muted",
 							)}
 							onClick={() => onSelect(provider)}
 							onMouseEnter={() => setHighlightedIndex(index)}
@@ -243,14 +243,14 @@ function CredentialForm({
 	existingCredential?: CredentialInfo;
 	onSave: (
 		authType: CredentialAuthType,
-		data: { apiKey?: string }
+		data: { apiKey?: string },
 	) => Promise<void>;
 	onCancel: () => void;
 }) {
 	const authTypes = getAuthTypesForProvider(provider.id);
 	const [selectedAuthType, setSelectedAuthType] =
 		React.useState<CredentialAuthType>(
-			existingCredential?.authType ?? authTypes[0].type
+			existingCredential?.authType ?? authTypes[0].type,
 		);
 	const [apiKey, setApiKey] = React.useState("");
 	const [showSecret, setShowSecret] = React.useState(false);
@@ -408,6 +408,8 @@ function CredentialForm({
 interface CredentialsDialogProps {
 	open: boolean;
 	onOpenChange: (open: boolean) => void;
+	/** If provided, opens directly to the form for this provider */
+	initialProviderId?: string | null;
 }
 
 type DialogView = "list" | "search" | "form";
@@ -415,9 +417,13 @@ type DialogView = "list" | "search" | "form";
 export function CredentialsDialog({
 	open,
 	onOpenChange,
+	initialProviderId,
 }: CredentialsDialogProps) {
-	const { providers, providersMap, isLoading: providersLoading } =
-		useModelsProviders();
+	const {
+		providers,
+		providersMap,
+		isLoading: providersLoading,
+	} = useModelsProviders();
 	const {
 		credentials,
 		isLoading: credentialsLoading,
@@ -428,27 +434,56 @@ export function CredentialsDialog({
 	const [view, setView] = React.useState<DialogView>("list");
 	const [editingProvider, setEditingProvider] =
 		React.useState<ModelProvider | null>(null);
+	// Track if we opened with an initial provider (to auto-close on save/cancel)
+	const [openedWithInitialProvider, setOpenedWithInitialProvider] =
+		React.useState(false);
+
+	// Handle initial provider selection when dialog opens
+	React.useEffect(() => {
+		if (open && initialProviderId && !providersLoading) {
+			const provider = providersMap[initialProviderId];
+			if (provider) {
+				setEditingProvider(provider);
+				setView("form");
+				setOpenedWithInitialProvider(true);
+			}
+		}
+	}, [open, initialProviderId, providersMap, providersLoading]);
 
 	// Reset state when dialog closes
 	React.useEffect(() => {
 		if (!open) {
 			setView("list");
 			setEditingProvider(null);
+			setOpenedWithInitialProvider(false);
 		}
 	}, [open]);
 
 	const handleSave = async (
 		providerId: string,
 		authType: CredentialAuthType,
-		data: { apiKey?: string }
+		data: { apiKey?: string },
 	) => {
 		await createCredential({
 			provider: providerId,
 			authType,
 			apiKey: data.apiKey,
 		});
-		setView("list");
-		setEditingProvider(null);
+		if (openedWithInitialProvider) {
+			onOpenChange(false);
+		} else {
+			setView("list");
+			setEditingProvider(null);
+		}
+	};
+
+	const handleFormCancel = () => {
+		if (openedWithInitialProvider) {
+			onOpenChange(false);
+		} else {
+			setView("list");
+			setEditingProvider(null);
+		}
 	};
 
 	const handleRemove = async (providerId: string) => {
@@ -460,7 +495,7 @@ export function CredentialsDialog({
 	// Filter to providers with env vars that aren't already configured
 	const configuredProviderIds = new Set(credentials.map((c) => c.provider));
 	const availableProviders = providers.filter(
-		(p) => p.env && p.env.length > 0 && !configuredProviderIds.has(p.id)
+		(p) => p.env && p.env.length > 0 && !configuredProviderIds.has(p.id),
 	);
 
 	const isLoading = providersLoading || credentialsLoading;
@@ -479,15 +514,12 @@ export function CredentialsDialog({
 					<CredentialForm
 						provider={editingProvider}
 						existingCredential={credentials.find(
-							(c) => c.provider === editingProvider.id
+							(c) => c.provider === editingProvider.id,
 						)}
 						onSave={(authType, data) =>
 							handleSave(editingProvider.id, authType, data)
 						}
-						onCancel={() => {
-							setView("list");
-							setEditingProvider(null);
-						}}
+						onCancel={handleFormCancel}
 					/>
 				) : view === "search" ? (
 					<ProviderCombobox

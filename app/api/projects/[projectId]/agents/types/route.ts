@@ -48,6 +48,7 @@ const supportedAgentTypes: SupportedAgentType[] = [
 				provider: "Anthropic",
 			},
 		],
+		supportedAuthProviders: ["anthropic"],
 	},
 	{
 		id: "opencode",
@@ -79,6 +80,7 @@ const supportedAgentTypes: SupportedAgentType[] = [
 			{ id: "gemini-2.5-pro", name: "Gemini 2.5 Pro", provider: "Google" },
 			{ id: "deepseek-v3", name: "DeepSeek V3", provider: "DeepSeek" },
 		],
+		supportedAuthProviders: ["*"],
 	},
 	{
 		id: "gemini-cli",
@@ -99,6 +101,7 @@ const supportedAgentTypes: SupportedAgentType[] = [
 			{ id: "gemini-2.5-pro", name: "Gemini 2.5 Pro", provider: "Google" },
 			{ id: "gemini-2.5-flash", name: "Gemini 2.5 Flash", provider: "Google" },
 		],
+		supportedAuthProviders: ["google"],
 	},
 	{
 		id: "aider",
@@ -130,6 +133,7 @@ const supportedAgentTypes: SupportedAgentType[] = [
 			{ id: "deepseek-chat", name: "DeepSeek Chat", provider: "DeepSeek" },
 			{ id: "gemini-2.5-pro", name: "Gemini 2.5 Pro", provider: "Google" },
 		],
+		supportedAuthProviders: ["anthropic", "openai", "google", "deepseek"],
 	},
 	{
 		id: "continue",
@@ -162,6 +166,7 @@ const supportedAgentTypes: SupportedAgentType[] = [
 			{ id: "gpt-4o", name: "GPT-4o", provider: "OpenAI" },
 			{ id: "codellama-70b", name: "Code Llama 70B", provider: "Meta" },
 		],
+		supportedAuthProviders: ["anthropic", "openai"],
 	},
 	{
 		id: "cursor-agent",
@@ -194,6 +199,7 @@ const supportedAgentTypes: SupportedAgentType[] = [
 			{ id: "gpt-4o", name: "GPT-4o", provider: "OpenAI" },
 			{ id: "cursor-small", name: "Cursor Small", provider: "Cursor" },
 		],
+		supportedAuthProviders: ["anthropic", "openai"],
 	},
 	{
 		id: "codex",
@@ -226,6 +232,7 @@ const supportedAgentTypes: SupportedAgentType[] = [
 			{ id: "o4-mini", name: "o4-mini", provider: "OpenAI" },
 			{ id: "gpt-4.1", name: "GPT-4.1", provider: "OpenAI" },
 		],
+		supportedAuthProviders: ["openai", "codex"],
 	},
 	{
 		id: "copilot-cli",
@@ -261,6 +268,7 @@ const supportedAgentTypes: SupportedAgentType[] = [
 				provider: "Anthropic",
 			},
 		],
+		supportedAuthProviders: ["github-copilot"],
 	},
 ];
 

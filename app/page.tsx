@@ -4,6 +4,7 @@ import * as React from "react";
 import { AddAgentDialog } from "@/components/ide/add-agent-dialog";
 import { AddWorkspaceDialog } from "@/components/ide/add-workspace-dialog";
 import { Header, LeftSidebar, MainContent } from "@/components/ide/layout";
+import { WelcomeModal } from "@/components/ide/welcome-modal";
 import { api } from "@/lib/api-client";
 import type {
 	Agent,
@@ -47,6 +48,25 @@ export default function IDEChatPage() {
 
 	// Dialog state
 	const dialogs = useDialogState();
+	const [credentialsOpen, setCredentialsOpen] = React.useState(false);
+	const [credentialsInitialProviderId, setCredentialsInitialProviderId] =
+		React.useState<string | null>(null);
+
+	// Reset initial provider when credentials dialog closes
+	const handleCredentialsOpenChange = React.useCallback((open: boolean) => {
+		setCredentialsOpen(open);
+		if (!open) {
+			setCredentialsInitialProviderId(null);
+		}
+	}, []);
+
+	const openCredentialsForProvider = React.useCallback(
+		(providerId?: string) => {
+			setCredentialsInitialProviderId(providerId || null);
+			setCredentialsOpen(true);
+		},
+		[],
+	);
 
 	// Computed values
 	const sessionAgent = React.useMemo(() => {
@@ -165,6 +185,9 @@ export default function IDEChatPage() {
 				sessionAgent={sessionAgent}
 				sessionWorkspace={sessionWorkspace}
 				agentTypes={agentTypes}
+				credentialsOpen={credentialsOpen}
+				onCredentialsOpenChange={handleCredentialsOpenChange}
+				credentialsInitialProviderId={credentialsInitialProviderId}
 			/>
 
 			<div className="flex-1 flex overflow-hidden">
@@ -212,6 +235,16 @@ export default function IDEChatPage() {
 				onOpenChange={dialogs.handleAgentDialogOpenChange}
 				onAdd={handleAddOrEditAgent}
 				editingAgent={dialogs.editingAgent}
+				onOpenCredentials={openCredentialsForProvider}
+				preselectedAgentTypeId={dialogs.preselectedAgentTypeId}
+			/>
+
+			<WelcomeModal
+				open={!agentsLoading && agents.length === 0}
+				agentTypes={agentTypes}
+				onSelectAgentType={(agentType) =>
+					dialogs.openAgentDialog(undefined, agentType.id)
+				}
 			/>
 		</div>
 	);

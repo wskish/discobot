@@ -4,7 +4,7 @@ import { db } from "@/lib/mock-db";
 // GET /api/projects/[projectId]/credentials/[providerId] - Get credential info
 export async function GET(
 	_request: Request,
-	{ params }: { params: Promise<{ projectId: string; providerId: string }> }
+	{ params }: { params: Promise<{ projectId: string; providerId: string }> },
 ) {
 	const { providerId } = await params;
 	const credential = db.getCredentialInfo(providerId);
@@ -12,7 +12,7 @@ export async function GET(
 	if (!credential) {
 		return NextResponse.json(
 			{ error: "Credential not found" },
-			{ status: 404 }
+			{ status: 404 },
 		);
 	}
 
@@ -22,7 +22,7 @@ export async function GET(
 // DELETE /api/projects/[projectId]/credentials/[providerId] - Delete a credential
 export async function DELETE(
 	_request: Request,
-	{ params }: { params: Promise<{ projectId: string; providerId: string }> }
+	{ params }: { params: Promise<{ projectId: string; providerId: string }> },
 ) {
 	const { providerId } = await params;
 	const deleted = db.deleteCredential(providerId);
@@ -30,7 +30,7 @@ export async function DELETE(
 	if (!deleted) {
 		return NextResponse.json(
 			{ error: "Credential not found" },
-			{ status: 404 }
+			{ status: 404 },
 		);
 	}
 

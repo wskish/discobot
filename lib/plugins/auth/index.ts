@@ -6,21 +6,18 @@
  * to the credentials dialog and other components.
  */
 
-import type { CredentialAuthType } from "@/lib/api-types";
-import type { AuthPlugin, AuthTypeOption } from "./types";
-
 // Import all auth plugins
 import { anthropicAuthPlugin } from "./anthropic";
 import { codexAuthPlugin } from "./codex";
 import { githubCopilotAuthPlugin } from "./github-copilot";
-
-// Re-export types
-export type { AuthPlugin, AuthTypeOption, OAuthOption } from "./types";
+import type { AuthPlugin, AuthTypeOption } from "./types";
 
 // Re-export plugin components
 export { AnthropicOAuthFlow } from "./anthropic";
 export { CodexOAuthFlow } from "./codex";
 export { GitHubCopilotOAuthFlow } from "./github-copilot";
+// Re-export types
+export type { AuthPlugin, AuthTypeOption, OAuthOption } from "./types";
 
 /**
  * Registry of all available auth plugins, keyed by provider ID
@@ -79,8 +76,10 @@ export function getAuthTypesForProvider(providerId: string): AuthTypeOption[] {
  * or undefined if the provider doesn't support OAuth.
  */
 export function getOAuthFlowComponent(
-	providerId: string
-): React.ComponentType<{ onComplete: () => void; onCancel: () => void }> | undefined {
+	providerId: string,
+):
+	| React.ComponentType<{ onComplete: () => void; onCancel: () => void }>
+	| undefined {
 	// Map provider IDs to their OAuth flow components
 	switch (providerId) {
 		case "anthropic":

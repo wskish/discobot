@@ -83,7 +83,7 @@ export function getProviderAliases(providerId: string): string[] {
  */
 export function matchesProviderAlias(
 	providerId: string,
-	query: string
+	query: string,
 ): boolean {
 	const aliases = PROVIDER_ALIASES[providerId];
 	if (!aliases) return false;

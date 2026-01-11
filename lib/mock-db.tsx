@@ -190,27 +190,30 @@ const workspaces: Workspace[] = [
 	},
 ];
 
-const agents: Agent[] = [
-	{
-		id: "agent-1",
-		name: "Code Assistant",
-		description: "General purpose coding helper",
-		agentType: "claude-code",
-		isDefault: true,
-	},
-	{
-		id: "agent-2",
-		name: "Refactor Pro",
-		description: "Specialized in code refactoring",
-		agentType: "opencode",
-	},
-	{
-		id: "agent-3",
-		name: "Test Writer",
-		description: "Generates unit and integration tests",
-		agentType: "gemini-cli",
-	},
-];
+// Start with empty agents to show welcome modal on first load
+// Uncomment below for development with pre-populated agents:
+// const agents: Agent[] = [
+// 	{
+// 		id: "agent-1",
+// 		name: "Code Assistant",
+// 		description: "General purpose coding helper",
+// 		agentType: "claude-code",
+// 		isDefault: true,
+// 	},
+// 	{
+// 		id: "agent-2",
+// 		name: "Refactor Pro",
+// 		description: "Specialized in code refactoring",
+// 		agentType: "opencode",
+// 	},
+// 	{
+// 		id: "agent-3",
+// 		name: "Test Writer",
+// 		description: "Generates unit and integration tests",
+// 		agentType: "gemini-cli",
+// 	},
+// ];
+const agents: Agent[] = [];
 
 const chatMessages: Record<string, ChatMessage[]> = {
 	"session-1": [
@@ -493,22 +496,6 @@ export const db = {
 		if (index === -1) return false;
 		agents.splice(index, 1);
 		return true;
-	},
-
-	duplicateAgent(id: string): Agent | null {
-		const original = agents.find((a) => a.id === id);
-		if (!original) return null;
-
-		const agent: Agent = {
-			id: `agent-${Date.now()}`,
-			name: `${original.name} (Copy)`,
-			description: original.description,
-			agentType: original.agentType,
-			systemPrompt: original.systemPrompt,
-			mcpServers: original.mcpServers,
-		};
-		agents.push(agent);
-		return agent;
 	},
 
 	setDefaultAgent(id: string): Agent | null {

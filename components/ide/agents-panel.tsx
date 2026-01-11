@@ -127,16 +127,12 @@ function AgentNode({
 	onConfigure?: () => void;
 }) {
 	const [menuOpen, setMenuOpen] = React.useState(false);
-	const { deleteAgent, duplicateAgent, setDefaultAgent } = useAgents();
+	const { deleteAgent, setDefaultAgent } = useAgents();
 
 	const handleConfigure = () => {
 		if (onConfigure) {
 			onConfigure();
 		}
-	};
-
-	const handleDuplicate = async () => {
-		await duplicateAgent(agent.id);
 	};
 
 	const handleDelete = async () => {
@@ -199,9 +195,6 @@ function AgentNode({
 					</DropdownMenuItem>
 					<DropdownMenuItem onSelect={handleConfigure}>
 						Configure
-					</DropdownMenuItem>
-					<DropdownMenuItem onSelect={handleDuplicate}>
-						Duplicate
 					</DropdownMenuItem>
 					<DropdownMenuItem
 						onSelect={handleDelete}

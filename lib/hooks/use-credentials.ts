@@ -12,7 +12,7 @@ import type { CreateCredentialRequest } from "../api-types";
  */
 export function useCredentials() {
 	const { data, error, isLoading, mutate } = useSWR("credentials", () =>
-		api.getCredentials()
+		api.getCredentials(),
 	);
 
 	const createCredential = async (data: CreateCredentialRequest) => {

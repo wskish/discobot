@@ -26,12 +26,6 @@ export function useAgents() {
 		mutate();
 	};
 
-	const duplicateAgent = async (id: string) => {
-		const agent = await api.duplicateAgent(id);
-		mutate();
-		return agent;
-	};
-
 	const setDefaultAgent = async (id: string) => {
 		const agent = await api.setDefaultAgent(id);
 		await mutate();
@@ -45,7 +39,6 @@ export function useAgents() {
 		createAgent,
 		updateAgent,
 		deleteAgent,
-		duplicateAgent,
 		setDefaultAgent,
 		mutate,
 	};

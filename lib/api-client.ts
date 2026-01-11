@@ -154,10 +154,6 @@ class ApiClient {
 		await this.fetch(`/agents/${id}`, { method: "DELETE" });
 	}
 
-	async duplicateAgent(id: string): Promise<Agent> {
-		return this.fetch<Agent>(`/agents/${id}/duplicate`, { method: "POST" });
-	}
-
 	async setDefaultAgent(id: string): Promise<Agent> {
 		return this.fetch<Agent>("/agents/default", {
 			method: "POST",
@@ -201,7 +197,9 @@ class ApiClient {
 		return this.fetch<CredentialInfo[]>("/credentials");
 	}
 
-	async createCredential(data: CreateCredentialRequest): Promise<CredentialInfo> {
+	async createCredential(
+		data: CreateCredentialRequest,
+	): Promise<CredentialInfo> {
 		return this.fetch<CredentialInfo>("/credentials", {
 			method: "POST",
 			body: JSON.stringify(data),
@@ -214,72 +212,68 @@ class ApiClient {
 
 	// Anthropic OAuth
 	async anthropicAuthorize(
-		mode: "max" | "console" = "max"
+		mode: "max" | "console" = "max",
 	): Promise<OAuthAuthorizeResponse> {
 		return this.fetch<OAuthAuthorizeResponse>(
 			"/credentials/anthropic/authorize",
 			{
 				method: "POST",
 				body: JSON.stringify({ mode }),
-			}
+			},
 		);
 	}
 
-	async anthropicExchange(data: OAuthExchangeRequest): Promise<OAuthExchangeResponse> {
+	async anthropicExchange(
+		data: OAuthExchangeRequest,
+	): Promise<OAuthExchangeResponse> {
 		return this.fetch<OAuthExchangeResponse>(
 			"/credentials/anthropic/exchange",
 			{
 				method: "POST",
 				body: JSON.stringify(data),
-			}
+			},
 		);
 	}
 
 	// GitHub Copilot OAuth (device flow)
 	async githubCopilotDeviceCode(
-		data: GitHubCopilotDeviceCodeRequest = {}
+		data: GitHubCopilotDeviceCodeRequest = {},
 	): Promise<GitHubCopilotDeviceCodeResponse> {
 		return this.fetch<GitHubCopilotDeviceCodeResponse>(
 			"/credentials/github-copilot/device-code",
 			{
 				method: "POST",
 				body: JSON.stringify(data),
-			}
+			},
 		);
 	}
 
 	async githubCopilotPoll(
-		data: GitHubCopilotPollRequest
+		data: GitHubCopilotPollRequest,
 	): Promise<GitHubCopilotPollResponse> {
 		return this.fetch<GitHubCopilotPollResponse>(
 			"/credentials/github-copilot/poll",
 			{
 				method: "POST",
 				body: JSON.stringify(data),
-			}
+			},
 		);
 	}
 
 	// Codex (ChatGPT) OAuth
 	async codexAuthorize(): Promise<CodexAuthorizeResponse> {
-		return this.fetch<CodexAuthorizeResponse>(
-			"/credentials/codex/authorize",
-			{
-				method: "POST",
-			}
-		);
+		return this.fetch<CodexAuthorizeResponse>("/credentials/codex/authorize", {
+			method: "POST",
+		});
 	}
 
 	async codexExchange(
-		data: CodexExchangeRequest
+		data: CodexExchangeRequest,
 	): Promise<CodexExchangeResponse> {
-		return this.fetch<CodexExchangeResponse>(
-			"/credentials/codex/exchange",
-			{
-				method: "POST",
-				body: JSON.stringify(data),
-			}
-		);
+		return this.fetch<CodexExchangeResponse>("/credentials/codex/exchange", {
+			method: "POST",
+			body: JSON.stringify(data),
+		});
 	}
 }
 

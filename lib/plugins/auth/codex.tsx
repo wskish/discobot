@@ -46,7 +46,7 @@ async function startOAuth(_optionId: string): Promise<OAuthStartResult> {
 
 async function completeOAuth(
 	code: string,
-	verifier: string
+	verifier: string,
 ): Promise<OAuthCompleteResult> {
 	const result = await api.codexExchange({ code, verifier });
 	if (result.success) {
@@ -83,7 +83,7 @@ function ProviderLogo({ className }: { className?: string }) {
 		<img
 			src="/data/models-dev/logos/openai.svg"
 			alt=""
-			className={className}
+			className={`${className} dark:invert`}
 			style={{ objectFit: "contain" }}
 			onError={() => setHasError(true)}
 		/>

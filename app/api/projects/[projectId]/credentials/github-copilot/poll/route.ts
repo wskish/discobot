@@ -22,7 +22,7 @@ export async function POST(request: Request) {
 	if (!body.deviceCode || !body.domain) {
 		return NextResponse.json(
 			{ status: "error", error: "Device code and domain are required" },
-			{ status: 400 }
+			{ status: 400 },
 		);
 	}
 
