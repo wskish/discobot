@@ -10,6 +10,10 @@ import type {
 	SupportedAgentType,
 	Workspace,
 } from "@/lib/api-types";
+import {
+	STORAGE_KEYS,
+	usePersistedState,
+} from "@/lib/hooks/use-persisted-state";
 import { cn } from "@/lib/utils";
 
 interface LeftSidebarProps {
@@ -41,18 +45,27 @@ export function LeftSidebar({
 	onAddAgent,
 	onConfigureAgent,
 }: LeftSidebarProps) {
-	const [agentsPanelMinimized, setAgentsPanelMinimized] = React.useState(false);
-	const [agentsPanelHeight, setAgentsPanelHeight] = React.useState(20);
+	const [agentsPanelMinimized, setAgentsPanelMinimized] = usePersistedState(
+		STORAGE_KEYS.AGENTS_PANEL_MINIMIZED,
+		false,
+	);
+	const [agentsPanelHeight, setAgentsPanelHeight] = usePersistedState(
+		STORAGE_KEYS.AGENTS_PANEL_HEIGHT,
+		20,
+	);
 	const sidebarRef = React.useRef<HTMLDivElement>(null);
 
-	const handleSidebarResize = React.useCallback((delta: number) => {
-		if (!sidebarRef.current) return;
-		const containerHeight = sidebarRef.current.clientHeight;
-		const deltaPercent = (delta / containerHeight) * 100;
-		setAgentsPanelHeight((prev) =>
-			Math.min(60, Math.max(15, prev - deltaPercent)),
-		);
-	}, []);
+	const handleSidebarResize = React.useCallback(
+		(delta: number) => {
+			if (!sidebarRef.current) return;
+			const containerHeight = sidebarRef.current.clientHeight;
+			const deltaPercent = (delta / containerHeight) * 100;
+			setAgentsPanelHeight((prev) =>
+				Math.min(60, Math.max(15, prev - deltaPercent)),
+			);
+		},
+		[setAgentsPanelHeight],
+	);
 
 	return (
 		<aside

@@ -1,10 +1,63 @@
 "use client";
 
 import * as React from "react";
+import { STORAGE_KEYS } from "./use-persisted-state";
 
 export type PanelState = "normal" | "minimized" | "maximized";
 
+/**
+ * Load persisted panel state from localStorage
+ */
+function loadPersistedState(): Partial<PanelLayoutState> {
+	if (typeof window === "undefined") return {};
+
+	try {
+		const diffPanelState = localStorage.getItem(STORAGE_KEYS.DIFF_PANEL_STATE);
+		const bottomPanelState = localStorage.getItem(
+			STORAGE_KEYS.BOTTOM_PANEL_STATE,
+		);
+		const diffPanelHeight = localStorage.getItem(
+			STORAGE_KEYS.DIFF_PANEL_HEIGHT,
+		);
+
+		return {
+			...(diffPanelState && { diffPanelState: JSON.parse(diffPanelState) }),
+			...(bottomPanelState && {
+				bottomPanelState: JSON.parse(bottomPanelState),
+			}),
+			...(diffPanelHeight && { diffPanelHeight: JSON.parse(diffPanelHeight) }),
+		};
+	} catch {
+		return {};
+	}
+}
+
+/**
+ * Save panel state to localStorage
+ */
+function savePersistedState(state: PanelLayoutState): void {
+	if (typeof window === "undefined") return;
+
+	try {
+		localStorage.setItem(
+			STORAGE_KEYS.DIFF_PANEL_STATE,
+			JSON.stringify(state.diffPanelState),
+		);
+		localStorage.setItem(
+			STORAGE_KEYS.BOTTOM_PANEL_STATE,
+			JSON.stringify(state.bottomPanelState),
+		);
+		localStorage.setItem(
+			STORAGE_KEYS.DIFF_PANEL_HEIGHT,
+			JSON.stringify(state.diffPanelHeight),
+		);
+	} catch {
+		// Ignore storage errors
+	}
+}
+
 type PanelAction =
+	| { type: "INIT"; persisted: Partial<PanelLayoutState> }
 	| { type: "MINIMIZE_DIFF" }
 	| { type: "MAXIMIZE_DIFF" }
 	| { type: "MINIMIZE_BOTTOM" }
@@ -26,6 +79,9 @@ function panelReducer(
 	action: PanelAction,
 ): PanelLayoutState {
 	switch (action.type) {
+		case "INIT":
+			return { ...state, ...action.persisted };
+
 		case "MINIMIZE_DIFF":
 			if (state.diffPanelState === "minimized") {
 				return {
@@ -128,6 +184,19 @@ export function usePanelLayout() {
 	});
 
 	const mainRef = React.useRef<HTMLDivElement>(null);
+
+	// Load persisted state on mount
+	React.useEffect(() => {
+		const persisted = loadPersistedState();
+		if (Object.keys(persisted).length > 0) {
+			dispatch({ type: "INIT", persisted });
+		}
+	}, []);
+
+	// Save state changes to localStorage
+	React.useEffect(() => {
+		savePersistedState(state);
+	}, [state]);
 
 	const handleResize = React.useCallback(
 		(delta: number) => {

@@ -16,10 +16,17 @@ import { useAgentTypes } from "@/lib/hooks/use-agent-types";
 import { useAgents } from "@/lib/hooks/use-agents";
 import { useDialogState } from "@/lib/hooks/use-dialog-state";
 import { useMessages } from "@/lib/hooks/use-messages";
+import {
+	STORAGE_KEYS,
+	usePersistedState,
+} from "@/lib/hooks/use-persisted-state";
 import { useWorkspaces } from "@/lib/hooks/use-workspaces";
 
 export default function IDEChatPage() {
-	const [leftSidebarOpen, setLeftSidebarOpen] = React.useState(true);
+	const [leftSidebarOpen, setLeftSidebarOpen] = usePersistedState(
+		STORAGE_KEYS.LEFT_SIDEBAR_OPEN,
+		true,
+	);
 	const [selectedSession, setSelectedSession] = React.useState<Session | null>(
 		null,
 	);
