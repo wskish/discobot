@@ -11,6 +11,7 @@ import type {
 	CreateAgentRequest,
 	CreateWorkspaceRequest,
 	Session,
+	Workspace,
 } from "@/lib/api-types";
 import { useAgentTypes } from "@/lib/hooks/use-agent-types";
 import { useAgents } from "@/lib/hooks/use-agents";
@@ -105,6 +106,19 @@ export default function IDEChatPage() {
 		setWorkspaceSelectTrigger((prev) => prev + 1);
 	}, []);
 
+	// Handle workspace selection from breadcrumb dropdown
+	const handleWorkspaceSelect = React.useCallback((workspace: Workspace) => {
+		// Find first non-closed session in this workspace
+		const firstSession = workspace.sessions.find((s) => s.status !== "closed");
+		if (firstSession) {
+			setSelectedSession(firstSession);
+		} else {
+			// No open sessions - clear selection and preselect this workspace for new session
+			setSelectedSession(null);
+			setPreselectedWorkspaceId(workspace.id);
+		}
+	}, []);
+
 	const handleAddWorkspace = async (newWorkspace: CreateWorkspaceRequest) => {
 		await createWorkspace(newWorkspace);
 		dialogs.closeWorkspaceDialog();
@@ -189,9 +203,13 @@ export default function IDEChatPage() {
 				leftSidebarOpen={leftSidebarOpen}
 				onToggleSidebar={() => setLeftSidebarOpen(!leftSidebarOpen)}
 				onNewSession={handleNewSession}
+				workspaces={workspaces}
+				selectedSession={selectedSession}
 				sessionAgent={sessionAgent}
 				sessionWorkspace={sessionWorkspace}
 				agentTypes={agentTypes}
+				onWorkspaceSelect={handleWorkspaceSelect}
+				onSessionSelect={handleSessionSelect}
 				credentialsOpen={credentialsOpen}
 				onCredentialsOpenChange={handleCredentialsOpenChange}
 				credentialsInitialProviderId={credentialsInitialProviderId}
