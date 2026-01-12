@@ -3,6 +3,7 @@ package handler
 import (
 	"errors"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/anthropics/octobot/server/internal/middleware"
@@ -183,9 +184,16 @@ func (h *Handler) AnthropicExchange(w http.ResponseWriter, r *http.Request) {
 	h.JSON(w, http.StatusOK, response)
 }
 
+// GitHubCopilotDeviceCodeRequest is the request for initiating device flow
+type GitHubCopilotDeviceCodeRequest struct {
+	DeploymentType string `json:"deploymentType"` // "github.com" or "enterprise"
+	EnterpriseURL  string `json:"enterpriseUrl,omitempty"`
+}
+
 // GitHubCopilotPollRequest is the request for polling device authorization
 type GitHubCopilotPollRequest struct {
 	DeviceCode string `json:"deviceCode"`
+	Domain     string `json:"domain"`
 }
 
 // GitHubCopilotDeviceCodeResponse is the camelCase response for frontend
@@ -195,11 +203,39 @@ type GitHubCopilotDeviceCodeResponse struct {
 	VerificationURI string `json:"verificationUri"`
 	ExpiresIn       int    `json:"expiresIn"`
 	Interval        int    `json:"interval"`
+	Domain          string `json:"domain"`
+}
+
+// GitHubCopilotPollResponse is the response for poll requests
+type GitHubCopilotPollResponse struct {
+	Status string `json:"status"` // "pending", "success", or "error"
+	Error  string `json:"error,omitempty"`
 }
 
 // GitHubCopilotDeviceCode initiates device flow
 func (h *Handler) GitHubCopilotDeviceCode(w http.ResponseWriter, r *http.Request) {
-	provider := oauth.NewGitHubCopilotProvider(h.cfg.GitHubCopilotClientID)
+	var req GitHubCopilotDeviceCodeRequest
+	if err := h.DecodeJSON(r, &req); err != nil {
+		// Allow empty body, default to github.com
+		req.DeploymentType = "github.com"
+	}
+
+	// Determine domain based on deployment type
+	domain := oauth.DefaultGitHubDomain
+	if req.DeploymentType == "enterprise" && req.EnterpriseURL != "" {
+		// Extract domain from enterprise URL
+		domain = req.EnterpriseURL
+		// Strip protocol if present
+		if idx := strings.Index(domain, "://"); idx != -1 {
+			domain = domain[idx+3:]
+		}
+		// Strip trailing slash and path
+		if idx := strings.Index(domain, "/"); idx != -1 {
+			domain = domain[:idx]
+		}
+	}
+
+	provider := oauth.NewGitHubCopilotProvider(h.cfg.GitHubCopilotClientID, domain)
 	deviceResp, err := provider.RequestDeviceCode(r.Context())
 	if err != nil {
 		h.Error(w, http.StatusInternalServerError, "Failed to request device code: "+err.Error())
@@ -213,6 +249,7 @@ func (h *Handler) GitHubCopilotDeviceCode(w http.ResponseWriter, r *http.Request
 		VerificationURI: deviceResp.VerificationURI,
 		ExpiresIn:       deviceResp.ExpiresIn,
 		Interval:        deviceResp.Interval,
+		Domain:          domain,
 	})
 }
 
@@ -227,11 +264,17 @@ func (h *Handler) GitHubCopilotPoll(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if req.DeviceCode == "" {
-		h.Error(w, http.StatusBadRequest, "device_code is required")
+		h.Error(w, http.StatusBadRequest, "deviceCode is required")
 		return
 	}
 
-	provider := oauth.NewGitHubCopilotProvider(h.cfg.GitHubCopilotClientID)
+	// Use domain from request, default to github.com
+	domain := req.Domain
+	if domain == "" {
+		domain = oauth.DefaultGitHubDomain
+	}
+
+	provider := oauth.NewGitHubCopilotProvider(h.cfg.GitHubCopilotClientID, domain)
 	pollResp, err := provider.PollForToken(r.Context(), req.DeviceCode)
 	if err != nil {
 		h.Error(w, http.StatusInternalServerError, "Poll request failed: "+err.Error())
@@ -294,7 +337,7 @@ func (h *Handler) GitHubCopilotPoll(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.JSON(w, http.StatusOK, map[string]any{
-		"status":     "authorized",
+		"status":     "success",
 		"credential": info,
 	})
 }

@@ -12,15 +12,25 @@ import (
 )
 
 const (
-	// GitHub device flow endpoints
-	githubDeviceURL = "https://github.com/login/device/code"
-	githubTokenURL  = "https://github.com/login/oauth/access_token"
+	// Default GitHub domain
+	DefaultGitHubDomain = "github.com"
 )
 
 // GitHubCopilotProvider handles GitHub Copilot device code flow.
 type GitHubCopilotProvider struct {
 	ClientID string
+	Domain   string // e.g., "github.com" or "github.mycompany.com"
 	Scopes   []string
+}
+
+// deviceCodeURL returns the device code endpoint for this provider's domain
+func (p *GitHubCopilotProvider) deviceCodeURL() string {
+	return "https://" + p.Domain + "/login/device/code"
+}
+
+// tokenURL returns the token endpoint for this provider's domain
+func (p *GitHubCopilotProvider) tokenURL() string {
+	return "https://" + p.Domain + "/login/oauth/access_token"
 }
 
 // DeviceCodeResponse represents the initial device code response.
@@ -44,9 +54,14 @@ type DevicePollResponse struct {
 }
 
 // NewGitHubCopilotProvider creates a new GitHub Copilot device flow provider.
-func NewGitHubCopilotProvider(clientID string) *GitHubCopilotProvider {
+// If domain is empty, defaults to github.com.
+func NewGitHubCopilotProvider(clientID, domain string) *GitHubCopilotProvider {
+	if domain == "" {
+		domain = DefaultGitHubDomain
+	}
 	return &GitHubCopilotProvider{
 		ClientID: clientID,
+		Domain:   domain,
 		// Copilot-specific scopes
 		Scopes: []string{"read:user"},
 	}
@@ -58,7 +73,7 @@ func (p *GitHubCopilotProvider) RequestDeviceCode(ctx context.Context) (*DeviceC
 	data.Set("client_id", p.ClientID)
 	data.Set("scope", strings.Join(p.Scopes, " "))
 
-	req, err := http.NewRequestWithContext(ctx, "POST", githubDeviceURL, strings.NewReader(data.Encode()))
+	req, err := http.NewRequestWithContext(ctx, "POST", p.deviceCodeURL(), strings.NewReader(data.Encode()))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
@@ -96,7 +111,7 @@ func (p *GitHubCopilotProvider) PollForToken(ctx context.Context, deviceCode str
 	data.Set("device_code", deviceCode)
 	data.Set("grant_type", "urn:ietf:params:oauth:grant-type:device_code")
 
-	req, err := http.NewRequestWithContext(ctx, "POST", githubTokenURL, strings.NewReader(data.Encode()))
+	req, err := http.NewRequestWithContext(ctx, "POST", p.tokenURL(), strings.NewReader(data.Encode()))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
