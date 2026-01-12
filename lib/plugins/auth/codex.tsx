@@ -122,7 +122,7 @@ export function CodexOAuthFlow({ onComplete, onCancel }: CodexOAuthFlowProps) {
 			try {
 				const credentials = await api.getCredentials();
 				const hasCodex = credentials.credentials.some(
-					(c) => c.provider === "codex" && c.isConfigured
+					(c) => c.provider === "codex" && c.isConfigured,
 				);
 				if (hasCodex) {
 					mutate("credentials");

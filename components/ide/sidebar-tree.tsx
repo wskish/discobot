@@ -206,7 +206,9 @@ function WorkspaceNode({
 								onClick={(e) => e.stopPropagation()}
 								className={cn(
 									"p-1 rounded hover:bg-muted shrink-0",
-									menuOpen ? "opacity-100" : "opacity-0 group-hover:opacity-100",
+									menuOpen
+										? "opacity-100"
+										: "opacity-0 group-hover:opacity-100",
 								)}
 								title="More options"
 							>

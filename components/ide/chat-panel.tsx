@@ -189,6 +189,22 @@ export function ChatPanel({
 		}
 	}, [selectedAgentId]);
 
+	// Auto-select default agent when agents become available and nothing is selected
+	React.useEffect(() => {
+		// Only auto-select if nothing is currently selected or selected agent doesn't exist
+		const currentAgentExists = agents.some(
+			(a) => a.id === localSelectedAgentId,
+		);
+		if (!localSelectedAgentId || !currentAgentExists) {
+			// Prefer the default agent, otherwise use the first one
+			const defaultAgent = agents.find((a) => a.isDefault);
+			const agentToSelect = defaultAgent || agents[0];
+			if (agentToSelect) {
+				setLocalSelectedAgentId(agentToSelect.id);
+			}
+		}
+	}, [agents, localSelectedAgentId]);
+
 	React.useEffect(() => {
 		if (workspaceSelectTrigger && workspaceSelectTrigger > 0) {
 			setIsShimmering(true);
