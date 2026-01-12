@@ -2,6 +2,7 @@
 
 import { ArrowLeft, ChevronDown, ChevronRight, Sparkles } from "lucide-react";
 import * as React from "react";
+import { Button } from "@/components/ui/button";
 import {
 	Dialog,
 	DialogContent,
@@ -11,12 +12,14 @@ import {
 } from "@/components/ui/dialog";
 import type {
 	AuthProvider,
+	CreateWorkspaceRequest,
 	CredentialInfo,
 	SupportedAgentType,
 } from "@/lib/api-types";
 import { cn } from "@/lib/utils";
 import { IconRenderer } from "./icon-renderer";
 import { OctobotLogo } from "./octobot-logo";
+import { WorkspaceForm, type WorkspaceFormRef } from "./workspace-form";
 
 interface WelcomeModalProps {
 	open: boolean;
@@ -26,16 +29,20 @@ interface WelcomeModalProps {
 	onComplete: (
 		agentType: SupportedAgentType,
 		authProviderId: string | null,
+		workspace: CreateWorkspaceRequest | null,
 	) => void;
+	/** Called when user skips the welcome flow (session-only, comes back on refresh) */
+	onSkip?: () => void;
 }
 
-type Step = "agent" | "auth";
+type Step = "agent" | "auth" | "workspace";
 
 /**
  * Welcome onboarding modal shown when no agents are configured.
- * Features a two-step flow:
+ * Features a three-step flow:
  * 1. Select an AI coding agent
  * 2. Select an auth provider (if needed)
+ * 3. Add a workspace
  */
 export function WelcomeModal({
 	open,
@@ -43,20 +50,28 @@ export function WelcomeModal({
 	authProviders,
 	configuredCredentials,
 	onComplete,
+	onSkip,
 }: WelcomeModalProps) {
 	const [step, setStep] = React.useState<Step>("agent");
 	const [selectedAgent, setSelectedAgent] =
 		React.useState<SupportedAgentType | null>(null);
+	const [selectedAuthProviderId, setSelectedAuthProviderId] = React.useState<
+		string | null
+	>(null);
 	const [showOtherAgents, setShowOtherAgents] = React.useState(false);
 	const [showOtherProviders, setShowOtherProviders] = React.useState(false);
+	const [workspaceIsValid, setWorkspaceIsValid] = React.useState(false);
+	const workspaceFormRef = React.useRef<WorkspaceFormRef>(null);
 
 	// Reset state when modal opens
 	React.useEffect(() => {
 		if (open) {
 			setStep("agent");
 			setSelectedAgent(null);
+			setSelectedAuthProviderId(null);
 			setShowOtherAgents(false);
 			setShowOtherProviders(false);
+			setWorkspaceIsValid(false);
 		}
 	}, [open]);
 
@@ -91,31 +106,68 @@ export function WelcomeModal({
 			? configuredProviderIds.size > 0
 			: supportedProviders.some((p) => configuredProviderIds.has(p));
 
+		setSelectedAgent(agent);
+
 		if (hasConfiguredProvider) {
-			// User already has valid credentials, complete immediately
-			onComplete(agent, null);
+			// User already has valid credentials, go to workspace step
+			setSelectedAuthProviderId(null);
+			setStep("workspace");
 		} else if (supportedProviders.length === 0 && agent.allowNoAuth) {
-			// Agent doesn't need auth and allows no auth
-			onComplete(agent, null);
+			// Agent doesn't need auth and allows no auth, go to workspace step
+			setSelectedAuthProviderId(null);
+			setStep("workspace");
 		} else {
 			// Need to select auth provider
-			setSelectedAgent(agent);
 			setStep("auth");
 		}
 	};
 
 	// Handle auth provider selection
 	const handleSelectAuthProvider = (providerId: string | null) => {
+		setSelectedAuthProviderId(providerId);
+		setStep("workspace");
+	};
+
+	// Handle workspace submission
+	const handleWorkspaceSubmit = (workspace: CreateWorkspaceRequest) => {
 		if (selectedAgent) {
-			onComplete(selectedAgent, providerId);
+			onComplete(selectedAgent, selectedAuthProviderId, workspace);
 		}
 	};
 
-	// Go back to agent selection
+	// Handle skip workspace
+	const handleSkipWorkspace = () => {
+		if (selectedAgent) {
+			onComplete(selectedAgent, selectedAuthProviderId, null);
+		}
+	};
+
+	// Go back
 	const handleBack = () => {
-		setStep("agent");
-		setSelectedAgent(null);
-		setShowOtherProviders(false);
+		if (step === "workspace") {
+			const supportedProviders = selectedAgent?.supportedAuthProviders || [];
+			const supportsAll = supportedProviders.includes("*");
+			const hasConfiguredProvider = supportsAll
+				? configuredProviderIds.size > 0
+				: supportedProviders.some((p) => configuredProviderIds.has(p));
+
+			if (
+				hasConfiguredProvider ||
+				(supportedProviders.length === 0 && selectedAgent?.allowNoAuth)
+			) {
+				// Came directly from agent selection
+				setStep("agent");
+				setSelectedAgent(null);
+			} else {
+				// Came from auth selection
+				setStep("auth");
+			}
+			setSelectedAuthProviderId(null);
+		} else if (step === "auth") {
+			setStep("agent");
+			setSelectedAgent(null);
+			setShowOtherProviders(false);
+		}
 	};
 
 	// Get available auth providers for selected agent
@@ -153,6 +205,25 @@ export function WelcomeModal({
 		return availableProviders.filter((p) => !highlightedProviderIds.has(p.id));
 	}, [availableProviders, highlightedProviderIds]);
 
+	const getStepDescription = () => {
+		switch (step) {
+			case "agent":
+				return "Get started by adding an AI coding agent. Choose from our recommended agents below or explore other options.";
+			case "auth":
+				return (
+					<>
+						Select how you want to authenticate with{" "}
+						<span className="font-medium text-foreground">
+							{selectedAgent?.name}
+						</span>
+						.
+					</>
+				);
+			case "workspace":
+				return "Add a workspace to start coding. You can add a local folder or clone a git repository.";
+		}
+	};
+
 	return (
 		<Dialog open={open}>
 			<DialogContent
@@ -161,8 +232,8 @@ export function WelcomeModal({
 			>
 				{/* Header with gradient background */}
 				<div className="relative bg-gradient-to-br from-primary/10 via-primary/5 to-background px-8 py-10 text-center flex-shrink-0">
-					{/* Back button for step 2 */}
-					{step === "auth" && (
+					{/* Back button for step 2 and 3 */}
+					{(step === "auth" || step === "workspace") && (
 						<button
 							type="button"
 							onClick={handleBack}
@@ -182,24 +253,14 @@ export function WelcomeModal({
 							Welcome to Octobot
 						</DialogTitle>
 						<DialogDescription className="text-base text-muted-foreground max-w-md mx-auto">
-							{step === "agent" ? (
-								"Get started by adding an AI coding agent. Choose from our recommended agents below or explore other options."
-							) : (
-								<>
-									Select how you want to authenticate with{" "}
-									<span className="font-medium text-foreground">
-										{selectedAgent?.name}
-									</span>
-									.
-								</>
-							)}
+							{getStepDescription()}
 						</DialogDescription>
 					</DialogHeader>
 				</div>
 
 				{/* Content */}
 				<div className="px-8 py-6 space-y-6 flex-1 overflow-y-auto">
-					{step === "agent" ? (
+					{step === "agent" && (
 						<>
 							{/* Featured Agents */}
 							<div className="space-y-3">
@@ -256,8 +317,23 @@ export function WelcomeModal({
 									)}
 								</div>
 							)}
+
+							{/* Skip button */}
+							{onSkip && (
+								<div className="flex justify-center pt-2">
+									<Button
+										variant="ghost"
+										onClick={onSkip}
+										className="text-muted-foreground"
+									>
+										Skip for now
+									</Button>
+								</div>
+							)}
 						</>
-					) : (
+					)}
+
+					{step === "auth" && (
 						<>
 							{/* Auth Provider Selection */}
 							<div className="space-y-3">
@@ -348,6 +424,37 @@ export function WelcomeModal({
 								</div>
 							)}
 						</>
+					)}
+
+					{step === "workspace" && (
+						<div className="space-y-6">
+							<div className="space-y-3">
+								<h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
+									Workspace
+								</h3>
+								<WorkspaceForm
+									ref={workspaceFormRef}
+									onSubmit={handleWorkspaceSubmit}
+									onValidationChange={setWorkspaceIsValid}
+								/>
+							</div>
+
+							<div className="flex justify-end gap-3 pt-2">
+								<Button
+									variant="ghost"
+									onClick={handleSkipWorkspace}
+									className="text-muted-foreground"
+								>
+									Skip for now
+								</Button>
+								<Button
+									onClick={() => workspaceFormRef.current?.submit()}
+									disabled={!workspaceIsValid}
+								>
+									Add Workspace
+								</Button>
+							</div>
+						</div>
 					)}
 				</div>
 			</DialogContent>

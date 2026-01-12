@@ -49,6 +49,8 @@ export default function IDEChatPage() {
 	>([]);
 	const [showSystemRequirements, setShowSystemRequirements] =
 		React.useState(false);
+	// Track if welcome modal was skipped for this session (resets on refresh)
+	const [welcomeSkipped, setWelcomeSkipped] = React.useState(false);
 
 	// Check system status on mount
 	React.useEffect(() => {
@@ -349,17 +351,23 @@ export default function IDEChatPage() {
 					systemStatusChecked &&
 					!showSystemRequirements &&
 					!agentsLoading &&
-					agents.length === 0
+					agents.length === 0 &&
+					!welcomeSkipped
 				}
 				agentTypes={agentTypes}
 				authProviders={authProviders}
 				configuredCredentials={credentials}
-				onComplete={async (agentType, authProviderId) => {
+				onSkip={() => setWelcomeSkipped(true)}
+				onComplete={async (agentType, authProviderId, workspace) => {
 					if (authProviderId) {
 						// Auth provider selected - store pending agent and open credentials dialog
 						// Agent will be created automatically when credentials are configured
 						setPendingAgentType(agentType);
 						openCredentialsForProvider(authProviderId);
+						// If workspace was provided, create it after agent setup
+						if (workspace) {
+							await createWorkspace(workspace);
+						}
 					} else {
 						// "Free" selected or already has credentials - create agent directly and make it default
 						const agent = await createAgent({
@@ -370,6 +378,13 @@ export default function IDEChatPage() {
 						// Make it the default agent
 						await api.setDefaultAgent(agent.id);
 						mutateAgents();
+						// Create workspace if provided
+						if (workspace) {
+							const ws = await createWorkspace(workspace);
+							if (ws) {
+								setPreselectedWorkspaceId(ws.id);
+							}
+						}
 					}
 				}}
 			/>
