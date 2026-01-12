@@ -4,6 +4,7 @@ import * as React from "react";
 import { AddAgentDialog } from "@/components/ide/add-agent-dialog";
 import { AddWorkspaceDialog } from "@/components/ide/add-workspace-dialog";
 import { Header, LeftSidebar, MainContent } from "@/components/ide/layout";
+import { SystemRequirementsDialog } from "@/components/ide/system-requirements-dialog";
 import { WelcomeModal } from "@/components/ide/welcome-modal";
 import { api } from "@/lib/api-client";
 import type {
@@ -11,10 +12,13 @@ import type {
 	CreateAgentRequest,
 	CreateWorkspaceRequest,
 	Session,
+	StatusMessage,
 	Workspace,
 } from "@/lib/api-types";
 import { useAgentTypes } from "@/lib/hooks/use-agent-types";
 import { useAgents } from "@/lib/hooks/use-agents";
+import { useAuthProviders } from "@/lib/hooks/use-auth-providers";
+import { useCredentials } from "@/lib/hooks/use-credentials";
 import { useDialogState } from "@/lib/hooks/use-dialog-state";
 import { useMessages } from "@/lib/hooks/use-messages";
 import {
@@ -37,6 +41,29 @@ export default function IDEChatPage() {
 	>(null);
 	const [workspaceSelectTrigger, setWorkspaceSelectTrigger] = React.useState(0);
 
+	// System status check
+	const [systemStatusChecked, setSystemStatusChecked] = React.useState(false);
+	const [systemStatusMessages, setSystemStatusMessages] = React.useState<StatusMessage[]>([]);
+	const [showSystemRequirements, setShowSystemRequirements] = React.useState(false);
+
+	// Check system status on mount
+	React.useEffect(() => {
+		async function checkSystemStatus() {
+			try {
+				const status = await api.getSystemStatus();
+				if (status.messages && status.messages.length > 0) {
+					setSystemStatusMessages(status.messages);
+					setShowSystemRequirements(true);
+				}
+			} catch (error) {
+				console.error("Failed to check system status:", error);
+			} finally {
+				setSystemStatusChecked(true);
+			}
+		}
+		checkSystemStatus();
+	}, []);
+
 	// Data fetching
 	const {
 		workspaces,
@@ -52,6 +79,8 @@ export default function IDEChatPage() {
 		mutate: mutateAgents,
 	} = useAgents();
 	const { agentTypes } = useAgentTypes();
+	const { authProviders } = useAuthProviders();
+	const { credentials } = useCredentials();
 	const { messages } = useMessages(selectedSession?.id || null);
 
 	// Dialog state
@@ -264,12 +293,34 @@ export default function IDEChatPage() {
 				preselectedAgentTypeId={dialogs.preselectedAgentTypeId}
 			/>
 
+			<SystemRequirementsDialog
+				open={showSystemRequirements}
+				messages={systemStatusMessages}
+				onClose={() => setShowSystemRequirements(false)}
+			/>
+
 			<WelcomeModal
-				open={!agentsLoading && agents.length === 0}
+				open={systemStatusChecked && !showSystemRequirements && !agentsLoading && agents.length === 0}
 				agentTypes={agentTypes}
-				onSelectAgentType={(agentType) =>
-					dialogs.openAgentDialog(undefined, agentType.id)
-				}
+				authProviders={authProviders}
+				configuredCredentials={credentials}
+				onComplete={async (agentType, authProviderId) => {
+					if (authProviderId) {
+						// Auth provider selected - open credentials dialog to configure it
+						// After credentials are configured, user can re-select the agent
+						openCredentialsForProvider(authProviderId);
+					} else {
+						// "Free" selected or already has credentials - create agent directly and make it default
+						const agent = await createAgent({
+							name: agentType.name,
+							description: agentType.description,
+							agentType: agentType.id,
+						});
+						// Make it the default agent
+						await api.setDefaultAgent(agent.id);
+						mutateAgents();
+					}
+				}}
 			/>
 		</div>
 	);

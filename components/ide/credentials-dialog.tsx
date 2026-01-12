@@ -21,14 +21,17 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import type { CredentialAuthType, CredentialInfo } from "@/lib/api-types";
+import type {
+	AuthProvider,
+	CredentialAuthType,
+	CredentialInfo,
+} from "@/lib/api-types";
 import { matchesProviderAlias } from "@/lib/config/provider-aliases";
 import { useCredentials } from "@/lib/hooks/use-credentials";
 import {
-	getProviderLogoUrl,
-	type ModelProvider,
-	useModelsProviders,
-} from "@/lib/hooks/use-models-providers";
+	getAuthProviderLogoUrl,
+	useAuthProviders,
+} from "@/lib/hooks/use-auth-providers";
 import {
 	getAuthTypesForProvider,
 	getOAuthFlowComponent,
@@ -37,13 +40,15 @@ import { cn } from "@/lib/utils";
 
 function ProviderLogo({
 	providerId,
+	provider,
 	className,
 }: {
 	providerId: string;
+	provider?: AuthProvider;
 	className?: string;
 }) {
 	const [hasError, setHasError] = React.useState(false);
-	const logoUrl = getProviderLogoUrl(providerId);
+	const logoUrl = getAuthProviderLogoUrl(providerId, provider);
 
 	if (hasError) {
 		return <Key className={className} />;
@@ -65,8 +70,8 @@ function ProviderCombobox({
 	onSelect,
 	onCancel,
 }: {
-	providers: ModelProvider[];
-	onSelect: (provider: ModelProvider) => void;
+	providers: AuthProvider[];
+	onSelect: (provider: AuthProvider) => void;
 	onCancel: () => void;
 }) {
 	const [search, setSearch] = React.useState("");
@@ -163,7 +168,7 @@ function ProviderCombobox({
 							onMouseEnter={() => setHighlightedIndex(index)}
 						>
 							<div className="h-5 w-5 rounded flex items-center justify-center shrink-0 overflow-hidden">
-								<ProviderLogo providerId={provider.id} className="h-4 w-4" />
+								<ProviderLogo providerId={provider.id} provider={provider} className="h-4 w-4" />
 							</div>
 							<div className="flex-1 min-w-0">
 								<div className="text-sm font-medium">{provider.name}</div>
@@ -194,7 +199,7 @@ function ConfiguredCredentialRow({
 	onRemove,
 }: {
 	credential: CredentialInfo;
-	provider?: ModelProvider;
+	provider?: AuthProvider;
 	onEdit: () => void;
 	onRemove: () => void;
 }) {
@@ -206,7 +211,7 @@ function ConfiguredCredentialRow({
 		<div className="flex items-center justify-between gap-3 py-2 px-3 rounded-lg bg-muted/30 border">
 			<div className="flex items-center gap-3 min-w-0">
 				<div className="h-6 w-6 rounded flex items-center justify-center shrink-0 overflow-hidden bg-background">
-					<ProviderLogo providerId={credential.provider} className="h-4 w-4" />
+					<ProviderLogo providerId={credential.provider} provider={provider} className="h-4 w-4" />
 				</div>
 				<div className="min-w-0">
 					<div className="font-medium text-sm truncate">
@@ -239,7 +244,7 @@ function CredentialForm({
 	onSave,
 	onCancel,
 }: {
-	provider: ModelProvider;
+	provider: AuthProvider;
 	existingCredential?: CredentialInfo;
 	onSave: (
 		authType: CredentialAuthType,
@@ -308,7 +313,7 @@ function CredentialForm({
 			{/* Provider header */}
 			<div className="flex items-center gap-3 pb-3 border-b">
 				<div className="h-8 w-8 rounded-md flex items-center justify-center bg-muted overflow-hidden">
-					<ProviderLogo providerId={provider.id} className="h-5 w-5" />
+					<ProviderLogo providerId={provider.id} provider={provider} className="h-5 w-5" />
 				</div>
 				<div>
 					<div className="font-medium">{provider.name}</div>
@@ -423,7 +428,7 @@ export function CredentialsDialog({
 		providers,
 		providersMap,
 		isLoading: providersLoading,
-	} = useModelsProviders();
+	} = useAuthProviders();
 	const {
 		credentials,
 		isLoading: credentialsLoading,
@@ -433,7 +438,7 @@ export function CredentialsDialog({
 
 	const [view, setView] = React.useState<DialogView>("list");
 	const [editingProvider, setEditingProvider] =
-		React.useState<ModelProvider | null>(null);
+		React.useState<AuthProvider | null>(null);
 	// Track if we opened with an initial provider (to auto-close on save/cancel)
 	const [openedWithInitialProvider, setOpenedWithInitialProvider] =
 		React.useState(false);
