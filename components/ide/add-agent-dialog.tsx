@@ -180,8 +180,8 @@ function AuthProvidersSection({
 	onOpenCredentials,
 }: {
 	selectedType: SupportedAgentType | null;
-	providers: ModelProvider[];
-	providersMap: Record<string, ModelProvider>;
+	providers: AuthProvider[];
+	providersMap: Record<string, AuthProvider>;
 	configuredProviderIds: Set<string>;
 	onOpenCredentials?: (providerId?: string) => void;
 }) {
@@ -483,7 +483,7 @@ export function AddAgentDialog({
 }: AddAgentDialogProps) {
 	const { agentTypes, isLoading } = useAgentTypes();
 	const { credentials } = useCredentials();
-	const { providers, providersMap } = useModelsProviders();
+	const { providers, providersMap } = useAuthProviders();
 	const [selectedType, setSelectedType] =
 		React.useState<SupportedAgentType | null>(null);
 	const [name, setName] = React.useState("");
