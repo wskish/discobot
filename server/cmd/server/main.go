@@ -11,9 +11,14 @@ import (
 	"time"
 
 	"github.com/anthropics/octobot/server/internal/config"
+	"github.com/anthropics/octobot/server/internal/container"
+	"github.com/anthropics/octobot/server/internal/container/docker"
 	"github.com/anthropics/octobot/server/internal/database"
+	"github.com/anthropics/octobot/server/internal/dispatcher"
+	"github.com/anthropics/octobot/server/internal/git"
 	"github.com/anthropics/octobot/server/internal/handler"
 	"github.com/anthropics/octobot/server/internal/middleware"
+	"github.com/anthropics/octobot/server/internal/service"
 	"github.com/anthropics/octobot/server/internal/store"
 	"github.com/anthropics/octobot/server/static"
 	"github.com/go-chi/chi/v5"
@@ -61,6 +66,55 @@ func main() {
 	// Create store
 	s := store.New(db.DB)
 
+	// Initialize git provider
+	gitProvider, err := git.NewLocalProvider(cfg.GitDir)
+	if err != nil {
+		log.Printf("Warning: Failed to initialize git provider: %v", err)
+		log.Println("Git operations will not be available")
+	} else {
+		log.Printf("Git provider initialized at %s", cfg.GitDir)
+	}
+
+	// Initialize container runtime
+	var containerRuntime container.Runtime
+	switch cfg.ContainerRuntime {
+	case "docker", "":
+		containerRuntime, err = docker.NewProvider(cfg)
+		if err != nil {
+			log.Printf("Warning: Failed to initialize Docker runtime: %v", err)
+			log.Println("Terminal/container operations will not be available")
+		} else {
+			log.Printf("Container runtime initialized (type: docker)")
+		}
+	case "kubernetes":
+		log.Println("Warning: Kubernetes runtime not yet implemented")
+		log.Println("Terminal/container operations will not be available")
+	case "cloudflare":
+		log.Println("Warning: Cloudflare runtime not yet implemented")
+		log.Println("Terminal/container operations will not be available")
+	default:
+		log.Printf("Warning: Unknown container runtime: %s", cfg.ContainerRuntime)
+		log.Println("Terminal/container operations will not be available")
+	}
+
+	// Initialize and start job dispatcher
+	var disp *dispatcher.Service
+	if cfg.DispatcherEnabled {
+		disp = dispatcher.NewService(s, cfg)
+
+		// Register executors if container runtime is available
+		if containerRuntime != nil {
+			containerSvc := service.NewContainerService(s, containerRuntime, cfg)
+			disp.RegisterExecutor(dispatcher.NewContainerCreateExecutor(containerSvc))
+			disp.RegisterExecutor(dispatcher.NewContainerDestroyExecutor(containerSvc))
+		}
+
+		disp.Start(context.Background())
+		log.Printf("Job dispatcher started (server ID: %s)", disp.ServerID())
+	} else {
+		log.Println("Job dispatcher disabled")
+	}
+
 	// Create router
 	r := chi.NewRouter()
 
@@ -99,7 +153,15 @@ func main() {
 	})
 
 	// Initialize handlers
-	h := handler.New(s, cfg)
+	h := handler.NewWithProviders(s, cfg, gitProvider, containerRuntime)
+
+	// Wire up job queue notification to dispatcher for immediate execution
+	if disp != nil {
+		h.JobQueue().SetNotifyFunc(disp.NotifyNewJob)
+	}
+
+	// System status endpoint (checks for required dependencies, no auth required)
+	r.Get("/api/status", h.GetSystemStatus)
 
 	// Auth routes (no auth required)
 	r.Route("/auth", func(r chi.Router) {
@@ -146,6 +208,19 @@ func main() {
 				// Sessions within workspace
 				r.Get("/{workspaceId}/sessions", h.ListSessionsByWorkspace)
 				r.Post("/{workspaceId}/sessions", h.CreateSession)
+
+				// Git operations
+				r.Get("/{workspaceId}/git/status", h.GetWorkspaceGitStatus)
+				r.Post("/{workspaceId}/git/fetch", h.FetchWorkspace)
+				r.Post("/{workspaceId}/git/checkout", h.CheckoutWorkspace)
+				r.Get("/{workspaceId}/git/branches", h.GetWorkspaceBranches)
+				r.Get("/{workspaceId}/git/diff", h.GetWorkspaceDiff)
+				r.Get("/{workspaceId}/git/files", h.GetWorkspaceFileTree)
+				r.Get("/{workspaceId}/git/file", h.GetWorkspaceFileContent)
+				r.Post("/{workspaceId}/git/file", h.WriteWorkspaceFile)
+				r.Post("/{workspaceId}/git/stage", h.StageWorkspaceFiles)
+				r.Post("/{workspaceId}/git/commit", h.CommitWorkspace)
+				r.Get("/{workspaceId}/git/log", h.GetWorkspaceLog)
 			})
 
 			// Sessions (direct access)
@@ -162,6 +237,7 @@ func main() {
 				r.Get("/", h.ListAgents)
 				r.Post("/", h.CreateAgent)
 				r.Get("/types", h.GetAgentTypes)
+				r.Get("/auth-providers", h.GetAuthProviders)
 				r.Post("/default", h.SetDefaultAgent)
 				r.Get("/{agentId}", h.GetAgent)
 				r.Put("/{agentId}", h.UpdateAgent)
@@ -194,10 +270,10 @@ func main() {
 				r.Post("/codex/exchange", h.CodexExchange)
 			})
 
-			// Terminal
-			r.Get("/terminal/ws", h.TerminalWebSocket)
-			r.Get("/terminal/history", h.GetTerminalHistory)
-			r.Get("/terminal/status", h.GetTerminalStatus)
+			// Terminal (session-specific)
+			r.Get("/sessions/{sessionId}/terminal/ws", h.TerminalWebSocket)
+			r.Get("/sessions/{sessionId}/terminal/history", h.GetTerminalHistory)
+			r.Get("/sessions/{sessionId}/terminal/status", h.GetTerminalStatus)
 		})
 	})
 
@@ -227,6 +303,11 @@ func main() {
 	<-quit
 
 	log.Println("Shutting down server...")
+
+	// Stop dispatcher first (finish in-flight jobs)
+	if disp != nil {
+		disp.Stop()
+	}
 
 	// Graceful shutdown with timeout
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)

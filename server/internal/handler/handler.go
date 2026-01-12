@@ -5,6 +5,9 @@ import (
 	"net/http"
 
 	"github.com/anthropics/octobot/server/internal/config"
+	"github.com/anthropics/octobot/server/internal/container"
+	"github.com/anthropics/octobot/server/internal/dispatcher"
+	"github.com/anthropics/octobot/server/internal/git"
 	"github.com/anthropics/octobot/server/internal/service"
 	"github.com/anthropics/octobot/server/internal/store"
 )
@@ -20,26 +23,58 @@ type Handler struct {
 	cfg               *config.Config
 	authService       *service.AuthService
 	credentialService *service.CredentialService
+	gitService        *service.GitService
+	containerService  *service.ContainerService
+	jobQueue          *dispatcher.JobQueue
 }
 
 // New creates a new Handler
 func New(s *store.Store, cfg *config.Config) *Handler {
+	return NewWithProviders(s, cfg, nil, nil)
+}
+
+// NewWithGitProvider creates a new Handler with an optional git provider.
+// If gitProvider is nil, git operations will not be available.
+func NewWithGitProvider(s *store.Store, cfg *config.Config, gitProvider git.Provider) *Handler {
+	return NewWithProviders(s, cfg, gitProvider, nil)
+}
+
+// NewWithProviders creates a new Handler with optional git and container providers.
+// If gitProvider is nil, git operations will not be available.
+// If containerRuntime is nil, container/terminal operations will not be available.
+func NewWithProviders(s *store.Store, cfg *config.Config, gitProvider git.Provider, containerRuntime container.Runtime) *Handler {
 	credSvc, err := service.NewCredentialService(s, cfg)
 	if err != nil {
 		// This should only fail if the encryption key is invalid
 		panic("failed to create credential service: " + err.Error())
 	}
 
+	var gitSvc *service.GitService
+	if gitProvider != nil {
+		gitSvc = service.NewGitService(s, gitProvider)
+	}
+
+	var containerSvc *service.ContainerService
+	if containerRuntime != nil {
+		containerSvc = service.NewContainerService(s, containerRuntime, cfg)
+	}
+
+	// Create job queue for background job processing
+	jobQueue := dispatcher.NewJobQueue(s)
+
 	return &Handler{
 		store:             s,
 		cfg:               cfg,
 		authService:       service.NewAuthService(s, cfg),
 		credentialService: credSvc,
+		gitService:        gitSvc,
+		containerService:  containerSvc,
+		jobQueue:          jobQueue,
 	}
 }
 
 // JSON helper to write JSON responses
-func (h *Handler) JSON(w http.ResponseWriter, status int, data interface{}) {
+func (h *Handler) JSON(w http.ResponseWriter, status int, data any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	if data != nil {
@@ -53,8 +88,14 @@ func (h *Handler) Error(w http.ResponseWriter, status int, message string) {
 }
 
 // DecodeJSON helper to decode request body
-func (h *Handler) DecodeJSON(r *http.Request, v interface{}) error {
+func (h *Handler) DecodeJSON(r *http.Request, v any) error {
 	return json.NewDecoder(r.Body).Decode(v)
+}
+
+// JobQueue returns the handler's job queue.
+// Used by main.go to wire up dispatcher notifications.
+func (h *Handler) JobQueue() *dispatcher.JobQueue {
+	return h.jobQueue
 }
 
 // setSessionCookie sets the session cookie

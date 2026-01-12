@@ -9,6 +9,9 @@ import (
 	"time"
 )
 
+// DefaultContainerImage is the default container image for sessions.
+const DefaultContainerImage = "ubuntu:24.04"
+
 // Config holds all configuration for the server
 type Config struct {
 	// Server settings
@@ -26,11 +29,35 @@ type Config struct {
 	SessionSecret []byte
 	EncryptionKey []byte // 32 bytes for AES-256-GCM
 
-	// Workspaces
-	WorkspaceDir string
+	// Workspaces and Git
+	WorkspaceDir string // Base directory for workspaces and git cache
+	GitDir       string // Directory for git operations (cache + working copies)
 
-	// Docker/Container settings
-	ContainerIdleTimeout time.Duration
+	// Container runtime settings
+	ContainerRuntime     string        // "docker", "kubernetes", "cloudflare" (default: "docker")
+	ContainerImage       string        // Default container image
+	ContainerIdleTimeout time.Duration // Auto-stop containers after idle period
+
+	// Docker-specific settings
+	DockerHost    string // Docker socket/host (default: unix:///var/run/docker.sock)
+	DockerNetwork string // Docker network to attach containers to
+
+	// Kubernetes-specific settings (future)
+	KubeConfig    string // Path to kubeconfig file
+	KubeNamespace string // Namespace for container pods
+
+	// Cloudflare-specific settings (future)
+	CloudflareAccountID string // Cloudflare account ID
+	CloudflareAPIToken  string // Cloudflare API token
+
+	// Job Dispatcher settings
+	DispatcherEnabled            bool          // Enable job dispatcher (default: true)
+	DispatcherPollInterval       time.Duration // How often to poll for jobs (default: 1s)
+	DispatcherHeartbeatInterval  time.Duration // Heartbeat interval for leader (default: 10s)
+	DispatcherHeartbeatTimeout   time.Duration // Timeout before leader is considered dead (default: 30s)
+	DispatcherJobTimeout         time.Duration // Max time for a single job (default: 5m)
+	DispatcherStaleJobTimeout    time.Duration // Time after which running jobs are considered stale (default: 10m)
+	DispatcherImmediateExecution bool          // Try to execute jobs immediately when enqueued (default: true)
 
 	// OAuth providers (for user login)
 	GitHubClientID     string
@@ -49,7 +76,7 @@ func Load() (*Config, error) {
 	cfg := &Config{}
 
 	// Server
-	cfg.Port = getEnvInt("PORT", 8080)
+	cfg.Port = getEnvInt("PORT", 3001)
 	cfg.CORSOrigins = getEnvList("CORS_ORIGINS", []string{"http://localhost:3000"})
 
 	// Database
@@ -88,11 +115,36 @@ func Load() (*Config, error) {
 	}
 	cfg.EncryptionKey = encryptionKey
 
-	// Workspaces
+	// Workspaces and Git
 	cfg.WorkspaceDir = getEnv("WORKSPACE_DIR", "./workspaces")
+	cfg.GitDir = getEnv("GIT_DIR", "./git")
 
-	// Container settings
+	// Container runtime settings
+	cfg.ContainerRuntime = getEnv("CONTAINER_RUNTIME", "docker")
+	cfg.ContainerImage = getEnv("CONTAINER_IMAGE", DefaultContainerImage)
 	cfg.ContainerIdleTimeout = getEnvDuration("CONTAINER_IDLE_TIMEOUT", 30*time.Minute)
+
+	// Docker-specific settings
+	// Empty default lets the Docker SDK auto-detect (works on Linux, macOS, and Windows)
+	cfg.DockerHost = getEnv("DOCKER_HOST", "")
+	cfg.DockerNetwork = getEnv("DOCKER_NETWORK", "")
+
+	// Kubernetes-specific settings
+	cfg.KubeConfig = getEnv("KUBECONFIG", "")
+	cfg.KubeNamespace = getEnv("KUBE_NAMESPACE", "octobot")
+
+	// Cloudflare-specific settings
+	cfg.CloudflareAccountID = getEnv("CLOUDFLARE_ACCOUNT_ID", "")
+	cfg.CloudflareAPIToken = getEnv("CLOUDFLARE_API_TOKEN", "")
+
+	// Job Dispatcher settings
+	cfg.DispatcherEnabled = getEnvBool("DISPATCHER_ENABLED", true)
+	cfg.DispatcherPollInterval = getEnvDuration("DISPATCHER_POLL_INTERVAL", 5*time.Second)
+	cfg.DispatcherHeartbeatInterval = getEnvDuration("DISPATCHER_HEARTBEAT_INTERVAL", 10*time.Second)
+	cfg.DispatcherHeartbeatTimeout = getEnvDuration("DISPATCHER_HEARTBEAT_TIMEOUT", 30*time.Second)
+	cfg.DispatcherJobTimeout = getEnvDuration("DISPATCHER_JOB_TIMEOUT", 5*time.Minute)
+	cfg.DispatcherStaleJobTimeout = getEnvDuration("DISPATCHER_STALE_JOB_TIMEOUT", 10*time.Minute)
+	cfg.DispatcherImmediateExecution = getEnvBool("DISPATCHER_IMMEDIATE_EXECUTION", true)
 
 	// OAuth providers for user login
 	cfg.GitHubClientID = getEnv("GITHUB_CLIENT_ID", "")

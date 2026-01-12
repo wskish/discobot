@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"log"
 	"net/http"
 
 	"github.com/anthropics/octobot/server/internal/middleware"
@@ -28,7 +29,7 @@ func (h *Handler) ListWorkspaces(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.JSON(w, http.StatusOK, workspaces)
+	h.JSON(w, http.StatusOK, map[string]any{"workspaces": workspaces})
 }
 
 // CreateWorkspace creates a new workspace
@@ -117,7 +118,7 @@ func (h *Handler) ListSessionsByWorkspace(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	h.JSON(w, http.StatusOK, sessions)
+	h.JSON(w, http.StatusOK, map[string]any{"sessions": sessions})
 }
 
 // CreateSession creates a new session in a workspace
@@ -137,10 +138,25 @@ func (h *Handler) CreateSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Get workspace to get the path for container mounting
+	workspace, err := h.workspaceService().GetWorkspace(r.Context(), workspaceID)
+	if err != nil {
+		h.Error(w, http.StatusNotFound, "Workspace not found")
+		return
+	}
+
 	session, err := h.sessionService().CreateSession(r.Context(), workspaceID, req.Name, req.AgentID)
 	if err != nil {
 		h.Error(w, http.StatusInternalServerError, "Failed to create session")
 		return
+	}
+
+	// Enqueue container creation job (processed by dispatcher)
+	if h.jobQueue != nil {
+		if err := h.jobQueue.EnqueueContainerCreate(r.Context(), session.ID, workspace.Path); err != nil {
+			// Log but don't fail the request - container can be created on-demand
+			log.Printf("Failed to enqueue container create job for session %s: %v", session.ID, err)
+		}
 	}
 
 	h.JSON(w, http.StatusCreated, session)

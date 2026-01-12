@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"log"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -44,8 +45,17 @@ func (h *Handler) UpdateSession(w http.ResponseWriter, r *http.Request) {
 // DeleteSession deletes a session
 func (h *Handler) DeleteSession(w http.ResponseWriter, r *http.Request) {
 	sessionID := chi.URLParam(r, "sessionId")
+	ctx := r.Context()
 
-	if err := h.sessionService().DeleteSession(r.Context(), sessionID); err != nil {
+	// Enqueue container destruction job (processed by dispatcher)
+	if h.jobQueue != nil {
+		if err := h.jobQueue.EnqueueContainerDestroy(ctx, sessionID); err != nil {
+			// Log but don't fail - container might not exist
+			log.Printf("Failed to enqueue container destroy job for session %s: %v", sessionID, err)
+		}
+	}
+
+	if err := h.sessionService().DeleteSession(ctx, sessionID); err != nil {
 		h.Error(w, http.StatusInternalServerError, "Failed to delete session")
 		return
 	}
@@ -56,11 +66,11 @@ func (h *Handler) DeleteSession(w http.ResponseWriter, r *http.Request) {
 // GetSessionFiles returns files for a session
 func (h *Handler) GetSessionFiles(w http.ResponseWriter, r *http.Request) {
 	// TODO: Implement - this will use git service to get file diffs
-	h.JSON(w, http.StatusOK, []interface{}{})
+	h.JSON(w, http.StatusOK, map[string]any{"files": []any{}})
 }
 
 // ListMessages returns messages for a session
 func (h *Handler) ListMessages(w http.ResponseWriter, r *http.Request) {
 	// TODO: Implement - this will use message service
-	h.JSON(w, http.StatusOK, []interface{}{})
+	h.JSON(w, http.StatusOK, map[string]any{"messages": []any{}})
 }

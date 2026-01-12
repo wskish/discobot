@@ -455,3 +455,225 @@ func (s *Store) ListTerminalHistory(ctx context.Context, sessionID string, limit
 func (s *Store) CreateTerminalHistory(ctx context.Context, entry *model.TerminalHistory) error {
 	return s.db.WithContext(ctx).Create(entry).Error
 }
+
+// --- Jobs ---
+
+// CreateJob creates a new job in the queue.
+func (s *Store) CreateJob(ctx context.Context, job *model.Job) error {
+	return s.db.WithContext(ctx).Create(job).Error
+}
+
+// GetJobByID retrieves a job by its ID.
+func (s *Store) GetJobByID(ctx context.Context, id string) (*model.Job, error) {
+	var job model.Job
+	if err := s.db.WithContext(ctx).First(&job, "id = ?", id).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+	return &job, nil
+}
+
+// ClaimJob atomically claims a pending job of the given type.
+// Returns nil, nil if no job is available.
+func (s *Store) ClaimJob(ctx context.Context, jobType string, workerID string) (*model.Job, error) {
+	return s.ClaimJobOfTypes(ctx, []string{jobType}, workerID)
+}
+
+// ClaimJobOfTypes atomically claims a pending job of any of the given types.
+// Jobs are selected by priority (highest first), then by scheduled time (oldest first).
+// Returns nil, nil if no job is available.
+func (s *Store) ClaimJobOfTypes(ctx context.Context, jobTypes []string, workerID string) (*model.Job, error) {
+	if len(jobTypes) == 0 {
+		return nil, nil
+	}
+
+	var job model.Job
+	var found bool
+
+	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// Find a pending job of any allowed type that is scheduled to run
+		// Order: priority (highest first), scheduled_at (oldest first), created_at (tiebreaker for insertion order)
+		query := tx.Where("type IN ? AND status = ? AND scheduled_at <= ?",
+			jobTypes, model.JobStatusPending, time.Now()).
+			Order("priority DESC, scheduled_at ASC, created_at ASC").
+			Limit(1)
+
+		if err := query.First(&job).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return nil // No job available, not an error
+			}
+			return err
+		}
+
+		found = true
+
+		// Claim the job
+		now := time.Now()
+		job.Status = string(model.JobStatusRunning)
+		job.WorkerID = &workerID
+		job.StartedAt = &now
+		job.Attempts++
+
+		return tx.Save(&job).Error
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	if !found {
+		return nil, nil
+	}
+
+	return &job, nil
+}
+
+// CompleteJob marks a job as completed.
+func (s *Store) CompleteJob(ctx context.Context, jobID string) error {
+	now := time.Now()
+	return s.db.WithContext(ctx).Model(&model.Job{}).
+		Where("id = ?", jobID).
+		Updates(map[string]interface{}{
+			"status":       model.JobStatusCompleted,
+			"completed_at": now,
+		}).Error
+}
+
+// FailJob marks a job as failed with an error message.
+// If attempts < max_attempts, requeues as pending for retry with backoff.
+func (s *Store) FailJob(ctx context.Context, jobID string, errMsg string) error {
+	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var job model.Job
+		if err := tx.First(&job, "id = ?", jobID).Error; err != nil {
+			return err
+		}
+
+		if job.Attempts < job.MaxAttempts {
+			// Retry: reset to pending with exponential backoff
+			backoff := time.Duration(job.Attempts) * 30 * time.Second
+			scheduledAt := time.Now().Add(backoff)
+
+			return tx.Model(&job).Updates(map[string]interface{}{
+				"status":       model.JobStatusPending,
+				"worker_id":    nil,
+				"started_at":   nil,
+				"scheduled_at": scheduledAt,
+				"error":        errMsg,
+			}).Error
+		}
+
+		// Max attempts reached, mark as failed
+		now := time.Now()
+		return tx.Model(&job).Updates(map[string]interface{}{
+			"status":       model.JobStatusFailed,
+			"completed_at": now,
+			"error":        errMsg,
+		}).Error
+	})
+}
+
+// CountRunningJobsByType returns the count of running jobs of a given type.
+func (s *Store) CountRunningJobsByType(ctx context.Context, jobType string) (int64, error) {
+	var count int64
+	err := s.db.WithContext(ctx).Model(&model.Job{}).
+		Where("type = ? AND status = ?", jobType, model.JobStatusRunning).
+		Count(&count).Error
+	return count, err
+}
+
+// CleanupStaleJobs resets jobs that have been running too long (worker died).
+// Returns the number of jobs reset.
+func (s *Store) CleanupStaleJobs(ctx context.Context, staleAfter time.Duration) (int64, error) {
+	cutoff := time.Now().Add(-staleAfter)
+	result := s.db.WithContext(ctx).Model(&model.Job{}).
+		Where("status = ? AND started_at < ?", model.JobStatusRunning, cutoff).
+		Updates(map[string]interface{}{
+			"status":     model.JobStatusPending,
+			"worker_id":  nil,
+			"started_at": nil,
+		})
+	return result.RowsAffected, result.Error
+}
+
+// ListPendingJobTypes returns the distinct types of pending jobs.
+func (s *Store) ListPendingJobTypes(ctx context.Context) ([]string, error) {
+	var types []string
+	err := s.db.WithContext(ctx).Model(&model.Job{}).
+		Where("status = ? AND scheduled_at <= ?", model.JobStatusPending, time.Now()).
+		Distinct("type").
+		Pluck("type", &types).Error
+	return types, err
+}
+
+// --- Dispatcher Leader Election ---
+
+// TryAcquireLeadership attempts to become the leader.
+// Returns true if this server is now the leader.
+func (s *Store) TryAcquireLeadership(ctx context.Context, serverID string, heartbeatTimeout time.Duration) (bool, error) {
+	now := time.Now()
+	cutoff := now.Add(-heartbeatTimeout)
+
+	var acquired bool
+	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var existing model.DispatcherLeader
+		err := tx.First(&existing, "id = ?", model.DispatcherLeaderSingletonID).Error
+
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			// No leader exists, try to become leader
+			leader := model.DispatcherLeader{
+				ID:          model.DispatcherLeaderSingletonID,
+				ServerID:    serverID,
+				HeartbeatAt: now,
+				AcquiredAt:  now,
+			}
+			if err := tx.Create(&leader).Error; err != nil {
+				// Another server might have won the race
+				return nil
+			}
+			acquired = true
+			return nil
+		}
+
+		if err != nil {
+			return err
+		}
+
+		// Leader exists - check if it's us or if heartbeat has expired
+		if existing.ServerID == serverID {
+			// We are already the leader, update heartbeat
+			existing.HeartbeatAt = now
+			if err := tx.Save(&existing).Error; err != nil {
+				return err
+			}
+			acquired = true
+			return nil
+		}
+
+		if existing.HeartbeatAt.Before(cutoff) {
+			// Previous leader's heartbeat expired, take over
+			existing.ServerID = serverID
+			existing.HeartbeatAt = now
+			existing.AcquiredAt = now
+			if err := tx.Save(&existing).Error; err != nil {
+				return err
+			}
+			acquired = true
+			return nil
+		}
+
+		// Another server is the active leader
+		acquired = false
+		return nil
+	})
+
+	return acquired, err
+}
+
+// ReleaseLeadership releases leadership on graceful shutdown.
+func (s *Store) ReleaseLeadership(ctx context.Context, serverID string) error {
+	return s.db.WithContext(ctx).
+		Where("id = ? AND server_id = ?", model.DispatcherLeaderSingletonID, serverID).
+		Delete(&model.DispatcherLeader{}).Error
+}

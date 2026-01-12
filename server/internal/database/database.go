@@ -3,7 +3,9 @@ package database
 import (
 	"fmt"
 	"log"
+	"os"
 	"strings"
+	"time"
 
 	"github.com/anthropics/octobot/server/internal/config"
 	"github.com/anthropics/octobot/server/internal/model"
@@ -24,8 +26,19 @@ func New(cfg *config.Config) (*DB, error) {
 	var db *gorm.DB
 	var err error
 
+	// Configure logger to only log slow queries (>1 second)
+	slowLogger := logger.New(
+		log.New(os.Stdout, "\r\n", log.LstdFlags),
+		logger.Config{
+			SlowThreshold:             time.Second, // Log queries slower than 1 second
+			LogLevel:                  logger.Warn, // Only log warnings and errors
+			IgnoreRecordNotFoundError: true,        // Don't log "record not found" as error
+			Colorful:                  true,
+		},
+	)
+
 	gormConfig := &gorm.Config{
-		Logger: logger.Default.LogMode(logger.Warn),
+		Logger: slowLogger,
 	}
 
 	driver := cfg.DatabaseDriver

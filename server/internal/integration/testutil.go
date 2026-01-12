@@ -16,10 +16,15 @@ import (
 	"time"
 
 	"github.com/anthropics/octobot/server/internal/config"
+	"github.com/anthropics/octobot/server/internal/container"
+	"github.com/anthropics/octobot/server/internal/container/mock"
 	"github.com/anthropics/octobot/server/internal/database"
+	"github.com/anthropics/octobot/server/internal/dispatcher"
+	"github.com/anthropics/octobot/server/internal/git"
 	"github.com/anthropics/octobot/server/internal/handler"
 	"github.com/anthropics/octobot/server/internal/middleware"
 	"github.com/anthropics/octobot/server/internal/model"
+	"github.com/anthropics/octobot/server/internal/service"
 	"github.com/anthropics/octobot/server/internal/store"
 	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
@@ -27,12 +32,16 @@ import (
 
 // TestServer wraps a test HTTP server with helpers
 type TestServer struct {
-	Server  *httptest.Server
-	Store   *store.Store
-	Config  *config.Config
-	Handler *handler.Handler
-	DB      *database.DB
-	T       *testing.T
+	Server           *httptest.Server
+	Store            *store.Store
+	Config           *config.Config
+	Handler          *handler.Handler
+	DB               *database.DB
+	GitProvider      git.Provider
+	ContainerRuntime container.Runtime
+	MockContainer    *mock.Provider // Access to mock for test assertions
+	Dispatcher       *dispatcher.Service
+	T                *testing.T
 }
 
 // NewTestServer creates a new test server with in-memory SQLite or PostgreSQL
@@ -56,11 +65,14 @@ func NewTestServer(t *testing.T) *TestServer {
 			driver = "sqlite"
 		}
 	} else {
-		// Default to in-memory SQLite
-		dsn = "sqlite3://:memory:"
+		// Default to file-based SQLite in temp directory
+		// (in-memory SQLite creates separate databases per connection,
+		// which doesn't work well with the dispatcher using separate goroutines)
+		dsn = fmt.Sprintf("sqlite3://%s/test.db", t.TempDir())
 		driver = "sqlite"
 	}
 
+	gitDir := t.TempDir()
 	cfg := &config.Config{
 		Port:           8080,
 		CORSOrigins:    []string{"*"},
@@ -70,6 +82,7 @@ func NewTestServer(t *testing.T) *TestServer {
 		SessionSecret:  []byte("test-session-secret-32-bytes-long!!"),
 		EncryptionKey:  []byte("01234567890123456789012345678901"), // 32 bytes
 		WorkspaceDir:   t.TempDir(),
+		GitDir:         gitDir,
 	}
 
 	db, err := database.New(cfg)
@@ -87,21 +100,53 @@ func NewTestServer(t *testing.T) *TestServer {
 	}
 
 	s := store.New(db.DB)
-	h := handler.New(s, cfg)
+
+	// Create git provider
+	gitProvider, err := git.NewLocalProvider(gitDir)
+	if err != nil {
+		t.Fatalf("Failed to create git provider: %v", err)
+	}
+
+	// Create mock container runtime
+	mockContainer := mock.NewProvider()
+
+	h := handler.NewWithProviders(s, cfg, gitProvider, mockContainer)
+
+	// Create and start dispatcher for job processing
+	cfg.DispatcherEnabled = true
+	cfg.DispatcherPollInterval = 10 * time.Millisecond   // Fast polling for tests
+	cfg.DispatcherHeartbeatInterval = 50 * time.Millisecond
+	cfg.DispatcherHeartbeatTimeout = 500 * time.Millisecond
+	cfg.DispatcherJobTimeout = 30 * time.Second
+	cfg.DispatcherStaleJobTimeout = 1 * time.Minute
+
+	containerSvc := service.NewContainerService(s, mockContainer, cfg)
+	disp := dispatcher.NewService(s, cfg)
+	disp.RegisterExecutor(dispatcher.NewContainerCreateExecutor(containerSvc))
+	disp.RegisterExecutor(dispatcher.NewContainerDestroyExecutor(containerSvc))
+	disp.Start(context.Background())
+
+	// Wire up job queue notification for immediate execution
+	h.JobQueue().SetNotifyFunc(disp.NotifyNewJob)
 
 	r := setupRouter(s, cfg, h)
 	server := httptest.NewServer(r)
 
 	ts := &TestServer{
-		Server:  server,
-		Store:   s,
-		Config:  cfg,
-		Handler: h,
-		DB:      db,
-		T:       t,
+		Server:           server,
+		Store:            s,
+		Config:           cfg,
+		Handler:          h,
+		DB:               db,
+		GitProvider:      gitProvider,
+		ContainerRuntime: mockContainer,
+		MockContainer:    mockContainer,
+		Dispatcher:       disp,
+		T:                t,
 	}
 
 	t.Cleanup(func() {
+		disp.Stop()
 		server.Close()
 		db.Close()
 	})
@@ -161,6 +206,19 @@ func setupRouter(s *store.Store, cfg *config.Config, h *handler.Handler) *chi.Mu
 
 				r.Get("/{workspaceId}/sessions", h.ListSessionsByWorkspace)
 				r.Post("/{workspaceId}/sessions", h.CreateSession)
+
+				// Git operations
+				r.Get("/{workspaceId}/git/status", h.GetWorkspaceGitStatus)
+				r.Post("/{workspaceId}/git/fetch", h.FetchWorkspace)
+				r.Post("/{workspaceId}/git/checkout", h.CheckoutWorkspace)
+				r.Get("/{workspaceId}/git/branches", h.GetWorkspaceBranches)
+				r.Get("/{workspaceId}/git/diff", h.GetWorkspaceDiff)
+				r.Get("/{workspaceId}/git/files", h.GetWorkspaceFileTree)
+				r.Get("/{workspaceId}/git/file", h.GetWorkspaceFileContent)
+				r.Post("/{workspaceId}/git/file", h.WriteWorkspaceFile)
+				r.Post("/{workspaceId}/git/stage", h.StageWorkspaceFiles)
+				r.Post("/{workspaceId}/git/commit", h.CommitWorkspace)
+				r.Get("/{workspaceId}/git/log", h.GetWorkspaceLog)
 			})
 
 			r.Route("/sessions", func(r chi.Router) {
@@ -200,9 +258,10 @@ func setupRouter(s *store.Store, cfg *config.Config, h *handler.Handler) *chi.Mu
 				r.Post("/codex/exchange", h.CodexExchange)
 			})
 
-			r.Get("/terminal/ws", h.TerminalWebSocket)
-			r.Get("/terminal/history", h.GetTerminalHistory)
-			r.Get("/terminal/status", h.GetTerminalStatus)
+			// Terminal (session-specific)
+			r.Get("/sessions/{sessionId}/terminal/ws", h.TerminalWebSocket)
+			r.Get("/sessions/{sessionId}/terminal/history", h.GetTerminalHistory)
+			r.Get("/sessions/{sessionId}/terminal/status", h.GetTerminalStatus)
 		})
 	})
 
@@ -215,15 +274,18 @@ func setupRouter(s *store.Store, cfg *config.Config, h *handler.Handler) *chi.Mu
 func NewTestServerNoAuth(t *testing.T) *TestServer {
 	t.Helper()
 
+	gitDir := t.TempDir()
+	dbDir := t.TempDir()
 	cfg := &config.Config{
 		Port:           8080,
 		CORSOrigins:    []string{"*"},
-		DatabaseDSN:    "sqlite3://:memory:",
+		DatabaseDSN:    fmt.Sprintf("sqlite3://%s/test.db", dbDir),
 		DatabaseDriver: "sqlite",
 		AuthEnabled:    false, // Disable auth - use anonymous user
 		SessionSecret:  []byte("test-session-secret-32-bytes-long!!"),
 		EncryptionKey:  []byte("01234567890123456789012345678901"),
 		WorkspaceDir:   t.TempDir(),
+		GitDir:         gitDir,
 	}
 
 	db, err := database.New(cfg)
@@ -241,21 +303,53 @@ func NewTestServerNoAuth(t *testing.T) *TestServer {
 	}
 
 	s := store.New(db.DB)
-	h := handler.New(s, cfg)
+
+	// Create git provider
+	gitProvider, err := git.NewLocalProvider(gitDir)
+	if err != nil {
+		t.Fatalf("Failed to create git provider: %v", err)
+	}
+
+	// Create mock container runtime
+	mockContainer := mock.NewProvider()
+
+	h := handler.NewWithProviders(s, cfg, gitProvider, mockContainer)
+
+	// Create and start dispatcher for job processing
+	cfg.DispatcherEnabled = true
+	cfg.DispatcherPollInterval = 10 * time.Millisecond   // Fast polling for tests
+	cfg.DispatcherHeartbeatInterval = 50 * time.Millisecond
+	cfg.DispatcherHeartbeatTimeout = 500 * time.Millisecond
+	cfg.DispatcherJobTimeout = 30 * time.Second
+	cfg.DispatcherStaleJobTimeout = 1 * time.Minute
+
+	containerSvc := service.NewContainerService(s, mockContainer, cfg)
+	disp := dispatcher.NewService(s, cfg)
+	disp.RegisterExecutor(dispatcher.NewContainerCreateExecutor(containerSvc))
+	disp.RegisterExecutor(dispatcher.NewContainerDestroyExecutor(containerSvc))
+	disp.Start(context.Background())
+
+	// Wire up job queue notification for immediate execution
+	h.JobQueue().SetNotifyFunc(disp.NotifyNewJob)
 
 	r := setupRouter(s, cfg, h)
 	server := httptest.NewServer(r)
 
 	ts := &TestServer{
-		Server:  server,
-		Store:   s,
-		Config:  cfg,
-		Handler: h,
-		DB:      db,
-		T:       t,
+		Server:           server,
+		Store:            s,
+		Config:           cfg,
+		Handler:          h,
+		DB:               db,
+		GitProvider:      gitProvider,
+		ContainerRuntime: mockContainer,
+		MockContainer:    mockContainer,
+		Dispatcher:       disp,
+		T:                t,
 	}
 
 	t.Cleanup(func() {
+		disp.Stop()
 		server.Close()
 		db.Close()
 	})

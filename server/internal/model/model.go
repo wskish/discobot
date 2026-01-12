@@ -294,5 +294,7 @@ func AllModels() []interface{} {
 		&Message{},
 		&Credential{},
 		&TerminalHistory{},
+		&Job{},
+		&DispatcherLeader{},
 	}
 }
