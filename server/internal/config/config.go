@@ -42,14 +42,6 @@ type Config struct {
 	DockerHost    string // Docker socket/host (default: unix:///var/run/docker.sock)
 	DockerNetwork string // Docker network to attach containers to
 
-	// Kubernetes-specific settings (future)
-	KubeConfig    string // Path to kubeconfig file
-	KubeNamespace string // Namespace for container pods
-
-	// Cloudflare-specific settings (future)
-	CloudflareAccountID string // Cloudflare account ID
-	CloudflareAPIToken  string // Cloudflare API token
-
 	// Job Dispatcher settings
 	DispatcherEnabled            bool          // Enable job dispatcher (default: true)
 	DispatcherPollInterval       time.Duration // How often to poll for jobs (default: 1s)
@@ -128,14 +120,6 @@ func Load() (*Config, error) {
 	// Empty default lets the Docker SDK auto-detect (works on Linux, macOS, and Windows)
 	cfg.DockerHost = getEnv("DOCKER_HOST", "")
 	cfg.DockerNetwork = getEnv("DOCKER_NETWORK", "")
-
-	// Kubernetes-specific settings
-	cfg.KubeConfig = getEnv("KUBECONFIG", "")
-	cfg.KubeNamespace = getEnv("KUBE_NAMESPACE", "octobot")
-
-	// Cloudflare-specific settings
-	cfg.CloudflareAccountID = getEnv("CLOUDFLARE_ACCOUNT_ID", "")
-	cfg.CloudflareAPIToken = getEnv("CLOUDFLARE_API_TOKEN", "")
 
 	// Job Dispatcher settings
 	cfg.DispatcherEnabled = getEnvBool("DISPATCHER_ENABLED", true)

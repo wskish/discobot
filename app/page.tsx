@@ -13,6 +13,7 @@ import type {
 	CreateWorkspaceRequest,
 	Session,
 	StatusMessage,
+	SupportedAgentType,
 	Workspace,
 } from "@/lib/api-types";
 import { useAgentTypes } from "@/lib/hooks/use-agent-types";
@@ -91,14 +92,36 @@ export default function IDEChatPage() {
 	const [credentialsOpen, setCredentialsOpen] = React.useState(false);
 	const [credentialsInitialProviderId, setCredentialsInitialProviderId] =
 		React.useState<string | null>(null);
+	// Track pending agent type when user needs to configure credentials first
+	const [pendingAgentType, setPendingAgentType] =
+		React.useState<SupportedAgentType | null>(null);
 
-	// Reset initial provider when credentials dialog closes
-	const handleCredentialsOpenChange = React.useCallback((open: boolean) => {
-		setCredentialsOpen(open);
-		if (!open) {
-			setCredentialsInitialProviderId(null);
-		}
-	}, []);
+	// Handle credentials dialog close - create pending agent if credentials were configured
+	const handleCredentialsOpenChange = React.useCallback(
+		async (open: boolean) => {
+			setCredentialsOpen(open);
+			if (!open) {
+				setCredentialsInitialProviderId(null);
+				// If we have a pending agent type from welcome modal, create it now
+				if (pendingAgentType) {
+					const agentType = pendingAgentType;
+					setPendingAgentType(null);
+					try {
+						const agent = await createAgent({
+							name: agentType.name,
+							description: agentType.description,
+							agentType: agentType.id,
+						});
+						await api.setDefaultAgent(agent.id);
+						mutateAgents();
+					} catch (error) {
+						console.error("Failed to create agent:", error);
+					}
+				}
+			}
+		},
+		[pendingAgentType, createAgent, mutateAgents],
+	);
 
 	const openCredentialsForProvider = React.useCallback(
 		(providerId?: string) => {
@@ -314,8 +337,9 @@ export default function IDEChatPage() {
 				configuredCredentials={credentials}
 				onComplete={async (agentType, authProviderId) => {
 					if (authProviderId) {
-						// Auth provider selected - open credentials dialog to configure it
-						// After credentials are configured, user can re-select the agent
+						// Auth provider selected - store pending agent and open credentials dialog
+						// Agent will be created automatically when credentials are configured
+						setPendingAgentType(agentType);
 						openCredentialsForProvider(authProviderId);
 					} else {
 						// "Free" selected or already has credentials - create agent directly and make it default

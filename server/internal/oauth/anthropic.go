@@ -12,36 +12,30 @@ import (
 )
 
 const (
-	// Anthropic OAuth endpoints
-	anthropicAuthURL  = "https://console.anthropic.com/oauth/authorize"
-	anthropicTokenURL = "https://api.anthropic.com/oauth/token"
+	// Anthropic OAuth endpoints (Claude Max flow via claude.ai)
+	anthropicAuthURL    = "https://claude.ai/oauth/authorize"
+	anthropicTokenURL   = "https://console.anthropic.com/v1/oauth/token"
+	anthropicRedirectURI = "https://console.anthropic.com/oauth/code/callback"
 )
 
 // AnthropicProvider handles Anthropic OAuth 2.0 with PKCE.
 type AnthropicProvider struct {
-	ClientID    string
-	RedirectURI string
-	Scopes      []string
-}
-
-// AuthorizeRequest represents the data needed to start an Anthropic OAuth flow.
-type AuthorizeRequest struct {
-	RedirectURI string `json:"redirect_uri"`
+	ClientID string
+	Scopes   []string
 }
 
 // AuthorizeResponse contains the data needed to redirect the user to Anthropic.
 type AuthorizeResponse struct {
-	AuthURL             string `json:"auth_url"`
+	URL                 string `json:"url"`
 	State               string `json:"state"`
-	CodeVerifier        string `json:"code_verifier"`
-	CodeChallenge       string `json:"code_challenge"`
-	CodeChallengeMethod string `json:"code_challenge_method"`
+	Verifier            string `json:"verifier"`
+	CodeChallenge       string `json:"codeChallenge"`
+	CodeChallengeMethod string `json:"codeChallengeMethod"`
 }
 
 // ExchangeRequest represents the token exchange request.
 type ExchangeRequest struct {
 	Code         string `json:"code"`
-	RedirectURI  string `json:"redirect_uri"`
 	CodeVerifier string `json:"code_verifier"`
 }
 
@@ -59,60 +53,72 @@ type TokenResponse struct {
 func NewAnthropicProvider(clientID string) *AnthropicProvider {
 	return &AnthropicProvider{
 		ClientID: clientID,
-		Scopes:   []string{"api"},
+		Scopes:   []string{"org:create_api_key", "user:profile", "user:inference"},
 	}
 }
 
 // Authorize generates the authorization URL and PKCE challenge.
-func (p *AnthropicProvider) Authorize(redirectURI string) (*AuthorizeResponse, error) {
+// Note: Following the reference implementation, we use the PKCE verifier as the state parameter.
+// This is because the callback returns code#state, and state needs to match the verifier.
+func (p *AnthropicProvider) Authorize() (*AuthorizeResponse, error) {
 	// Generate PKCE challenge
 	pkce, err := GeneratePKCE()
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate PKCE: %w", err)
 	}
 
-	// Generate state
-	state, err := GenerateState()
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate state: %w", err)
-	}
-
 	// Build authorization URL
+	// Use verifier as state (matches reference implementation)
 	params := url.Values{}
+	params.Set("code", "true")
 	params.Set("response_type", "code")
 	params.Set("client_id", p.ClientID)
-	params.Set("redirect_uri", redirectURI)
+	params.Set("redirect_uri", anthropicRedirectURI)
 	params.Set("scope", strings.Join(p.Scopes, " "))
-	params.Set("state", state)
+	params.Set("state", pkce.CodeVerifier)
 	params.Set("code_challenge", pkce.CodeChallenge)
 	params.Set("code_challenge_method", pkce.CodeChallengeMethod)
 
 	authURL := anthropicAuthURL + "?" + params.Encode()
 
 	return &AuthorizeResponse{
-		AuthURL:             authURL,
-		State:               state,
-		CodeVerifier:        pkce.CodeVerifier,
+		URL:                 authURL,
+		State:               pkce.CodeVerifier,
+		Verifier:            pkce.CodeVerifier,
 		CodeChallenge:       pkce.CodeChallenge,
 		CodeChallengeMethod: pkce.CodeChallengeMethod,
 	}, nil
 }
 
 // Exchange exchanges an authorization code for tokens.
-func (p *AnthropicProvider) Exchange(ctx context.Context, code, redirectURI, codeVerifier string) (*TokenResponse, error) {
-	// Build token request
-	data := url.Values{}
-	data.Set("grant_type", "authorization_code")
-	data.Set("client_id", p.ClientID)
-	data.Set("code", code)
-	data.Set("redirect_uri", redirectURI)
-	data.Set("code_verifier", codeVerifier)
+func (p *AnthropicProvider) Exchange(ctx context.Context, code, codeVerifier string) (*TokenResponse, error) {
+	// The code may have a state appended after #
+	actualCode := code
+	state := codeVerifier
+	if parts := strings.SplitN(code, "#", 2); len(parts) == 2 {
+		actualCode = parts[0]
+		state = parts[1]
+	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", anthropicTokenURL, strings.NewReader(data.Encode()))
+	// Build token request as JSON (Anthropic expects JSON, not form-encoded)
+	reqBody := map[string]string{
+		"code":          actualCode,
+		"state":         state,
+		"grant_type":    "authorization_code",
+		"client_id":     p.ClientID,
+		"redirect_uri":  anthropicRedirectURI,
+		"code_verifier": codeVerifier,
+	}
+	jsonBody, err := json.Marshal(reqBody)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", anthropicTokenURL, strings.NewReader(string(jsonBody)))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
