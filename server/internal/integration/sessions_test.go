@@ -18,11 +18,13 @@ func TestListSessionsByWorkspace_Empty(t *testing.T) {
 
 	AssertStatus(t, resp, http.StatusOK)
 
-	var sessions []interface{}
-	ParseJSON(t, resp, &sessions)
+	var result struct {
+		Sessions []interface{} `json:"sessions"`
+	}
+	ParseJSON(t, resp, &result)
 
-	if len(sessions) != 0 {
-		t.Errorf("Expected 0 sessions, got %d", len(sessions))
+	if len(result.Sessions) != 0 {
+		t.Errorf("Expected 0 sessions, got %d", len(result.Sessions))
 	}
 }
 
@@ -174,11 +176,13 @@ func TestListSessionsByWorkspace_WithData(t *testing.T) {
 
 	AssertStatus(t, resp, http.StatusOK)
 
-	var sessions []interface{}
-	ParseJSON(t, resp, &sessions)
+	var result struct {
+		Sessions []interface{} `json:"sessions"`
+	}
+	ParseJSON(t, resp, &result)
 
-	if len(sessions) != 3 {
-		t.Errorf("Expected 3 sessions, got %d", len(sessions))
+	if len(result.Sessions) != 3 {
+		t.Errorf("Expected 3 sessions, got %d", len(result.Sessions))
 	}
 }
 
@@ -196,11 +200,13 @@ func TestGetSessionFiles(t *testing.T) {
 
 	AssertStatus(t, resp, http.StatusOK)
 
-	var files []interface{}
-	ParseJSON(t, resp, &files)
+	var result struct {
+		Files []interface{} `json:"files"`
+	}
+	ParseJSON(t, resp, &result)
 
-	if len(files) != 0 {
-		t.Errorf("Expected 0 files (TODO endpoint), got %d", len(files))
+	if len(result.Files) != 0 {
+		t.Errorf("Expected 0 files (TODO endpoint), got %d", len(result.Files))
 	}
 }
 
@@ -218,10 +224,12 @@ func TestListMessages(t *testing.T) {
 
 	AssertStatus(t, resp, http.StatusOK)
 
-	var messages []interface{}
-	ParseJSON(t, resp, &messages)
+	var result struct {
+		Messages []interface{} `json:"messages"`
+	}
+	ParseJSON(t, resp, &result)
 
-	if len(messages) != 0 {
-		t.Errorf("Expected 0 messages (TODO endpoint), got %d", len(messages))
+	if len(result.Messages) != 0 {
+		t.Errorf("Expected 0 messages (TODO endpoint), got %d", len(result.Messages))
 	}
 }

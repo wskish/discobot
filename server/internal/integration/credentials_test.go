@@ -15,11 +15,13 @@ func TestListCredentials_Empty(t *testing.T) {
 	resp := client.Get("/api/projects/" + project.ID + "/credentials")
 	AssertStatus(t, resp, http.StatusOK)
 
-	var credentials []map[string]interface{}
-	ParseJSON(t, resp, &credentials)
+	var result struct {
+		Credentials []map[string]interface{} `json:"credentials"`
+	}
+	ParseJSON(t, resp, &result)
 
-	if len(credentials) != 0 {
-		t.Errorf("Expected empty credentials list, got %d", len(credentials))
+	if len(result.Credentials) != 0 {
+		t.Errorf("Expected empty credentials list, got %d", len(result.Credentials))
 	}
 }
 
@@ -191,11 +193,13 @@ func TestUpdateCredential(t *testing.T) {
 	resp = client.Get("/api/projects/" + project.ID + "/credentials")
 	AssertStatus(t, resp, http.StatusOK)
 
-	var credentials []map[string]interface{}
-	ParseJSON(t, resp, &credentials)
+	var credList struct {
+		Credentials []map[string]interface{} `json:"credentials"`
+	}
+	ParseJSON(t, resp, &credList)
 
-	if len(credentials) != 1 {
-		t.Errorf("Expected 1 credential, got %d", len(credentials))
+	if len(credList.Credentials) != 1 {
+		t.Errorf("Expected 1 credential, got %d", len(credList.Credentials))
 	}
 }
 
@@ -220,10 +224,12 @@ func TestListCredentials_WithData(t *testing.T) {
 	resp := client.Get("/api/projects/" + project.ID + "/credentials")
 	AssertStatus(t, resp, http.StatusOK)
 
-	var credentials []map[string]interface{}
-	ParseJSON(t, resp, &credentials)
+	var result struct {
+		Credentials []map[string]interface{} `json:"credentials"`
+	}
+	ParseJSON(t, resp, &result)
 
-	if len(credentials) != 3 {
-		t.Errorf("Expected 3 credentials, got %d", len(credentials))
+	if len(result.Credentials) != 3 {
+		t.Errorf("Expected 3 credentials, got %d", len(result.Credentials))
 	}
 }

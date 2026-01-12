@@ -17,11 +17,13 @@ func TestListWorkspaces_Empty(t *testing.T) {
 
 	AssertStatus(t, resp, http.StatusOK)
 
-	var workspaces []interface{}
-	ParseJSON(t, resp, &workspaces)
+	var result struct {
+		Workspaces []interface{} `json:"workspaces"`
+	}
+	ParseJSON(t, resp, &result)
 
-	if len(workspaces) != 0 {
-		t.Errorf("Expected 0 workspaces, got %d", len(workspaces))
+	if len(result.Workspaces) != 0 {
+		t.Errorf("Expected 0 workspaces, got %d", len(result.Workspaces))
 	}
 }
 
@@ -158,10 +160,12 @@ func TestListWorkspaces_WithData(t *testing.T) {
 
 	AssertStatus(t, resp, http.StatusOK)
 
-	var workspaces []interface{}
-	ParseJSON(t, resp, &workspaces)
+	var result struct {
+		Workspaces []interface{} `json:"workspaces"`
+	}
+	ParseJSON(t, resp, &result)
 
-	if len(workspaces) != 2 {
-		t.Errorf("Expected 2 workspaces, got %d", len(workspaces))
+	if len(result.Workspaces) != 2 {
+		t.Errorf("Expected 2 workspaces, got %d", len(result.Workspaces))
 	}
 }

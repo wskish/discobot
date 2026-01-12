@@ -105,10 +105,12 @@ func TestNoAuthMode_APIAccess(t *testing.T) {
 
 	AssertStatus(t, resp, http.StatusOK)
 
-	var types []map[string]interface{}
-	ParseJSON(t, resp, &types)
+	var result struct {
+		AgentTypes []map[string]interface{} `json:"agentTypes"`
+	}
+	ParseJSON(t, resp, &result)
 
-	if len(types) == 0 {
+	if len(result.AgentTypes) == 0 {
 		t.Error("Expected at least one agent type")
 	}
 }

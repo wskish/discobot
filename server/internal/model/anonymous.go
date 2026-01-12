@@ -15,13 +15,13 @@ const (
 
 	// DefaultProjectID is the reserved project ID for the default project.
 	// Created during seeding for the anonymous user.
-	DefaultProjectID = "00000000-0000-0000-0000-000000000001"
+	DefaultProjectID = "local"
 
 	// DefaultProjectName is the name of the default project.
-	DefaultProjectName = "Default Project"
+	DefaultProjectName = "Local Project"
 
 	// DefaultProjectSlug is the slug for the default project.
-	DefaultProjectSlug = "default"
+	DefaultProjectSlug = "local"
 )
 
 // NewAnonymousUser creates the anonymous user model.
