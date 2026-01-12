@@ -12,7 +12,7 @@ This document outlines the plan to replace the mock TypeScript API with a full G
 | Phase 4 | ✅ Complete | Projects & membership (multi-tenancy) |
 | Phase 5 | ✅ Complete | Core resources (workspaces, sessions, agents) |
 | Phase 6 | ✅ Complete | AI provider credentials (encryption, OAuth flows) |
-| Phase 7 | 🔲 Not Started | Git integration |
+| Phase 7 | ✅ Complete | Git integration (interface + local provider) |
 | Phase 8 | 🔲 Not Started | Docker terminal (WebSocket PTY) |
 | Phase 9 | 🔲 Not Started | AI chat streaming |
 | Phase 10 | 🔲 Not Started | Frontend integration |
@@ -58,11 +58,14 @@ This document outlines the plan to replace the mock TypeScript API with a full G
 - GitHub Copilot device code flow
 - OpenAI Codex OAuth with PKCE
 
-### Phase 7: Git Integration 🔲
-- Clone repositories to workspace directory
-- Git status, diff, commit operations
-- Branch management
-- File tree with git status indicators
+### Phase 7: Git Integration ✅
+- Abstracted `git.Provider` interface for future remote implementations
+- Local provider with efficient caching (bare repo cache + workspace clones)
+- Full git operations: clone, fetch, checkout, status, diff, branches, log
+- File operations: tree listing, read/write files at any ref
+- Staging and commit with custom author
+- Integration tests (10 tests covering all operations)
+- API endpoints under `/workspaces/{id}/git/*`
 
 ### Phase 8: Docker Terminal 🔲
 - WebSocket endpoint for terminal

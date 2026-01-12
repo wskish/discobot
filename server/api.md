@@ -83,7 +83,7 @@ server/
 
 When `AUTH_ENABLED=false` (the default):
 - No login is required - all requests use the anonymous user
-- A default project is created automatically with ID `00000000-0000-0000-0000-000000000001`
+- A default project is created automatically with ID `local`
 - SESSION_SECRET and ENCRYPTION_KEY use insecure defaults (fine for local dev)
 - The `/auth/me` endpoint returns the anonymous user info
 - All API endpoints are accessible without authentication
