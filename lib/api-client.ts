@@ -246,14 +246,11 @@ class ApiClient {
 	}
 
 	// Anthropic OAuth
-	async anthropicAuthorize(
-		mode: "max" | "console" = "max",
-	): Promise<OAuthAuthorizeResponse> {
+	async anthropicAuthorize(): Promise<OAuthAuthorizeResponse> {
 		return this.fetch<OAuthAuthorizeResponse>(
 			"/credentials/anthropic/authorize",
 			{
 				method: "POST",
-				body: JSON.stringify({ mode }),
 			},
 		);
 	}

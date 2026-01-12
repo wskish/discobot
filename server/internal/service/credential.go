@@ -51,10 +51,10 @@ type CredentialInfo struct {
 	ID           string    `json:"id"`
 	Provider     string    `json:"provider"`
 	Name         string    `json:"name"`
-	AuthType     string    `json:"auth_type"`
-	IsConfigured bool      `json:"is_configured"`
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
+	AuthType     string    `json:"authType"`
+	IsConfigured bool      `json:"isConfigured"`
+	CreatedAt    time.Time `json:"createdAt"`
+	UpdatedAt    time.Time `json:"updatedAt"`
 }
 
 // CredentialService handles credential operations with encryption

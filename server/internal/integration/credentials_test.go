@@ -34,7 +34,7 @@ func TestCreateCredential_APIKey(t *testing.T) {
 	resp := client.Post("/api/projects/"+project.ID+"/credentials", map[string]string{
 		"provider": "anthropic",
 		"name":     "My Anthropic Key",
-		"api_key":  "sk-ant-test-123456",
+		"apiKey":   "sk-ant-test-123456",
 	})
 	AssertStatus(t, resp, http.StatusOK)
 
@@ -47,14 +47,14 @@ func TestCreateCredential_APIKey(t *testing.T) {
 	if cred["name"] != "My Anthropic Key" {
 		t.Errorf("Expected name 'My Anthropic Key', got %v", cred["name"])
 	}
-	if cred["auth_type"] != "api_key" {
-		t.Errorf("Expected auth_type 'api_key', got %v", cred["auth_type"])
+	if cred["authType"] != "api_key" {
+		t.Errorf("Expected authType 'api_key', got %v", cred["authType"])
 	}
-	if cred["is_configured"] != true {
-		t.Errorf("Expected is_configured true, got %v", cred["is_configured"])
+	if cred["isConfigured"] != true {
+		t.Errorf("Expected isConfigured true, got %v", cred["isConfigured"])
 	}
 	// Verify the API key is NOT returned
-	if _, ok := cred["api_key"]; ok {
+	if _, ok := cred["apiKey"]; ok {
 		t.Error("API key should not be returned in response")
 	}
 }
@@ -66,7 +66,7 @@ func TestCreateCredential_MissingProvider(t *testing.T) {
 
 	client := ts.AuthenticatedClient(user)
 	resp := client.Post("/api/projects/"+project.ID+"/credentials", map[string]string{
-		"api_key": "sk-test-123",
+		"apiKey": "sk-test-123",
 	})
 	AssertStatus(t, resp, http.StatusBadRequest)
 }
@@ -91,7 +91,7 @@ func TestCreateCredential_InvalidProvider(t *testing.T) {
 	client := ts.AuthenticatedClient(user)
 	resp := client.Post("/api/projects/"+project.ID+"/credentials", map[string]string{
 		"provider": "invalid-provider",
-		"api_key":  "sk-test-123",
+		"apiKey":   "sk-test-123",
 	})
 	AssertStatus(t, resp, http.StatusBadRequest)
 }
@@ -107,7 +107,7 @@ func TestGetCredential(t *testing.T) {
 	resp := client.Post("/api/projects/"+project.ID+"/credentials", map[string]string{
 		"provider": "openai",
 		"name":     "My OpenAI Key",
-		"api_key":  "sk-test-openai-123",
+		"apiKey":   "sk-test-openai-123",
 	})
 	AssertStatus(t, resp, http.StatusOK)
 
@@ -146,7 +146,7 @@ func TestDeleteCredential(t *testing.T) {
 	// Create credential first
 	resp := client.Post("/api/projects/"+project.ID+"/credentials", map[string]string{
 		"provider": "anthropic",
-		"api_key":  "sk-test-123",
+		"apiKey":   "sk-test-123",
 	})
 	AssertStatus(t, resp, http.StatusOK)
 
@@ -170,7 +170,7 @@ func TestUpdateCredential(t *testing.T) {
 	resp := client.Post("/api/projects/"+project.ID+"/credentials", map[string]string{
 		"provider": "anthropic",
 		"name":     "Original Name",
-		"api_key":  "sk-old-key",
+		"apiKey":   "sk-old-key",
 	})
 	AssertStatus(t, resp, http.StatusOK)
 
@@ -178,7 +178,7 @@ func TestUpdateCredential(t *testing.T) {
 	resp = client.Post("/api/projects/"+project.ID+"/credentials", map[string]string{
 		"provider": "anthropic",
 		"name":     "Updated Name",
-		"api_key":  "sk-new-key",
+		"apiKey":   "sk-new-key",
 	})
 	AssertStatus(t, resp, http.StatusOK)
 
@@ -215,7 +215,7 @@ func TestListCredentials_WithData(t *testing.T) {
 	for _, provider := range providers {
 		resp := client.Post("/api/projects/"+project.ID+"/credentials", map[string]string{
 			"provider": provider,
-			"api_key":  "sk-test-" + provider,
+			"apiKey":   "sk-test-" + provider,
 		})
 		AssertStatus(t, resp, http.StatusOK)
 	}

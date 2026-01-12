@@ -58,9 +58,9 @@ func (p *CodexProvider) Authorize(redirectURI string) (*AuthorizeResponse, error
 	authURL := codexAuthURL + "?" + params.Encode()
 
 	return &AuthorizeResponse{
-		AuthURL:             authURL,
+		URL:                 authURL,
 		State:               state,
-		CodeVerifier:        pkce.CodeVerifier,
+		Verifier:            pkce.CodeVerifier,
 		CodeChallenge:       pkce.CodeChallenge,
 		CodeChallengeMethod: pkce.CodeChallengeMethod,
 	}, nil

@@ -15,8 +15,8 @@ import (
 type CreateCredentialRequest struct {
 	Provider string `json:"provider"`
 	Name     string `json:"name"`
-	AuthType string `json:"auth_type"` // "api_key" or "oauth"
-	APIKey   string `json:"api_key,omitempty"`
+	AuthType string `json:"authType"` // "api_key" or "oauth"
+	APIKey   string `json:"apiKey,omitempty"`
 }
 
 // ListCredentials returns all credentials for a project (safe info only)
@@ -107,33 +107,16 @@ func (h *Handler) DeleteCredential(w http.ResponseWriter, r *http.Request) {
 	h.JSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 }
 
-// AnthropicAuthorizeRequest is the request for starting Anthropic OAuth
-type AnthropicAuthorizeRequest struct {
-	RedirectURI string `json:"redirect_uri"`
-}
-
 // AnthropicExchangeRequest is the request for exchanging code for tokens
 type AnthropicExchangeRequest struct {
 	Code         string `json:"code"`
-	RedirectURI  string `json:"redirect_uri"`
-	CodeVerifier string `json:"code_verifier"`
+	CodeVerifier string `json:"verifier"`
 }
 
 // AnthropicAuthorize generates PKCE and returns OAuth URL
 func (h *Handler) AnthropicAuthorize(w http.ResponseWriter, r *http.Request) {
-	var req AnthropicAuthorizeRequest
-	if err := h.DecodeJSON(r, &req); err != nil {
-		h.Error(w, http.StatusBadRequest, "Invalid request body")
-		return
-	}
-
-	if req.RedirectURI == "" {
-		h.Error(w, http.StatusBadRequest, "redirect_uri is required")
-		return
-	}
-
 	provider := oauth.NewAnthropicProvider(h.cfg.AnthropicClientID)
-	authResp, err := provider.Authorize(req.RedirectURI)
+	authResp, err := provider.Authorize()
 	if err != nil {
 		h.Error(w, http.StatusInternalServerError, "Failed to generate authorization URL")
 		return
@@ -156,19 +139,19 @@ func (h *Handler) AnthropicExchange(w http.ResponseWriter, r *http.Request) {
 		h.Error(w, http.StatusBadRequest, "code is required")
 		return
 	}
-	if req.RedirectURI == "" {
-		h.Error(w, http.StatusBadRequest, "redirect_uri is required")
-		return
-	}
 	if req.CodeVerifier == "" {
-		h.Error(w, http.StatusBadRequest, "code_verifier is required")
+		h.Error(w, http.StatusBadRequest, "verifier is required")
 		return
 	}
 
 	provider := oauth.NewAnthropicProvider(h.cfg.AnthropicClientID)
-	tokenResp, err := provider.Exchange(r.Context(), req.Code, req.RedirectURI, req.CodeVerifier)
+	tokenResp, err := provider.Exchange(r.Context(), req.Code, req.CodeVerifier)
 	if err != nil {
-		h.Error(w, http.StatusBadRequest, "Token exchange failed: "+err.Error())
+		// Return as JSON with success: false so frontend can display the error
+		h.JSON(w, http.StatusOK, map[string]any{
+			"success": false,
+			"error":   err.Error(),
+		})
 		return
 	}
 
@@ -187,13 +170,14 @@ func (h *Handler) AnthropicExchange(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Return credential info with token expiration
+	// Return success response with credential info
 	response := map[string]any{
+		"success":    true,
 		"credential": info,
-		"expires_at": tokenResp.ExpiresAt,
+		"expiresAt":  tokenResp.ExpiresAt,
 	}
 	if !tokenResp.ExpiresAt.IsZero() {
-		response["expires_in"] = int(time.Until(tokenResp.ExpiresAt).Seconds())
+		response["expiresIn"] = int(time.Until(tokenResp.ExpiresAt).Seconds())
 	}
 
 	h.JSON(w, http.StatusOK, response)
@@ -201,7 +185,16 @@ func (h *Handler) AnthropicExchange(w http.ResponseWriter, r *http.Request) {
 
 // GitHubCopilotPollRequest is the request for polling device authorization
 type GitHubCopilotPollRequest struct {
-	DeviceCode string `json:"device_code"`
+	DeviceCode string `json:"deviceCode"`
+}
+
+// GitHubCopilotDeviceCodeResponse is the camelCase response for frontend
+type GitHubCopilotDeviceCodeResponse struct {
+	DeviceCode      string `json:"deviceCode"`
+	UserCode        string `json:"userCode"`
+	VerificationURI string `json:"verificationUri"`
+	ExpiresIn       int    `json:"expiresIn"`
+	Interval        int    `json:"interval"`
 }
 
 // GitHubCopilotDeviceCode initiates device flow
@@ -213,7 +206,14 @@ func (h *Handler) GitHubCopilotDeviceCode(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	h.JSON(w, http.StatusOK, deviceResp)
+	// Convert to camelCase for frontend
+	h.JSON(w, http.StatusOK, GitHubCopilotDeviceCodeResponse{
+		DeviceCode:      deviceResp.DeviceCode,
+		UserCode:        deviceResp.UserCode,
+		VerificationURI: deviceResp.VerificationURI,
+		ExpiresIn:       deviceResp.ExpiresIn,
+		Interval:        deviceResp.Interval,
+	})
 }
 
 // GitHubCopilotPoll polls for device authorization
@@ -301,14 +301,14 @@ func (h *Handler) GitHubCopilotPoll(w http.ResponseWriter, r *http.Request) {
 
 // CodexAuthorizeRequest is the request for starting Codex OAuth
 type CodexAuthorizeRequest struct {
-	RedirectURI string `json:"redirect_uri"`
+	RedirectURI string `json:"redirectUri"`
 }
 
 // CodexExchangeRequest is the request for exchanging code for tokens
 type CodexExchangeRequest struct {
 	Code         string `json:"code"`
-	RedirectURI  string `json:"redirect_uri"`
-	CodeVerifier string `json:"code_verifier"`
+	RedirectURI  string `json:"redirectUri"`
+	CodeVerifier string `json:"verifier"`
 }
 
 // CodexAuthorize generates PKCE and returns OAuth URL
@@ -382,10 +382,10 @@ func (h *Handler) CodexExchange(w http.ResponseWriter, r *http.Request) {
 	// Return credential info with token expiration
 	response := map[string]any{
 		"credential": info,
-		"expires_at": tokenResp.ExpiresAt,
+		"expiresAt":  tokenResp.ExpiresAt,
 	}
 	if !tokenResp.ExpiresAt.IsZero() {
-		response["expires_in"] = int(time.Until(tokenResp.ExpiresAt).Seconds())
+		response["expiresIn"] = int(time.Until(tokenResp.ExpiresAt).Seconds())
 	}
 
 	h.JSON(w, http.StatusOK, response)

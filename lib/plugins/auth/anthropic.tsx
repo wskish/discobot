@@ -30,7 +30,7 @@ const OAUTH_OPTIONS: OAuthOption[] = [
 ];
 
 async function startOAuth(_optionId: string): Promise<OAuthStartResult> {
-	const result = await api.anthropicAuthorize("max");
+	const result = await api.anthropicAuthorize();
 	return {
 		url: result.url,
 		verifier: result.verifier,
