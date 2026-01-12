@@ -13,5 +13,5 @@ func (h *Handler) GetFile(w http.ResponseWriter, r *http.Request) {
 // GetSuggestions returns autocomplete suggestions
 func (h *Handler) GetSuggestions(w http.ResponseWriter, r *http.Request) {
 	// TODO: Implement path/repo suggestions
-	h.JSON(w, http.StatusOK, []interface{}{})
+	h.JSON(w, http.StatusOK, map[string]any{"suggestions": []any{}})
 }

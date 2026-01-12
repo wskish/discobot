@@ -29,7 +29,7 @@ func (h *Handler) ListCredentials(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.JSON(w, http.StatusOK, credentials)
+	h.JSON(w, http.StatusOK, map[string]any{"credentials": credentials})
 }
 
 // CreateCredential creates or updates a credential
@@ -188,7 +188,7 @@ func (h *Handler) AnthropicExchange(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Return credential info with token expiration
-	response := map[string]interface{}{
+	response := map[string]any{
 		"credential": info,
 		"expires_at": tokenResp.ExpiresAt,
 	}
@@ -293,7 +293,7 @@ func (h *Handler) GitHubCopilotPoll(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.JSON(w, http.StatusOK, map[string]interface{}{
+	h.JSON(w, http.StatusOK, map[string]any{
 		"status":     "authorized",
 		"credential": info,
 	})
@@ -380,7 +380,7 @@ func (h *Handler) CodexExchange(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Return credential info with token expiration
-	response := map[string]interface{}{
+	response := map[string]any{
 		"credential": info,
 		"expires_at": tokenResp.ExpiresAt,
 	}

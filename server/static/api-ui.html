@@ -49,11 +49,31 @@
 
         /* Sidebar */
         .sidebar {
-            width: 320px;
+            width: 480px;
+            min-width: 280px;
+            max-width: 800px;
             background: var(--bg-secondary);
             border-right: 1px solid var(--border);
             overflow-y: auto;
             flex-shrink: 0;
+            position: relative;
+        }
+
+        .resize-handle {
+            position: absolute;
+            top: 0;
+            right: 0;
+            width: 4px;
+            height: 100%;
+            cursor: col-resize;
+            background: transparent;
+            transition: background 0.2s;
+            z-index: 20;
+        }
+
+        .resize-handle:hover,
+        .resize-handle.dragging {
+            background: var(--accent);
         }
 
         .sidebar-header {
@@ -84,6 +104,41 @@
         .search-input:focus {
             outline: none;
             border-color: var(--accent);
+        }
+
+        .project-id-section {
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px solid var(--border);
+        }
+
+        .project-id-label {
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            color: var(--text-muted);
+            margin-bottom: 6px;
+            display: block;
+        }
+
+        .project-id-input {
+            width: 100%;
+            padding: 6px 10px;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            color: var(--text);
+            font-size: 13px;
+            font-family: monospace;
+        }
+
+        .project-id-input:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+
+        .project-id-input::placeholder {
+            color: var(--text-muted);
         }
 
         .endpoint-group {
@@ -162,12 +217,22 @@
             display: flex;
             flex-direction: column;
             overflow: hidden;
+            min-height: 0;
+        }
+
+        #mainContent {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            min-height: 0;
         }
 
         .main-header {
             padding: 16px 24px;
             border-bottom: 1px solid var(--border);
             background: var(--bg-secondary);
+            flex-shrink: 0;
         }
 
         .main-header h2 {
@@ -186,10 +251,23 @@
             flex: 1;
             overflow-y: auto;
             padding: 24px;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
         }
 
         .section {
             margin-bottom: 24px;
+            flex-shrink: 0;
+        }
+
+        .section.response-section {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-height: 300px;
+            margin-bottom: 0;
+            overflow: hidden;
         }
 
         .section-title {
@@ -197,6 +275,7 @@
             font-weight: 600;
             margin-bottom: 12px;
             color: var(--text-muted);
+            flex-shrink: 0;
         }
 
         .params-table {
@@ -298,6 +377,7 @@
             align-items: center;
             gap: 12px;
             margin-bottom: 12px;
+            flex-shrink: 0;
         }
 
         .status-badge {
@@ -325,8 +405,9 @@
             font-size: 13px;
             white-space: pre-wrap;
             word-break: break-word;
-            max-height: 400px;
+            flex: 1;
             overflow-y: auto;
+            min-height: 100px;
         }
 
         .response-body.error {
@@ -338,6 +419,7 @@
             display: flex;
             gap: 4px;
             margin-bottom: 12px;
+            flex-shrink: 0;
         }
 
         .tab {
@@ -433,10 +515,15 @@
 </head>
 <body>
     <div class="container">
-        <aside class="sidebar">
+        <aside class="sidebar" id="sidebar">
+            <div class="resize-handle" id="resizeHandle"></div>
             <div class="sidebar-header">
                 <h1>Octobot API</h1>
                 <input type="text" class="search-input" placeholder="Search endpoints..." id="search">
+                <div class="project-id-section">
+                    <label class="project-id-label" for="defaultProjectId">Default Project ID</label>
+                    <input type="text" class="project-id-input" id="defaultProjectId" placeholder="e.g., local">
+                </div>
             </div>
             <div class="auth-status">
                 <span class="auth-indicator" id="authIndicator"></span>
@@ -460,8 +547,9 @@
     <script>
         // API endpoint definitions
         const API_ENDPOINTS = [
-            // Health
+            // Health & Status
             { group: 'Health', method: 'GET', path: '/health', description: 'Health check' },
+            { group: 'Health', method: 'GET', path: '/api/status', description: 'System status (Docker, Git checks)' },
 
             // Auth
             { group: 'Auth', method: 'GET', path: '/auth/login/{provider}', description: 'Start OAuth login', params: [{ name: 'provider', in: 'path', required: true, example: 'github' }] },
@@ -502,6 +590,7 @@
             { group: 'Agents', method: 'GET', path: '/api/projects/{projectId}/agents', description: 'List agents', params: [{ name: 'projectId', in: 'path', required: true }] },
             { group: 'Agents', method: 'POST', path: '/api/projects/{projectId}/agents', description: 'Create agent', params: [{ name: 'projectId', in: 'path', required: true }], body: { name: 'My Agent', agent_type: 'claude-code' } },
             { group: 'Agents', method: 'GET', path: '/api/projects/{projectId}/agents/types', description: 'Get agent types', params: [{ name: 'projectId', in: 'path', required: true }] },
+            { group: 'Agents', method: 'GET', path: '/api/projects/{projectId}/agents/auth-providers', description: 'Get auth providers', params: [{ name: 'projectId', in: 'path', required: true }] },
             { group: 'Agents', method: 'POST', path: '/api/projects/{projectId}/agents/default', description: 'Set default agent', params: [{ name: 'projectId', in: 'path', required: true }], body: { agent_id: '' } },
             { group: 'Agents', method: 'GET', path: '/api/projects/{projectId}/agents/{agentId}', description: 'Get agent', params: [{ name: 'projectId', in: 'path', required: true }, { name: 'agentId', in: 'path', required: true }] },
             { group: 'Agents', method: 'PUT', path: '/api/projects/{projectId}/agents/{agentId}', description: 'Update agent', params: [{ name: 'projectId', in: 'path', required: true }, { name: 'agentId', in: 'path', required: true }], body: { name: 'Updated Agent' } },
@@ -540,6 +629,25 @@
         let currentEndpoint = null;
         let currentUser = null;
         let paramValues = {};
+        let defaultProjectId = localStorage.getItem('octobot_default_project_id') || 'local';
+
+        // Initialize default project ID input
+        (function initProjectId() {
+            const input = document.getElementById('defaultProjectId');
+            input.value = defaultProjectId;
+            input.addEventListener('input', (e) => {
+                defaultProjectId = e.target.value;
+                localStorage.setItem('octobot_default_project_id', defaultProjectId);
+            });
+        })();
+
+        // Get the effective value for a parameter (use default projectId if applicable)
+        function getDefaultParamValue(param) {
+            if (param.name === 'projectId' && defaultProjectId) {
+                return defaultProjectId;
+            }
+            return param.example || '';
+        }
 
         // Group endpoints
         function groupEndpoints(endpoints) {
@@ -625,7 +733,7 @@
                                         <input class="param-input" type="text"
                                             data-param="${p.name}" data-in="path"
                                             placeholder="${p.example || p.name}"
-                                            value="${p.example || ''}">
+                                            value="${getDefaultParamValue(p)}">
                                     </div>
                                 `).join('')}
                             </div>
@@ -642,7 +750,7 @@
                                         <input class="param-input" type="text"
                                             data-param="${p.name}" data-in="query"
                                             placeholder="${p.example || p.name}"
-                                            value="${p.example || ''}">
+                                            value="${getDefaultParamValue(p)}">
                                     </div>
                                 `).join('')}
                             </div>
@@ -661,7 +769,7 @@
                         <button class="btn btn-secondary" id="clearBtn">Clear</button>
                     </div>
 
-                    <div class="section" id="responseSection" style="display: none;">
+                    <div class="section response-section" id="responseSection" style="display: none;">
                         <div class="section-title">Response</div>
                         <div class="response-header">
                             <span class="status-badge" id="statusBadge"></span>
@@ -756,7 +864,7 @@
                 const responseBody = document.getElementById('responseBody');
                 const responseHeaders = document.getElementById('responseHeaders');
 
-                responseSection.style.display = 'block';
+                responseSection.style.display = 'flex';
                 statusBadge.textContent = `${response.status} ${response.statusText}`;
                 statusBadge.className = 'status-badge ' + (response.ok ? 'success' : response.status >= 500 ? 'error' : 'warning');
                 responseTime.textContent = `${duration}ms`;
@@ -786,7 +894,7 @@
                 const statusBadge = document.getElementById('statusBadge');
                 const responseBody = document.getElementById('responseBody');
 
-                responseSection.style.display = 'block';
+                responseSection.style.display = 'flex';
                 statusBadge.textContent = 'Error';
                 statusBadge.className = 'status-badge error';
                 responseBody.textContent = error.message;
@@ -818,6 +926,42 @@
                 status.textContent = 'Could not check auth status';
             }
         }
+
+        // Sidebar resize functionality
+        (function initResize() {
+            const sidebar = document.getElementById('sidebar');
+            const handle = document.getElementById('resizeHandle');
+            let isResizing = false;
+            let startX = 0;
+            let startWidth = 0;
+
+            handle.addEventListener('mousedown', (e) => {
+                isResizing = true;
+                startX = e.clientX;
+                startWidth = sidebar.offsetWidth;
+                handle.classList.add('dragging');
+                document.body.style.cursor = 'col-resize';
+                document.body.style.userSelect = 'none';
+                e.preventDefault();
+            });
+
+            document.addEventListener('mousemove', (e) => {
+                if (!isResizing) return;
+                const width = startWidth + (e.clientX - startX);
+                const minWidth = 280;
+                const maxWidth = 800;
+                sidebar.style.width = Math.max(minWidth, Math.min(maxWidth, width)) + 'px';
+            });
+
+            document.addEventListener('mouseup', () => {
+                if (isResizing) {
+                    isResizing = false;
+                    handle.classList.remove('dragging');
+                    document.body.style.cursor = '';
+                    document.body.style.userSelect = '';
+                }
+            });
+        })();
 
         // Initialize
         document.getElementById('search').oninput = (e) => {
