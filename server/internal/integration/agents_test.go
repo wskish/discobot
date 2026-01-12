@@ -16,16 +16,18 @@ func TestGetAgentTypes(t *testing.T) {
 
 	AssertStatus(t, resp, http.StatusOK)
 
-	var types []map[string]interface{}
-	ParseJSON(t, resp, &types)
+	var result struct {
+		AgentTypes []map[string]interface{} `json:"agentTypes"`
+	}
+	ParseJSON(t, resp, &result)
 
-	if len(types) == 0 {
+	if len(result.AgentTypes) == 0 {
 		t.Error("Expected at least one agent type")
 	}
 
 	// Check that claude-code is in the list
 	found := false
-	for _, agentType := range types {
+	for _, agentType := range result.AgentTypes {
 		if agentType["id"] == "claude-code" {
 			found = true
 			break
@@ -47,11 +49,13 @@ func TestListAgents_Empty(t *testing.T) {
 
 	AssertStatus(t, resp, http.StatusOK)
 
-	var agents []interface{}
-	ParseJSON(t, resp, &agents)
+	var result struct {
+		Agents []interface{} `json:"agents"`
+	}
+	ParseJSON(t, resp, &result)
 
-	if len(agents) != 0 {
-		t.Errorf("Expected 0 agents, got %d", len(agents))
+	if len(result.Agents) != 0 {
+		t.Errorf("Expected 0 agents, got %d", len(result.Agents))
 	}
 }
 
@@ -247,10 +251,12 @@ func TestListAgents_WithData(t *testing.T) {
 
 	AssertStatus(t, resp, http.StatusOK)
 
-	var agents []interface{}
-	ParseJSON(t, resp, &agents)
+	var result struct {
+		Agents []interface{} `json:"agents"`
+	}
+	ParseJSON(t, resp, &result)
 
-	if len(agents) != 2 {
-		t.Errorf("Expected 2 agents, got %d", len(agents))
+	if len(result.Agents) != 2 {
+		t.Errorf("Expected 2 agents, got %d", len(result.Agents))
 	}
 }
