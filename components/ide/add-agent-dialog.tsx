@@ -37,6 +37,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import type {
 	Agent,
+	AuthProvider,
 	CreateAgentRequest,
 	MCPServer,
 	MCPServerConfig,
@@ -45,10 +46,9 @@ import type {
 import { useAgentTypes } from "@/lib/hooks/use-agent-types";
 import { useCredentials } from "@/lib/hooks/use-credentials";
 import {
-	getProviderLogoUrl,
-	type ModelProvider,
-	useModelsProviders,
-} from "@/lib/hooks/use-models-providers";
+	getAuthProviderLogoUrl,
+	useAuthProviders,
+} from "@/lib/hooks/use-auth-providers";
 import { cn } from "@/lib/utils";
 
 function parseCommandLine(input: string): { command: string; args: string[] } {
@@ -109,7 +109,7 @@ function ProviderLogo({
 	className?: string;
 }) {
 	const [hasError, setHasError] = React.useState(false);
-	const logoUrl = getProviderLogoUrl(providerId);
+	const logoUrl = getAuthProviderLogoUrl(providerId);
 
 	if (hasError) {
 		return <Key className={className} />;
@@ -127,7 +127,7 @@ function ProviderLogo({
 
 interface AuthProviderRowProps {
 	providerId: string;
-	provider?: ModelProvider;
+	provider?: AuthProvider;
 	isConfigured: boolean;
 	onConfigure: () => void;
 }

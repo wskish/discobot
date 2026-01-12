@@ -30,10 +30,11 @@ export function IconRenderer({
 		? { width: `${size}px`, height: `${size}px` }
 		: { width: "1em", height: "1em" };
 
+	const currentTheme = mounted ? resolvedTheme : "light";
+	const isDark = currentTheme === "dark";
+
 	const icon = React.useMemo(() => {
 		if (!icons || icons.length === 0) return null;
-
-		const currentTheme = mounted ? resolvedTheme : "light";
 
 		// Filter icons by current theme or no theme specified (universal)
 		const themeFilteredIcons = icons.filter(
@@ -50,7 +51,11 @@ export function IconRenderer({
 
 		// Fall back to first available icon
 		return availableIcons[0];
-	}, [icons, resolvedTheme, mounted]);
+	}, [icons, currentTheme]);
+
+	// Apply invert filter for icons that need color inversion in dark mode
+	const shouldInvert = isDark && icon?.invertDark;
+	const invertStyle = shouldInvert ? { filter: "invert(1)" } : {};
 
 	if (!icon) {
 		return fallback ? fallback : <Bot className={className} />;
@@ -68,7 +73,7 @@ export function IconRenderer({
 			return (
 				<span
 					className={className}
-					style={{ display: "inline-flex", ...sizeStyle }}
+					style={{ display: "inline-flex", ...sizeStyle, ...invertStyle }}
 					// biome-ignore lint/security/noDangerouslySetInnerHtml: SVG content is decoded from data URI icons, not user input
 					dangerouslySetInnerHTML={{
 						__html: svgContent.replace(
@@ -90,7 +95,7 @@ export function IconRenderer({
 			src={icon.src || "/placeholder.svg"}
 			alt=""
 			className={className}
-			style={{ ...sizeStyle, objectFit: "contain" }}
+			style={{ ...sizeStyle, objectFit: "contain", ...invertStyle }}
 		/>
 	);
 }
