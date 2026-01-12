@@ -356,22 +356,29 @@ type CodexExchangeRequest struct {
 
 // CodexAuthorize generates PKCE and returns OAuth URL
 func (h *Handler) CodexAuthorize(w http.ResponseWriter, r *http.Request) {
-	var req CodexAuthorizeRequest
-	if err := h.DecodeJSON(r, &req); err != nil {
-		h.Error(w, http.StatusBadRequest, "Invalid request body")
-		return
-	}
+	projectID := middleware.GetProjectID(r.Context())
 
-	if req.RedirectURI == "" {
-		h.Error(w, http.StatusBadRequest, "redirect_uri is required")
-		return
+	var req CodexAuthorizeRequest
+	// Allow empty body - use default redirect URI
+	_ = h.DecodeJSON(r, &req)
+
+	// Use default redirect URI if not provided (matches opencode implementation)
+	redirectURI := req.RedirectURI
+	if redirectURI == "" {
+		redirectURI = "http://localhost:1455/auth/callback"
 	}
 
 	provider := oauth.NewCodexProvider(h.cfg.CodexClientID)
-	authResp, err := provider.Authorize(req.RedirectURI)
+	authResp, err := provider.Authorize(redirectURI)
 	if err != nil {
 		h.Error(w, http.StatusInternalServerError, "Failed to generate authorization URL")
 		return
+	}
+
+	// Try to start the callback server and register this pending auth
+	if h.codexCallbackServer != nil {
+		h.codexCallbackServer.Start() // Optimistically try to start, ignore if fails
+		h.codexCallbackServer.RegisterPending(authResp.State, authResp.Verifier, projectID, redirectURI)
 	}
 
 	h.JSON(w, http.StatusOK, authResp)
@@ -391,17 +398,19 @@ func (h *Handler) CodexExchange(w http.ResponseWriter, r *http.Request) {
 		h.Error(w, http.StatusBadRequest, "code is required")
 		return
 	}
-	if req.RedirectURI == "" {
-		h.Error(w, http.StatusBadRequest, "redirect_uri is required")
-		return
+
+	// Use default redirect URI if not provided
+	redirectURI := req.RedirectURI
+	if redirectURI == "" {
+		redirectURI = "http://localhost:1455/auth/callback"
 	}
 	if req.CodeVerifier == "" {
-		h.Error(w, http.StatusBadRequest, "code_verifier is required")
+		h.Error(w, http.StatusBadRequest, "verifier is required")
 		return
 	}
 
 	provider := oauth.NewCodexProvider(h.cfg.CodexClientID)
-	tokenResp, err := provider.Exchange(r.Context(), req.Code, req.RedirectURI, req.CodeVerifier)
+	tokenResp, err := provider.Exchange(r.Context(), req.Code, redirectURI, req.CodeVerifier)
 	if err != nil {
 		h.Error(w, http.StatusBadRequest, "Token exchange failed: "+err.Error())
 		return
@@ -424,6 +433,7 @@ func (h *Handler) CodexExchange(w http.ResponseWriter, r *http.Request) {
 
 	// Return credential info with token expiration
 	response := map[string]any{
+		"success":    true,
 		"credential": info,
 		"expiresAt":  tokenResp.ExpiresAt,
 	}

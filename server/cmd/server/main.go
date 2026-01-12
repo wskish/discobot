@@ -309,6 +309,9 @@ func main() {
 		disp.Stop()
 	}
 
+	// Close handler resources (stops Codex callback server, etc.)
+	h.Close()
+
 	// Graceful shutdown with timeout
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()

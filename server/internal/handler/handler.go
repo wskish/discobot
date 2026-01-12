@@ -19,13 +19,14 @@ const (
 
 // Handler contains all HTTP handlers
 type Handler struct {
-	store             *store.Store
-	cfg               *config.Config
-	authService       *service.AuthService
-	credentialService *service.CredentialService
-	gitService        *service.GitService
-	containerService  *service.ContainerService
-	jobQueue          *dispatcher.JobQueue
+	store               *store.Store
+	cfg                 *config.Config
+	authService         *service.AuthService
+	credentialService   *service.CredentialService
+	gitService          *service.GitService
+	containerService    *service.ContainerService
+	jobQueue            *dispatcher.JobQueue
+	codexCallbackServer *CodexCallbackServer
 }
 
 // New creates a new Handler
@@ -62,7 +63,7 @@ func NewWithProviders(s *store.Store, cfg *config.Config, gitProvider git.Provid
 	// Create job queue for background job processing
 	jobQueue := dispatcher.NewJobQueue(s)
 
-	return &Handler{
+	h := &Handler{
 		store:             s,
 		cfg:               cfg,
 		authService:       service.NewAuthService(s, cfg),
@@ -71,6 +72,11 @@ func NewWithProviders(s *store.Store, cfg *config.Config, gitProvider git.Provid
 		containerService:  containerSvc,
 		jobQueue:          jobQueue,
 	}
+
+	// Create Codex callback server (will be started on first use)
+	h.codexCallbackServer = NewCodexCallbackServer(h)
+
+	return h
 }
 
 // JSON helper to write JSON responses
@@ -96,6 +102,13 @@ func (h *Handler) DecodeJSON(r *http.Request, v any) error {
 // Used by main.go to wire up dispatcher notifications.
 func (h *Handler) JobQueue() *dispatcher.JobQueue {
 	return h.jobQueue
+}
+
+// Close cleans up handler resources
+func (h *Handler) Close() {
+	if h.codexCallbackServer != nil {
+		h.codexCallbackServer.Stop()
+	}
 }
 
 // setSessionCookie sets the session cookie

@@ -112,6 +112,39 @@ export function CodexOAuthFlow({ onComplete, onCancel }: CodexOAuthFlowProps) {
 	const [code, setCode] = React.useState("");
 	const [isLoading, setIsLoading] = React.useState(false);
 	const [error, setError] = React.useState<string | null>(null);
+	const pollingRef = React.useRef<NodeJS.Timeout | null>(null);
+
+	// Poll for credential completion (callback server may have completed it)
+	React.useEffect(() => {
+		if (step !== "code") return;
+
+		const checkCredential = async () => {
+			try {
+				const credentials = await api.getCredentials();
+				const hasCodex = credentials.credentials.some(
+					(c) => c.provider === "codex" && c.isConfigured
+				);
+				if (hasCodex) {
+					mutate("credentials");
+					onComplete();
+				}
+			} catch {
+				// Ignore errors, keep polling
+			}
+		};
+
+		// Start polling every 2 seconds
+		pollingRef.current = setInterval(checkCredential, 2000);
+		// Also check immediately
+		checkCredential();
+
+		return () => {
+			if (pollingRef.current) {
+				clearInterval(pollingRef.current);
+				pollingRef.current = null;
+			}
+		};
+	}, [step, onComplete]);
 
 	const handleStartOAuth = async () => {
 		setIsLoading(true);

@@ -13,7 +13,7 @@ import (
 
 const (
 	// OpenAI Codex OAuth endpoints
-	codexAuthURL  = "https://auth.openai.com/authorize"
+	codexAuthURL  = "https://auth.openai.com/oauth/authorize"
 	codexTokenURL = "https://auth.openai.com/oauth/token"
 )
 
@@ -54,6 +54,10 @@ func (p *CodexProvider) Authorize(redirectURI string) (*AuthorizeResponse, error
 	params.Set("state", state)
 	params.Set("code_challenge", pkce.CodeChallenge)
 	params.Set("code_challenge_method", pkce.CodeChallengeMethod)
+	// Extra params from opencode reference implementation
+	params.Set("id_token_add_organizations", "true")
+	params.Set("codex_cli_simplified_flow", "true")
+	params.Set("originator", "codex_cli")
 
 	authURL := codexAuthURL + "?" + params.Encode()
 
