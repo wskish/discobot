@@ -72,6 +72,7 @@ export default function IDEChatPage() {
 	const {
 		workspaces,
 		createWorkspace,
+		deleteWorkspace,
 		isLoading: workspacesLoading,
 		mutate: mutateWorkspaces,
 	} = useWorkspaces();
@@ -175,8 +176,25 @@ export default function IDEChatPage() {
 	}, []);
 
 	const handleAddWorkspace = async (newWorkspace: CreateWorkspaceRequest) => {
-		await createWorkspace(newWorkspace);
+		const workspace = await createWorkspace(newWorkspace);
 		dialogs.closeWorkspaceDialog();
+		// Auto-select the newly created workspace
+		if (workspace) {
+			setPreselectedWorkspaceId(workspace.id);
+			setWorkspaceSelectTrigger((prev) => prev + 1);
+		}
+	};
+
+	const handleDeleteWorkspace = async (workspaceId: string) => {
+		await deleteWorkspace(workspaceId);
+		// Clear selection if the deleted workspace was preselected
+		if (preselectedWorkspaceId === workspaceId) {
+			setPreselectedWorkspaceId(null);
+		}
+		// Clear session if it belonged to the deleted workspace
+		if (selectedSession?.workspaceId === workspaceId) {
+			setSelectedSession(null);
+		}
 	};
 
 	const handleAddOrEditAgent = async (agentData: CreateAgentRequest) => {
@@ -282,6 +300,7 @@ export default function IDEChatPage() {
 					onAgentSelect={setSelectedAgent}
 					onAddWorkspace={dialogs.openWorkspaceDialog}
 					onAddSession={handleAddSession}
+					onDeleteWorkspace={handleDeleteWorkspace}
 					onAddAgent={() => dialogs.openAgentDialog()}
 					onConfigureAgent={(agent) => dialogs.openAgentDialog(agent)}
 				/>

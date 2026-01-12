@@ -54,6 +54,7 @@ interface SidebarTreeProps {
 	selectedSessionId: string | null;
 	onAddWorkspace: () => void;
 	onAddSession: (workspaceId: string) => void;
+	onDeleteWorkspace: (workspaceId: string) => void;
 	className?: string;
 }
 
@@ -63,6 +64,7 @@ export function SidebarTree({
 	selectedSessionId,
 	onAddWorkspace,
 	onAddSession,
+	onDeleteWorkspace,
 	className,
 }: SidebarTreeProps) {
 	const [expandedIds, setExpandedIds] = React.useState<Set<string>>(
@@ -120,6 +122,7 @@ export function SidebarTree({
 						selectedSessionId={selectedSessionId}
 						showClosed={showClosed}
 						onAddSession={onAddSession}
+						onDeleteWorkspace={onDeleteWorkspace}
 					/>
 				))}
 			</div>
@@ -135,6 +138,7 @@ function WorkspaceNode({
 	selectedSessionId,
 	showClosed,
 	onAddSession,
+	onDeleteWorkspace,
 }: {
 	workspace: Workspace;
 	expandedIds: Set<string>;
@@ -143,8 +147,10 @@ function WorkspaceNode({
 	selectedSessionId: string | null;
 	showClosed: boolean;
 	onAddSession: (workspaceId: string) => void;
+	onDeleteWorkspace: (workspaceId: string) => void;
 }) {
 	const isExpanded = expandedIds.has(workspace.id);
+	const [menuOpen, setMenuOpen] = React.useState(false);
 	const { displayPath, isGitHub } = parseWorkspacePath(
 		workspace.path,
 		workspace.sourceType,
@@ -181,17 +187,42 @@ function WorkspaceNode({
 					)}
 					<span className="font-mono truncate text-sm">{displayPath}</span>
 				</div>
-				<button
-					type="button"
-					onClick={(e) => {
-						e.stopPropagation();
-						onAddSession(workspace.id);
-					}}
-					className="opacity-0 group-hover:opacity-100 p-1 rounded transition-opacity"
-					title="New session"
-				>
-					<Plus className="h-3.5 w-3.5 text-muted-foreground" />
-				</button>
+				<div className="flex items-center gap-0.5">
+					<button
+						type="button"
+						onClick={(e) => {
+							e.stopPropagation();
+							onAddSession(workspace.id);
+						}}
+						className="opacity-0 group-hover:opacity-100 p-1 rounded transition-opacity"
+						title="New session"
+					>
+						<Plus className="h-3.5 w-3.5 text-muted-foreground" />
+					</button>
+					<DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
+						<DropdownMenuTrigger asChild>
+							<button
+								type="button"
+								onClick={(e) => e.stopPropagation()}
+								className={cn(
+									"p-1 rounded hover:bg-muted shrink-0",
+									menuOpen ? "opacity-100" : "opacity-0 group-hover:opacity-100",
+								)}
+								title="More options"
+							>
+								<MoreHorizontal className="h-3.5 w-3.5 text-muted-foreground" />
+							</button>
+						</DropdownMenuTrigger>
+						<DropdownMenuContent align="end" className="w-32">
+							<DropdownMenuItem
+								onClick={() => onDeleteWorkspace(workspace.id)}
+								className="text-destructive"
+							>
+								Delete
+							</DropdownMenuItem>
+						</DropdownMenuContent>
+					</DropdownMenu>
+				</div>
 			</div>
 			{isExpanded && (
 				<div className="ml-3">

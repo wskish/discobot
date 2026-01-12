@@ -55,6 +55,12 @@ function detectInputType(input: string): InputType {
 		return "local";
 	}
 
+	// Detect org/repo shorthand (e.g., "facebook/react", "vercel/next.js")
+	// Must start with alphanumeric, contain exactly one slash, no special prefixes
+	if (trimmed.match(/^[a-zA-Z0-9][\w.-]*\/[\w.-]+$/)) {
+		return "github";
+	}
+
 	return "unknown";
 }
 
@@ -75,12 +81,17 @@ function validateInput(input: string): ValidationResult {
 	}
 
 	if (type === "github") {
+		// Check for org/repo shorthand first
+		if (input.trim().match(/^[a-zA-Z0-9][\w.-]*\/[\w.-]+$/)) {
+			return { isValid: true, type: "github" };
+		}
+		// Then check for full GitHub URL
 		const match = input.match(/github\.com[/:]([\w-]+)\/([\w.-]+)/);
 		if (!match) {
 			return {
 				isValid: false,
 				type: "github",
-				error: "Invalid GitHub URL. Use format: github.com/org/repo",
+				error: "Invalid GitHub URL. Use format: github.com/org/repo or org/repo",
 			};
 		}
 		return { isValid: true, type: "github" };
@@ -109,6 +120,15 @@ function validateInput(input: string): ValidationResult {
 	}
 
 	return { isValid: false, type: "unknown" };
+}
+
+function normalizeGitPath(input: string): string {
+	const trimmed = input.trim();
+	// Convert org/repo shorthand to full GitHub URL
+	if (trimmed.match(/^[a-zA-Z0-9][\w.-]*\/[\w.-]+$/)) {
+		return `https://github.com/${trimmed}`;
+	}
+	return trimmed;
 }
 
 function getInputIcon(type: InputType, className?: string) {
@@ -157,8 +177,10 @@ export function AddWorkspaceDialog({
 		if (!validation.isValid) return;
 
 		const sourceType = inputType === "local" ? "local" : "git";
+		const path =
+			sourceType === "git" ? normalizeGitPath(input) : input.trim();
 		onAdd({
-			path: input.trim(),
+			path,
 			sourceType,
 		});
 
@@ -228,7 +250,7 @@ export function AddWorkspaceDialog({
 									onBlur={() =>
 										setTimeout(() => setShowSuggestions(false), 150)
 									}
-									placeholder="~/projects/app or github.com/org/repo"
+									placeholder="~/projects/app or org/repo"
 									className={cn(
 										"font-mono text-sm",
 										validation.error &&
@@ -289,7 +311,7 @@ export function AddWorkspaceDialog({
 						<p className="font-medium">Supported formats:</p>
 						<ul className="list-disc list-inside space-y-0.5 pl-1">
 							<li>Local paths: ~/projects/app, /var/www/site</li>
-							<li>GitHub: github.com/org/repo, git@github.com:org/repo</li>
+							<li>GitHub: org/repo, github.com/org/repo, git@github.com:org/repo</li>
 							<li>
 								Git: https://gitlab.com/org/repo, git@bitbucket.org:org/repo
 							</li>
