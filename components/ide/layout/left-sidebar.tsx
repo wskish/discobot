@@ -27,6 +27,7 @@ interface LeftSidebarProps {
 	onAgentSelect: (agent: Agent | null) => void;
 	onAddWorkspace: () => void;
 	onAddSession: (workspaceId: string) => void;
+	onDeleteWorkspace: (workspaceId: string) => void;
 	onAddAgent: () => void;
 	onConfigureAgent: (agent: Agent) => void;
 }
@@ -42,6 +43,7 @@ export function LeftSidebar({
 	onAgentSelect,
 	onAddWorkspace,
 	onAddSession,
+	onDeleteWorkspace,
 	onAddAgent,
 	onConfigureAgent,
 }: LeftSidebarProps) {
@@ -82,6 +84,7 @@ export function LeftSidebar({
 				selectedSessionId={selectedSessionId}
 				onAddWorkspace={onAddWorkspace}
 				onAddSession={onAddSession}
+				onDeleteWorkspace={onDeleteWorkspace}
 				className="flex-1 min-h-0"
 			/>
 
