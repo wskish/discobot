@@ -9,7 +9,11 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "@/components/ui/dialog";
-import type { AuthProvider, CredentialInfo, SupportedAgentType } from "@/lib/api-types";
+import type {
+	AuthProvider,
+	CredentialInfo,
+	SupportedAgentType,
+} from "@/lib/api-types";
 import { cn } from "@/lib/utils";
 import { IconRenderer } from "./icon-renderer";
 import { OctobotLogo } from "./octobot-logo";
@@ -19,7 +23,10 @@ interface WelcomeModalProps {
 	agentTypes: SupportedAgentType[];
 	authProviders: AuthProvider[];
 	configuredCredentials: CredentialInfo[];
-	onComplete: (agentType: SupportedAgentType, authProviderId: string | null) => void;
+	onComplete: (
+		agentType: SupportedAgentType,
+		authProviderId: string | null,
+	) => void;
 }
 
 type Step = "agent" | "auth";
@@ -38,7 +45,8 @@ export function WelcomeModal({
 	onComplete,
 }: WelcomeModalProps) {
 	const [step, setStep] = React.useState<Step>("agent");
-	const [selectedAgent, setSelectedAgent] = React.useState<SupportedAgentType | null>(null);
+	const [selectedAgent, setSelectedAgent] =
+		React.useState<SupportedAgentType | null>(null);
 	const [showOtherAgents, setShowOtherAgents] = React.useState(false);
 	const [showOtherProviders, setShowOtherProviders] = React.useState(false);
 
@@ -64,7 +72,12 @@ export function WelcomeModal({
 
 	// Get configured provider IDs
 	const configuredProviderIds = React.useMemo(
-		() => new Set(configuredCredentials.filter(c => c.isConfigured).map(c => c.provider)),
+		() =>
+			new Set(
+				configuredCredentials
+					.filter((c) => c.isConfigured)
+					.map((c) => c.provider),
+			),
 		[configuredCredentials],
 	);
 
@@ -76,7 +89,7 @@ export function WelcomeModal({
 		// Check if user has any configured credentials for this agent
 		const hasConfiguredProvider = supportsAll
 			? configuredProviderIds.size > 0
-			: supportedProviders.some(p => configuredProviderIds.has(p));
+			: supportedProviders.some((p) => configuredProviderIds.has(p));
 
 		if (hasConfiguredProvider) {
 			// User already has valid credentials, complete immediately
@@ -115,7 +128,7 @@ export function WelcomeModal({
 		}
 		// Map in order of supportedAuthProviders to respect agent's preferred order
 		return supported
-			.map(id => authProviders.find(p => p.id === id))
+			.map((id) => authProviders.find((p) => p.id === id))
 			.filter((p): p is AuthProvider => p !== undefined);
 	}, [selectedAgent, authProviders]);
 
@@ -132,12 +145,12 @@ export function WelcomeModal({
 		}
 		// Return highlighted providers in the order specified
 		return selectedAgent.highlightedAuthProviders
-			.map(id => authProviders.find(p => p.id === id))
+			.map((id) => authProviders.find((p) => p.id === id))
 			.filter((p): p is AuthProvider => p !== undefined);
 	}, [selectedAgent, authProviders, availableProviders]);
 
 	const otherProvidersList = React.useMemo(() => {
-		return availableProviders.filter(p => !highlightedProviderIds.has(p.id));
+		return availableProviders.filter((p) => !highlightedProviderIds.has(p.id));
 	}, [availableProviders, highlightedProviderIds]);
 
 	return (
@@ -174,7 +187,10 @@ export function WelcomeModal({
 							) : (
 								<>
 									Select how you want to authenticate with{" "}
-									<span className="font-medium text-foreground">{selectedAgent?.name}</span>.
+									<span className="font-medium text-foreground">
+										{selectedAgent?.name}
+									</span>
+									.
 								</>
 							)}
 						</DialogDescription>
@@ -259,7 +275,13 @@ export function WelcomeModal({
 											}
 											name="Free"
 											description="Use without authentication - some features may be limited"
-											badges={[{ label: "No Setup", className: "bg-green-500/10 text-green-600 dark:text-green-400" }]}
+											badges={[
+												{
+													label: "No Setup",
+													className:
+														"bg-green-500/10 text-green-600 dark:text-green-400",
+												},
+											]}
 											onSelect={() => handleSelectAuthProvider(null)}
 											isPrimary
 										/>
@@ -271,9 +293,15 @@ export function WelcomeModal({
 											key={provider.id}
 											icon={<IconRenderer icons={provider.icons} size={28} />}
 											name={provider.name}
-											description={provider.description || `Authenticate with ${provider.name}`}
+											description={
+												provider.description ||
+												`Authenticate with ${provider.name}`
+											}
 											onSelect={() => handleSelectAuthProvider(provider.id)}
-											isPrimary={!selectedAgent?.allowNoAuth && provider.id === featuredProviders[0]?.id}
+											isPrimary={
+												!selectedAgent?.allowNoAuth &&
+												provider.id === featuredProviders[0]?.id
+											}
 										/>
 									))}
 								</div>
@@ -304,9 +332,14 @@ export function WelcomeModal({
 											{otherProvidersList.map((provider) => (
 												<CompactCard
 													key={provider.id}
-													icon={<IconRenderer icons={provider.icons} size={20} />}
+													icon={
+														<IconRenderer icons={provider.icons} size={20} />
+													}
 													name={provider.name}
-													description={provider.description || `Authenticate with ${provider.name}`}
+													description={
+														provider.description ||
+														`Authenticate with ${provider.name}`
+													}
 													onSelect={() => handleSelectAuthProvider(provider.id)}
 												/>
 											))}

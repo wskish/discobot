@@ -43,8 +43,11 @@ export default function IDEChatPage() {
 
 	// System status check
 	const [systemStatusChecked, setSystemStatusChecked] = React.useState(false);
-	const [systemStatusMessages, setSystemStatusMessages] = React.useState<StatusMessage[]>([]);
-	const [showSystemRequirements, setShowSystemRequirements] = React.useState(false);
+	const [systemStatusMessages, setSystemStatusMessages] = React.useState<
+		StatusMessage[]
+	>([]);
+	const [showSystemRequirements, setShowSystemRequirements] =
+		React.useState(false);
 
 	// Check system status on mount
 	React.useEffect(() => {
@@ -300,7 +303,12 @@ export default function IDEChatPage() {
 			/>
 
 			<WelcomeModal
-				open={systemStatusChecked && !showSystemRequirements && !agentsLoading && agents.length === 0}
+				open={
+					systemStatusChecked &&
+					!showSystemRequirements &&
+					!agentsLoading &&
+					agents.length === 0
+				}
 				agentTypes={agentTypes}
 				authProviders={authProviders}
 				configuredCredentials={credentials}

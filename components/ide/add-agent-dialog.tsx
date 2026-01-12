@@ -44,11 +44,11 @@ import type {
 	SupportedAgentType,
 } from "@/lib/api-types";
 import { useAgentTypes } from "@/lib/hooks/use-agent-types";
-import { useCredentials } from "@/lib/hooks/use-credentials";
 import {
 	getAuthProviderLogoUrl,
 	useAuthProviders,
 } from "@/lib/hooks/use-auth-providers";
+import { useCredentials } from "@/lib/hooks/use-credentials";
 import { cn } from "@/lib/utils";
 
 function parseCommandLine(input: string): { command: string; args: string[] } {

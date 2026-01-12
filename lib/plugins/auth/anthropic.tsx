@@ -17,9 +17,7 @@ import type {
 /**
  * Anthropic OAuth authentication plugin
  *
- * Supports two OAuth modes:
- * - "max": Claude Pro/Max account login via claude.ai
- * - "console": API key creation via console.anthropic.com
+ * Uses Claude Pro/Max account login via claude.ai
  */
 
 const OAUTH_OPTIONS: OAuthOption[] = [
@@ -29,17 +27,10 @@ const OAUTH_OPTIONS: OAuthOption[] = [
 		description: "Sign in with your Claude subscription",
 		icon: "login",
 	},
-	{
-		id: "console",
-		label: "Create API Key (Console)",
-		description: "Generate an API key from Anthropic Console",
-		icon: "key",
-	},
 ];
 
-async function startOAuth(optionId: string): Promise<OAuthStartResult> {
-	const mode = optionId === "console" ? "console" : "max";
-	const result = await api.anthropicAuthorize(mode);
+async function startOAuth(_optionId: string): Promise<OAuthStartResult> {
+	const result = await api.anthropicAuthorize("max");
 	return {
 		url: result.url,
 		verifier: result.verifier,

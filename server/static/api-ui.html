@@ -627,8 +627,8 @@
 
         // State
         let currentEndpoint = null;
-        let currentUser = null;
-        let paramValues = {};
+        let _currentUser = null;
+        let _paramValues = {};
         let defaultProjectId = localStorage.getItem('octobot_default_project_id') || 'local';
 
         // Initialize default project ID input
@@ -682,7 +682,7 @@
                         <span>${filtered.length}</span>
                     </div>
                     <div class="endpoint-list">
-                        ${filtered.map((ep, idx) => `
+                        ${filtered.map((ep, _idx) => `
                             <div class="endpoint-item" data-group="${groupName}" data-idx="${endpoints.indexOf(ep)}">
                                 <span class="method-badge ${ep.method.toLowerCase()}">${ep.method}</span>
                                 <span class="endpoint-path">${ep.path}</span>
@@ -697,9 +697,9 @@
 
                 group.querySelectorAll('.endpoint-item').forEach(item => {
                     item.onclick = () => {
-                        const ep = API_ENDPOINTS.find(e => e.group === item.dataset.group && endpoints.indexOf(e) === parseInt(item.dataset.idx));
+                        const ep = API_ENDPOINTS.find(e => e.group === item.dataset.group && endpoints.indexOf(e) === parseInt(item.dataset.idx, 10));
                         selectEndpoint(ep);
-                        document.querySelectorAll('.endpoint-item').forEach(i => i.classList.remove('active'));
+                        document.querySelectorAll('.endpoint-item').forEach(i => { i.classList.remove('active'); });
                         item.classList.add('active');
                     };
                 });
@@ -711,7 +711,7 @@
         // Select endpoint
         function selectEndpoint(endpoint) {
             currentEndpoint = endpoint;
-            paramValues = {};
+            _paramValues = {};
 
             const pathParams = endpoint.params?.filter(p => p.in === 'path') || [];
             const queryParams = endpoint.params?.filter(p => p.in === 'query') || [];
@@ -793,7 +793,7 @@
 
             document.querySelectorAll('.tab').forEach(tab => {
                 tab.onclick = () => {
-                    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                    document.querySelectorAll('.tab').forEach(t => { t.classList.remove('active'); });
                     tab.classList.add('active');
                     document.getElementById('responseBody').style.display = tab.dataset.tab === 'body' ? 'block' : 'none';
                     document.getElementById('responseHeaders').style.display = tab.dataset.tab === 'headers' ? 'block' : 'none';
@@ -819,7 +819,7 @@
             });
 
             if (queryParams.length > 0) {
-                path += '?' + queryParams.join('&');
+                path += `?${queryParams.join('&')}`;
             }
 
             return path;
@@ -845,7 +845,7 @@
                 if (bodyEditor) {
                     try {
                         options.body = bodyEditor.value;
-                    } catch (e) {
+                    } catch (_e) {
                         options.body = bodyEditor.value;
                     }
                 }
@@ -866,7 +866,7 @@
 
                 responseSection.style.display = 'flex';
                 statusBadge.textContent = `${response.status} ${response.statusText}`;
-                statusBadge.className = 'status-badge ' + (response.ok ? 'success' : response.status >= 500 ? 'error' : 'warning');
+                statusBadge.className = `status-badge ${response.ok ? 'success' : response.status >= 500 ? 'error' : 'warning'}`;
                 responseTime.textContent = `${duration}ms`;
 
                 // Parse response
@@ -880,7 +880,7 @@
                     responseBody.textContent = body;
                 }
 
-                responseBody.className = 'response-body' + (response.ok ? '' : ' error');
+                responseBody.className = `response-body${response.ok ? '' : ' error'}`;
 
                 // Headers
                 const headers = {};
@@ -914,14 +914,14 @@
                 const response = await fetch('/auth/me', { credentials: 'include' });
                 if (response.ok) {
                     const user = await response.json();
-                    currentUser = user;
+                    _currentUser = user;
                     indicator.className = 'auth-indicator authenticated';
                     status.textContent = `Logged in as ${user.email}`;
                 } else {
                     indicator.className = 'auth-indicator unauthenticated';
                     status.innerHTML = 'Not authenticated - <a href="/auth/login/github" style="color: var(--accent)">Login with GitHub</a>';
                 }
-            } catch (e) {
+            } catch (_e) {
                 indicator.className = 'auth-indicator unauthenticated';
                 status.textContent = 'Could not check auth status';
             }
@@ -950,7 +950,7 @@
                 const width = startWidth + (e.clientX - startX);
                 const minWidth = 280;
                 const maxWidth = 800;
-                sidebar.style.width = Math.max(minWidth, Math.min(maxWidth, width)) + 'px';
+                sidebar.style.width = `${Math.max(minWidth, Math.min(maxWidth, width))}px`;
             });
 
             document.addEventListener('mouseup', () => {

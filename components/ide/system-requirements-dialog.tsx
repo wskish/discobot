@@ -1,6 +1,7 @@
 "use client";
 
 import { AlertTriangle, XCircle } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import {
 	Dialog,
 	DialogContent,
@@ -9,7 +10,6 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
 import type { StatusMessage } from "@/lib/api-types";
 import { cn } from "@/lib/utils";
 
@@ -86,11 +86,9 @@ export function SystemRequirementsDialog({
 							Close
 						</Button>
 					) : (
-						<>
-							<Button variant="outline" onClick={onClose}>
-								Continue Anyway
-							</Button>
-						</>
+						<Button variant="outline" onClick={onClose}>
+							Continue Anyway
+						</Button>
 					)}
 				</DialogFooter>
 			</DialogContent>

@@ -27,11 +27,11 @@ import type {
 	CredentialInfo,
 } from "@/lib/api-types";
 import { matchesProviderAlias } from "@/lib/config/provider-aliases";
-import { useCredentials } from "@/lib/hooks/use-credentials";
 import {
 	getAuthProviderLogoUrl,
 	useAuthProviders,
 } from "@/lib/hooks/use-auth-providers";
+import { useCredentials } from "@/lib/hooks/use-credentials";
 import {
 	getAuthTypesForProvider,
 	getOAuthFlowComponent,
@@ -168,7 +168,11 @@ function ProviderCombobox({
 							onMouseEnter={() => setHighlightedIndex(index)}
 						>
 							<div className="h-5 w-5 rounded flex items-center justify-center shrink-0 overflow-hidden">
-								<ProviderLogo providerId={provider.id} provider={provider} className="h-4 w-4" />
+								<ProviderLogo
+									providerId={provider.id}
+									provider={provider}
+									className="h-4 w-4"
+								/>
 							</div>
 							<div className="flex-1 min-w-0">
 								<div className="text-sm font-medium">{provider.name}</div>
@@ -211,7 +215,11 @@ function ConfiguredCredentialRow({
 		<div className="flex items-center justify-between gap-3 py-2 px-3 rounded-lg bg-muted/30 border">
 			<div className="flex items-center gap-3 min-w-0">
 				<div className="h-6 w-6 rounded flex items-center justify-center shrink-0 overflow-hidden bg-background">
-					<ProviderLogo providerId={credential.provider} provider={provider} className="h-4 w-4" />
+					<ProviderLogo
+						providerId={credential.provider}
+						provider={provider}
+						className="h-4 w-4"
+					/>
 				</div>
 				<div className="min-w-0">
 					<div className="font-medium text-sm truncate">
@@ -313,7 +321,11 @@ function CredentialForm({
 			{/* Provider header */}
 			<div className="flex items-center gap-3 pb-3 border-b">
 				<div className="h-8 w-8 rounded-md flex items-center justify-center bg-muted overflow-hidden">
-					<ProviderLogo providerId={provider.id} provider={provider} className="h-5 w-5" />
+					<ProviderLogo
+						providerId={provider.id}
+						provider={provider}
+						className="h-5 w-5"
+					/>
 				</div>
 				<div>
 					<div className="font-medium">{provider.name}</div>
