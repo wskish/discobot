@@ -1,0 +1,194 @@
+package integration
+
+import (
+	"net/http"
+	"testing"
+	"time"
+
+	"github.com/anthropics/octobot/server/internal/config"
+	"github.com/anthropics/octobot/server/internal/container"
+)
+
+func TestGetTerminalStatus_NotCreated(t *testing.T) {
+	ts := NewTestServer(t)
+	user := ts.CreateTestUser("test@example.com")
+	project := ts.CreateTestProject(user, "Test Project")
+	workspace := ts.CreateTestWorkspace(project, "/home/user/code")
+	session := ts.CreateTestSession(workspace, "Test Session")
+	client := ts.AuthenticatedClient(user)
+
+	resp := client.Get("/api/projects/" + project.ID + "/sessions/" + session.ID + "/terminal/status")
+	defer resp.Body.Close()
+
+	AssertStatus(t, resp, http.StatusOK)
+
+	var status map[string]interface{}
+	ParseJSON(t, resp, &status)
+
+	if status["status"] != "not_created" {
+		t.Errorf("Expected status 'not_created', got '%v'", status["status"])
+	}
+}
+
+func TestGetTerminalStatus_Running(t *testing.T) {
+	ts := NewTestServer(t)
+	user := ts.CreateTestUser("test@example.com")
+	project := ts.CreateTestProject(user, "Test Project")
+	workspace := ts.CreateTestWorkspace(project, "/home/user/code")
+	session := ts.CreateTestSession(workspace, "Test Session")
+	client := ts.AuthenticatedClient(user)
+
+	// Create and start container via mock
+	ts.MockContainer.Create(t.Context(), session.ID, container.CreateOptions{
+		Image: config.DefaultContainerImage,
+	})
+	ts.MockContainer.Start(t.Context(), session.ID)
+
+	resp := client.Get("/api/projects/" + project.ID + "/sessions/" + session.ID + "/terminal/status")
+	defer resp.Body.Close()
+
+	AssertStatus(t, resp, http.StatusOK)
+
+	var status map[string]interface{}
+	ParseJSON(t, resp, &status)
+
+	if status["status"] != "running" {
+		t.Errorf("Expected status 'running', got '%v'", status["status"])
+	}
+}
+
+func TestGetTerminalHistory_Empty(t *testing.T) {
+	ts := NewTestServer(t)
+	user := ts.CreateTestUser("test@example.com")
+	project := ts.CreateTestProject(user, "Test Project")
+	workspace := ts.CreateTestWorkspace(project, "/home/user/code")
+	session := ts.CreateTestSession(workspace, "Test Session")
+	client := ts.AuthenticatedClient(user)
+
+	resp := client.Get("/api/projects/" + project.ID + "/sessions/" + session.ID + "/terminal/history")
+	defer resp.Body.Close()
+
+	AssertStatus(t, resp, http.StatusOK)
+
+	var result map[string]interface{}
+	ParseJSON(t, resp, &result)
+
+	history, ok := result["history"].([]interface{})
+	if !ok {
+		t.Fatalf("Expected history to be an array")
+	}
+
+	if len(history) != 0 {
+		t.Errorf("Expected 0 history entries, got %d", len(history))
+	}
+}
+
+func TestGetTerminalStatus_SessionNotFound(t *testing.T) {
+	ts := NewTestServer(t)
+	user := ts.CreateTestUser("test@example.com")
+	project := ts.CreateTestProject(user, "Test Project")
+	client := ts.AuthenticatedClient(user)
+
+	resp := client.Get("/api/projects/" + project.ID + "/sessions/nonexistent-session/terminal/status")
+	defer resp.Body.Close()
+
+	// Should return not_created since container doesn't exist
+	// (The session check happens in the WebSocket handler, not status)
+	AssertStatus(t, resp, http.StatusOK)
+
+	var status map[string]interface{}
+	ParseJSON(t, resp, &status)
+
+	if status["status"] != "not_created" {
+		t.Errorf("Expected status 'not_created', got '%v'", status["status"])
+	}
+}
+
+func TestTerminalWebSocket_ServiceUnavailable(t *testing.T) {
+	// This test verifies that the WebSocket endpoint returns an error
+	// when trying to connect without a valid session setup
+	// Note: Full WebSocket testing would require a WebSocket client
+	ts := NewTestServer(t)
+	user := ts.CreateTestUser("test@example.com")
+	project := ts.CreateTestProject(user, "Test Project")
+	workspace := ts.CreateTestWorkspace(project, "/home/user/code")
+	session := ts.CreateTestSession(workspace, "Test Session")
+	client := ts.AuthenticatedClient(user)
+
+	// Regular HTTP GET to WebSocket endpoint (won't upgrade)
+	resp := client.Get("/api/projects/" + project.ID + "/sessions/" + session.ID + "/terminal/ws")
+	defer resp.Body.Close()
+
+	// Should fail because it's not a proper WebSocket upgrade
+	// The exact status depends on the WebSocket library behavior
+	// gorilla/websocket typically returns 400 Bad Request for non-WebSocket requests
+	if resp.StatusCode != http.StatusBadRequest && resp.StatusCode != http.StatusInternalServerError {
+		t.Errorf("Expected status 400 or 500 for non-WebSocket request, got %d", resp.StatusCode)
+	}
+}
+
+func TestCreateSession_CreatesContainer(t *testing.T) {
+	ts := NewTestServer(t)
+	user := ts.CreateTestUser("test@example.com")
+	project := ts.CreateTestProject(user, "Test Project")
+	workspace := ts.CreateTestWorkspace(project, "/home/user/code")
+	client := ts.AuthenticatedClient(user)
+
+	resp := client.Post("/api/projects/"+project.ID+"/workspaces/"+workspace.ID+"/sessions", map[string]string{
+		"name": "Container Session",
+	})
+	defer resp.Body.Close()
+
+	AssertStatus(t, resp, http.StatusCreated)
+
+	var session map[string]interface{}
+	ParseJSON(t, resp, &session)
+
+	sessionID := session["id"].(string)
+
+	// Wait for async container creation via job queue
+	// The dispatcher polls every 10ms in tests, so wait a bit for the job to be processed
+	time.Sleep(100 * time.Millisecond)
+
+	// Check that a container was created for this session
+	containers := ts.MockContainer.GetContainers()
+	if _, exists := containers[sessionID]; !exists {
+		t.Errorf("Expected container to be created for session %s", sessionID)
+	}
+}
+
+func TestDeleteSession_DestroysContainer(t *testing.T) {
+	ts := NewTestServer(t)
+	user := ts.CreateTestUser("test@example.com")
+	project := ts.CreateTestProject(user, "Test Project")
+	workspace := ts.CreateTestWorkspace(project, "/home/user/code")
+	session := ts.CreateTestSession(workspace, "Test Session")
+	client := ts.AuthenticatedClient(user)
+
+	// Create container for the session
+	ts.MockContainer.Create(t.Context(), session.ID, container.CreateOptions{
+		Image: config.DefaultContainerImage,
+	})
+	ts.MockContainer.Start(t.Context(), session.ID)
+
+	// Verify container exists
+	containers := ts.MockContainer.GetContainers()
+	if _, exists := containers[session.ID]; !exists {
+		t.Fatal("Container should exist before deletion")
+	}
+
+	// Delete the session
+	resp := client.Delete("/api/projects/" + project.ID + "/sessions/" + session.ID)
+	defer resp.Body.Close()
+
+	AssertStatus(t, resp, http.StatusOK)
+
+	// Wait for async container destruction via job queue
+	time.Sleep(100 * time.Millisecond)
+
+	// Verify container was destroyed
+	containers = ts.MockContainer.GetContainers()
+	if _, exists := containers[session.ID]; exists {
+		t.Error("Container should have been destroyed when session was deleted")
+	}
+}
