@@ -61,15 +61,35 @@ export interface MCPServer {
 	enabled: boolean;
 }
 
+export interface Badge {
+	label: string;
+	className: string;
+}
+
+export interface AuthProvider {
+	id: string;
+	name: string;
+	description?: string;
+	icons?: Icon[];
+	env?: string[]; // Environment variable names for API keys
+}
+
 export interface SupportedAgentType {
 	id: string;
 	name: string;
 	description: string;
 	icons?: Icon[];
+	badges?: Badge[];
+	/** Whether this agent should be highlighted/featured in the UI */
+	highlighted?: boolean;
 	modes?: AgentMode[];
 	models?: AgentModel[];
-	/** Auth provider IDs this agent supports (e.g., "anthropic", "openai", "codex") */
+	/** Auth provider IDs this agent supports. Use ["*"] for all providers */
 	supportedAuthProviders?: string[];
+	/** Auth providers to highlight/feature when selecting this agent */
+	highlightedAuthProviders?: string[];
+	/** Whether this agent can work without authentication */
+	allowNoAuth?: boolean;
 }
 
 export interface AgentMode {
@@ -164,6 +184,10 @@ export interface Icon {
 	 * Optional specifier for the theme this icon is designed for.
 	 */
 	theme?: "light" | "dark";
+	/**
+	 * If true, invert colors for dark mode (for black-on-white icons).
+	 */
+	invertDark?: boolean;
 }
 
 export interface Icons {
@@ -269,4 +293,19 @@ export interface CodexExchangeResponse {
 	success: boolean;
 	error?: string;
 	accountId?: string;
+}
+
+// System Status types
+export type StatusMessageLevel = "warn" | "error";
+
+export interface StatusMessage {
+	id: string;
+	level: StatusMessageLevel;
+	title: string;
+	message: string;
+}
+
+export interface SystemStatusResponse {
+	ok: boolean;
+	messages: StatusMessage[];
 }

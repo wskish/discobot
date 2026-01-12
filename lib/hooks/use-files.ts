@@ -6,11 +6,11 @@ import { api } from "../api-client";
 export function useSessionFiles(sessionId: string | null) {
 	const { data, error, isLoading, mutate } = useSWR(
 		sessionId ? `files-${sessionId}` : null,
-		() => (sessionId ? api.getSessionFiles(sessionId) : []),
+		() => (sessionId ? api.getSessionFiles(sessionId) : null),
 	);
 
 	return {
-		files: data || [],
+		files: data?.files || [],
 		isLoading,
 		error,
 		mutate,

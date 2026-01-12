@@ -27,7 +27,7 @@ export function useWorkspaces() {
 	};
 
 	return {
-		workspaces: data || [],
+		workspaces: data?.workspaces || [],
 		isLoading,
 		error,
 		createWorkspace,

@@ -33,7 +33,7 @@ export function useAgents() {
 	};
 
 	return {
-		agents: data || [],
+		agents: data?.agents || [],
 		isLoading,
 		error,
 		createAgent,

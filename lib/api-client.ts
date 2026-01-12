@@ -2,6 +2,7 @@
 import { getApiBase } from "./api-config";
 import type {
 	Agent,
+	AuthProvider,
 	ChatMessage,
 	CodexAuthorizeResponse,
 	CodexExchangeRequest,
@@ -22,6 +23,7 @@ import type {
 	Session,
 	Suggestion,
 	SupportedAgentType,
+	SystemStatusResponse,
 	TerminalExecuteResponse,
 	UpdateAgentRequest,
 	UpdateSessionRequest,
@@ -50,9 +52,34 @@ class ApiClient {
 		return response.json();
 	}
 
+	// Fetch from root API (not project-scoped)
+	private async fetchRoot<T>(path: string, options?: RequestInit): Promise<T> {
+		const response = await fetch(`/api${path}`, {
+			...options,
+			headers: {
+				"Content-Type": "application/json",
+				...options?.headers,
+			},
+		});
+
+		if (!response.ok) {
+			const error = await response
+				.json()
+				.catch(() => ({ error: "Request failed" }));
+			throw new Error(error.error || "Request failed");
+		}
+
+		return response.json();
+	}
+
+	// System Status
+	async getSystemStatus(): Promise<SystemStatusResponse> {
+		return this.fetchRoot<SystemStatusResponse>("/status");
+	}
+
 	// Workspaces
-	async getWorkspaces(): Promise<Workspace[]> {
-		return this.fetch<Workspace[]>("/workspaces");
+	async getWorkspaces(): Promise<{ workspaces: Workspace[] }> {
+		return this.fetch<{ workspaces: Workspace[] }>("/workspaces");
 	}
 
 	async getWorkspace(id: string): Promise<Workspace> {
@@ -81,8 +108,10 @@ class ApiClient {
 	}
 
 	// Sessions
-	async getSessions(workspaceId: string): Promise<Session[]> {
-		return this.fetch<Session[]>(`/workspaces/${workspaceId}/sessions`);
+	async getSessions(workspaceId: string): Promise<{ sessions: Session[] }> {
+		return this.fetch<{ sessions: Session[] }>(
+			`/workspaces/${workspaceId}/sessions`,
+		);
 	}
 
 	async getSession(id: string): Promise<Session> {
@@ -114,8 +143,8 @@ class ApiClient {
 	}
 
 	// Files
-	async getSessionFiles(sessionId: string): Promise<FileNode[]> {
-		return this.fetch<FileNode[]>(`/sessions/${sessionId}/files`);
+	async getSessionFiles(sessionId: string): Promise<{ files: FileNode[] }> {
+		return this.fetch<{ files: FileNode[] }>(`/sessions/${sessionId}/files`);
 	}
 
 	async getFile(id: string): Promise<FileNode> {
@@ -123,13 +152,15 @@ class ApiClient {
 	}
 
 	// Messages
-	async getMessages(sessionId: string): Promise<ChatMessage[]> {
-		return this.fetch<ChatMessage[]>(`/sessions/${sessionId}/messages`);
+	async getMessages(sessionId: string): Promise<{ messages: ChatMessage[] }> {
+		return this.fetch<{ messages: ChatMessage[] }>(
+			`/sessions/${sessionId}/messages`,
+		);
 	}
 
 	// Agents
-	async getAgents(): Promise<Agent[]> {
-		return this.fetch<Agent[]>("/agents");
+	async getAgents(): Promise<{ agents: Agent[] }> {
+		return this.fetch<{ agents: Agent[] }>("/agents");
 	}
 
 	async getAgent(id: string): Promise<Agent> {
@@ -165,6 +196,10 @@ class ApiClient {
 		return this.fetch("/agents/types");
 	}
 
+	async getAuthProviders(): Promise<{ authProviders: AuthProvider[] }> {
+		return this.fetch("/agents/auth-providers");
+	}
+
 	// Terminal
 	async executeCommand(
 		command: string,
@@ -176,9 +211,9 @@ class ApiClient {
 		});
 	}
 
-	async getTerminalHistory(): Promise<
-		{ type: "input" | "output"; content: string }[]
-	> {
+	async getTerminalHistory(): Promise<{
+		history: { type: "input" | "output"; content: string }[];
+	}> {
 		return this.fetch("/terminal/history");
 	}
 
@@ -186,15 +221,15 @@ class ApiClient {
 	async getSuggestions(
 		query: string,
 		type?: "path" | "repo",
-	): Promise<Suggestion[]> {
+	): Promise<{ suggestions: Suggestion[] }> {
 		const params = new URLSearchParams({ q: query });
 		if (type) params.set("type", type);
-		return this.fetch<Suggestion[]>(`/suggestions?${params}`);
+		return this.fetch<{ suggestions: Suggestion[] }>(`/suggestions?${params}`);
 	}
 
 	// Credentials
-	async getCredentials(): Promise<CredentialInfo[]> {
-		return this.fetch<CredentialInfo[]>("/credentials");
+	async getCredentials(): Promise<{ credentials: CredentialInfo[] }> {
+		return this.fetch<{ credentials: CredentialInfo[] }>("/credentials");
 	}
 
 	async createCredential(
