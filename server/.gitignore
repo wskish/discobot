@@ -1,0 +1,28 @@
+# Binaries
+bin/
+tmp/
+__debug_bin*
+server
+
+# Database
+*.db
+*.sqlite
+
+# Environment (but keep examples)
+.env
+!.env.example
+!.env.auth.example
+
+# IDE
+.idea/
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Workspaces (git clones)
+workspaces/
+
+# Air build errors
+build-errors.log

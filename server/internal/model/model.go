@@ -1,0 +1,298 @@
+// Package model defines the database models used throughout the application.
+// These models work with both PostgreSQL and SQLite via GORM.
+package model
+
+import (
+	"encoding/json"
+	"time"
+
+	"github.com/google/uuid"
+	"gorm.io/gorm"
+)
+
+// User represents an authenticated user.
+type User struct {
+	ID         string    `gorm:"primaryKey;type:text" json:"id"`
+	Email      string    `gorm:"uniqueIndex;not null;type:text" json:"email"`
+	Name       *string   `gorm:"type:text" json:"name,omitempty"`
+	AvatarURL  *string   `gorm:"column:avatar_url;type:text" json:"avatar_url,omitempty"`
+	Provider   string    `gorm:"not null;type:text" json:"provider"`
+	ProviderID string    `gorm:"column:provider_id;not null;type:text" json:"provider_id"`
+	CreatedAt  time.Time `gorm:"autoCreateTime" json:"created_at"`
+	UpdatedAt  time.Time `gorm:"autoUpdateTime" json:"updated_at"`
+}
+
+func (User) TableName() string { return "users" }
+
+func (u *User) BeforeCreate(tx *gorm.DB) error {
+	if u.ID == "" {
+		u.ID = uuid.New().String()
+	}
+	return nil
+}
+
+// UserSession represents an authentication session (cookie-based).
+type UserSession struct {
+	ID        string    `gorm:"primaryKey;type:text" json:"id"`
+	UserID    string    `gorm:"column:user_id;not null;type:text;index" json:"user_id"`
+	TokenHash string    `gorm:"column:token_hash;uniqueIndex;not null;type:text" json:"token_hash"`
+	ExpiresAt time.Time `gorm:"column:expires_at;not null;index" json:"expires_at"`
+	CreatedAt time.Time `gorm:"autoCreateTime" json:"created_at"`
+
+	User *User `gorm:"foreignKey:UserID" json:"-"`
+}
+
+func (UserSession) TableName() string { return "user_sessions" }
+
+func (s *UserSession) BeforeCreate(tx *gorm.DB) error {
+	if s.ID == "" {
+		s.ID = uuid.New().String()
+	}
+	return nil
+}
+
+// Project represents a multi-tenant container.
+type Project struct {
+	ID        string    `gorm:"primaryKey;type:text" json:"id"`
+	Name      string    `gorm:"not null;type:text" json:"name"`
+	Slug      string    `gorm:"uniqueIndex;not null;type:text" json:"slug"`
+	CreatedAt time.Time `gorm:"autoCreateTime" json:"created_at"`
+	UpdatedAt time.Time `gorm:"autoUpdateTime" json:"updated_at"`
+
+	Members    []ProjectMember `gorm:"foreignKey:ProjectID" json:"-"`
+	Workspaces []Workspace     `gorm:"foreignKey:ProjectID" json:"-"`
+	Agents     []Agent         `gorm:"foreignKey:ProjectID" json:"-"`
+}
+
+func (Project) TableName() string { return "projects" }
+
+func (p *Project) BeforeCreate(tx *gorm.DB) error {
+	if p.ID == "" {
+		p.ID = uuid.New().String()
+	}
+	return nil
+}
+
+// ProjectMember represents a user's membership in a project.
+type ProjectMember struct {
+	ID         string     `gorm:"primaryKey;type:text" json:"id"`
+	ProjectID  string     `gorm:"column:project_id;not null;type:text;uniqueIndex:idx_project_user" json:"project_id"`
+	UserID     string     `gorm:"column:user_id;not null;type:text;uniqueIndex:idx_project_user;index" json:"user_id"`
+	Role       string     `gorm:"not null;type:text;default:member" json:"role"`
+	InvitedBy  *string    `gorm:"column:invited_by;type:text" json:"invited_by,omitempty"`
+	InvitedAt  *time.Time `gorm:"column:invited_at" json:"invited_at,omitempty"`
+	AcceptedAt *time.Time `gorm:"column:accepted_at" json:"accepted_at,omitempty"`
+
+	Project *Project `gorm:"foreignKey:ProjectID" json:"-"`
+	User    *User    `gorm:"foreignKey:UserID" json:"-"`
+}
+
+func (ProjectMember) TableName() string { return "project_members" }
+
+func (m *ProjectMember) BeforeCreate(tx *gorm.DB) error {
+	if m.ID == "" {
+		m.ID = uuid.New().String()
+	}
+	return nil
+}
+
+// ProjectInvitation represents a pending invitation to join a project.
+type ProjectInvitation struct {
+	ID        string    `gorm:"primaryKey;type:text" json:"id"`
+	ProjectID string    `gorm:"column:project_id;not null;type:text;uniqueIndex:idx_project_email" json:"project_id"`
+	Email     string    `gorm:"not null;type:text;uniqueIndex:idx_project_email" json:"email"`
+	Role      string    `gorm:"not null;type:text;default:member" json:"role"`
+	InvitedBy *string   `gorm:"column:invited_by;type:text" json:"invited_by,omitempty"`
+	Token     string    `gorm:"uniqueIndex;not null;type:text" json:"token"`
+	ExpiresAt time.Time `gorm:"column:expires_at;not null" json:"expires_at"`
+	CreatedAt time.Time `gorm:"autoCreateTime" json:"created_at"`
+
+	Project *Project `gorm:"foreignKey:ProjectID" json:"-"`
+}
+
+func (ProjectInvitation) TableName() string { return "project_invitations" }
+
+func (i *ProjectInvitation) BeforeCreate(tx *gorm.DB) error {
+	if i.ID == "" {
+		i.ID = uuid.New().String()
+	}
+	return nil
+}
+
+// Agent represents an AI agent configuration.
+type Agent struct {
+	ID           string    `gorm:"primaryKey;type:text" json:"id"`
+	ProjectID    string    `gorm:"column:project_id;not null;type:text;index" json:"project_id"`
+	Name         string    `gorm:"not null;type:text" json:"name"`
+	Description  *string   `gorm:"type:text" json:"description,omitempty"`
+	AgentType    string    `gorm:"column:agent_type;not null;type:text" json:"agent_type"`
+	SystemPrompt *string   `gorm:"column:system_prompt;type:text" json:"system_prompt,omitempty"`
+	IsDefault    bool      `gorm:"column:is_default;default:false" json:"is_default"`
+	CreatedAt    time.Time `gorm:"autoCreateTime" json:"created_at"`
+	UpdatedAt    time.Time `gorm:"autoUpdateTime" json:"updated_at"`
+
+	Project    *Project         `gorm:"foreignKey:ProjectID" json:"-"`
+	MCPServers []AgentMCPServer `gorm:"foreignKey:AgentID" json:"-"`
+}
+
+func (Agent) TableName() string { return "agents" }
+
+func (a *Agent) BeforeCreate(tx *gorm.DB) error {
+	if a.ID == "" {
+		a.ID = uuid.New().String()
+	}
+	return nil
+}
+
+// AgentMCPServer represents an MCP server configuration for an agent.
+type AgentMCPServer struct {
+	ID        string          `gorm:"primaryKey;type:text" json:"id"`
+	AgentID   string          `gorm:"column:agent_id;not null;type:text;index" json:"agent_id"`
+	Name      string          `gorm:"not null;type:text" json:"name"`
+	Config    json.RawMessage `gorm:"type:text;not null" json:"config"`
+	Enabled   bool            `gorm:"default:true" json:"enabled"`
+	CreatedAt time.Time       `gorm:"autoCreateTime" json:"created_at"`
+
+	Agent *Agent `gorm:"foreignKey:AgentID" json:"-"`
+}
+
+func (AgentMCPServer) TableName() string { return "agent_mcp_servers" }
+
+func (s *AgentMCPServer) BeforeCreate(tx *gorm.DB) error {
+	if s.ID == "" {
+		s.ID = uuid.New().String()
+	}
+	return nil
+}
+
+// Workspace represents a working directory (local folder or git repo).
+type Workspace struct {
+	ID         string    `gorm:"primaryKey;type:text" json:"id"`
+	ProjectID  string    `gorm:"column:project_id;not null;type:text;index" json:"project_id"`
+	Name       string    `gorm:"not null;type:text" json:"name"`
+	Path       string    `gorm:"not null;type:text" json:"path"`
+	SourceType string    `gorm:"column:source_type;not null;type:text" json:"source_type"`
+	CreatedAt  time.Time `gorm:"autoCreateTime" json:"created_at"`
+	UpdatedAt  time.Time `gorm:"autoUpdateTime" json:"updated_at"`
+
+	Project  *Project  `gorm:"foreignKey:ProjectID" json:"-"`
+	Sessions []Session `gorm:"foreignKey:WorkspaceID" json:"-"`
+}
+
+func (Workspace) TableName() string { return "workspaces" }
+
+func (w *Workspace) BeforeCreate(tx *gorm.DB) error {
+	if w.ID == "" {
+		w.ID = uuid.New().String()
+	}
+	return nil
+}
+
+// Session represents a chat thread within a workspace.
+type Session struct {
+	ID          string    `gorm:"primaryKey;type:text" json:"id"`
+	WorkspaceID string    `gorm:"column:workspace_id;not null;type:text;index" json:"workspace_id"`
+	AgentID     *string   `gorm:"column:agent_id;type:text;index" json:"agent_id,omitempty"`
+	Name        string    `gorm:"not null;type:text" json:"name"`
+	Description *string   `gorm:"type:text" json:"description,omitempty"`
+	Status      string    `gorm:"not null;type:text;default:open" json:"status"`
+	CreatedAt   time.Time `gorm:"autoCreateTime" json:"created_at"`
+	UpdatedAt   time.Time `gorm:"autoUpdateTime" json:"updated_at"`
+
+	Workspace *Workspace `gorm:"foreignKey:WorkspaceID" json:"-"`
+	Agent     *Agent     `gorm:"foreignKey:AgentID" json:"-"`
+	Messages  []Message  `gorm:"foreignKey:SessionID" json:"-"`
+}
+
+func (Session) TableName() string { return "sessions" }
+
+func (s *Session) BeforeCreate(tx *gorm.DB) error {
+	if s.ID == "" {
+		s.ID = uuid.New().String()
+	}
+	return nil
+}
+
+// Message represents a chat message in a session.
+type Message struct {
+	ID        string    `gorm:"primaryKey;type:text" json:"id"`
+	SessionID string    `gorm:"column:session_id;not null;type:text;index" json:"session_id"`
+	Role      string    `gorm:"not null;type:text" json:"role"`
+	Content   string    `gorm:"not null;type:text" json:"content"`
+	Turn      int       `gorm:"not null" json:"turn"`
+	CreatedAt time.Time `gorm:"autoCreateTime" json:"created_at"`
+
+	Session *Session `gorm:"foreignKey:SessionID" json:"-"`
+}
+
+func (Message) TableName() string { return "messages" }
+
+func (m *Message) BeforeCreate(tx *gorm.DB) error {
+	if m.ID == "" {
+		m.ID = uuid.New().String()
+	}
+	return nil
+}
+
+// Credential represents stored credentials for AI providers.
+type Credential struct {
+	ID            string    `gorm:"primaryKey;type:text" json:"id"`
+	ProjectID     string    `gorm:"column:project_id;not null;type:text;uniqueIndex:idx_project_provider" json:"project_id"`
+	Provider      string    `gorm:"not null;type:text;uniqueIndex:idx_project_provider" json:"provider"`
+	Name          string    `gorm:"not null;type:text" json:"name"`
+	AuthType      string    `gorm:"column:auth_type;not null;type:text" json:"auth_type"`
+	EncryptedData []byte    `gorm:"column:encrypted_data" json:"-"`
+	IsConfigured  bool      `gorm:"column:is_configured;default:false" json:"is_configured"`
+	CreatedAt     time.Time `gorm:"autoCreateTime" json:"created_at"`
+	UpdatedAt     time.Time `gorm:"autoUpdateTime" json:"updated_at"`
+
+	Project *Project `gorm:"foreignKey:ProjectID" json:"-"`
+}
+
+func (Credential) TableName() string { return "credentials" }
+
+func (c *Credential) BeforeCreate(tx *gorm.DB) error {
+	if c.ID == "" {
+		c.ID = uuid.New().String()
+	}
+	return nil
+}
+
+// TerminalHistory represents a terminal command/output entry.
+type TerminalHistory struct {
+	ID        string    `gorm:"primaryKey;type:text" json:"id"`
+	SessionID string    `gorm:"column:session_id;not null;type:text;index" json:"session_id"`
+	EntryType string    `gorm:"column:entry_type;not null;type:text" json:"entry_type"`
+	Content   string    `gorm:"not null;type:text" json:"content"`
+	ExitCode  *int      `gorm:"column:exit_code" json:"exit_code,omitempty"`
+	CreatedAt time.Time `gorm:"autoCreateTime" json:"created_at"`
+
+	Session *Session `gorm:"foreignKey:SessionID" json:"-"`
+}
+
+func (TerminalHistory) TableName() string { return "terminal_history" }
+
+func (t *TerminalHistory) BeforeCreate(tx *gorm.DB) error {
+	if t.ID == "" {
+		t.ID = uuid.New().String()
+	}
+	return nil
+}
+
+// AllModels returns all model types for migration.
+func AllModels() []interface{} {
+	return []interface{}{
+		&User{},
+		&UserSession{},
+		&Project{},
+		&ProjectMember{},
+		&ProjectInvitation{},
+		&Agent{},
+		&AgentMCPServer{},
+		&Workspace{},
+		&Session{},
+		&Message{},
+		&Credential{},
+		&TerminalHistory{},
+	}
+}

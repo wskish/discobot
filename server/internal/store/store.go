@@ -1,0 +1,457 @@
+// Package store provides database operations using GORM.
+package store
+
+import (
+	"context"
+	"errors"
+	"time"
+
+	"github.com/anthropics/octobot/server/internal/model"
+	"gorm.io/gorm"
+)
+
+// Common errors
+var (
+	ErrNotFound = errors.New("record not found")
+)
+
+// Store wraps GORM DB for database operations.
+type Store struct {
+	db *gorm.DB
+}
+
+// New creates a new Store with the given GORM DB.
+func New(db *gorm.DB) *Store {
+	return &Store{db: db}
+}
+
+// DB returns the underlying GORM DB for advanced queries.
+func (s *Store) DB() *gorm.DB {
+	return s.db
+}
+
+// --- Users ---
+
+func (s *Store) GetUserByID(ctx context.Context, id string) (*model.User, error) {
+	var user model.User
+	if err := s.db.WithContext(ctx).First(&user, "id = ?", id).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+	return &user, nil
+}
+
+func (s *Store) GetUserByProviderID(ctx context.Context, provider, providerID string) (*model.User, error) {
+	var user model.User
+	if err := s.db.WithContext(ctx).First(&user, "provider = ? AND provider_id = ?", provider, providerID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+	return &user, nil
+}
+
+func (s *Store) CreateUser(ctx context.Context, user *model.User) error {
+	return s.db.WithContext(ctx).Create(user).Error
+}
+
+func (s *Store) UpdateUser(ctx context.Context, user *model.User) error {
+	return s.db.WithContext(ctx).Save(user).Error
+}
+
+// --- User Sessions ---
+
+func (s *Store) CreateUserSession(ctx context.Context, session *model.UserSession) error {
+	return s.db.WithContext(ctx).Create(session).Error
+}
+
+func (s *Store) GetUserSessionByToken(ctx context.Context, tokenHash string) (*model.UserSession, error) {
+	var session model.UserSession
+	if err := s.db.WithContext(ctx).Preload("User").First(&session, "token_hash = ?", tokenHash).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+	return &session, nil
+}
+
+func (s *Store) DeleteUserSession(ctx context.Context, tokenHash string) error {
+	return s.db.WithContext(ctx).Delete(&model.UserSession{}, "token_hash = ?", tokenHash).Error
+}
+
+func (s *Store) DeleteExpiredUserSessions(ctx context.Context) error {
+	return s.db.WithContext(ctx).Delete(&model.UserSession{}, "expires_at < ?", time.Now()).Error
+}
+
+// --- Projects ---
+
+func (s *Store) GetProjectByID(ctx context.Context, id string) (*model.Project, error) {
+	var project model.Project
+	if err := s.db.WithContext(ctx).First(&project, "id = ?", id).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+	return &project, nil
+}
+
+func (s *Store) ListProjectsByUser(ctx context.Context, userID string) ([]*model.Project, error) {
+	var projects []*model.Project
+	err := s.db.WithContext(ctx).
+		Joins("JOIN project_members ON project_members.project_id = projects.id").
+		Where("project_members.user_id = ?", userID).
+		Find(&projects).Error
+	return projects, err
+}
+
+func (s *Store) CreateProject(ctx context.Context, project *model.Project) error {
+	return s.db.WithContext(ctx).Create(project).Error
+}
+
+func (s *Store) UpdateProject(ctx context.Context, project *model.Project) error {
+	return s.db.WithContext(ctx).Save(project).Error
+}
+
+func (s *Store) DeleteProject(ctx context.Context, id string) error {
+	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// Delete all related records explicitly (no cascade in schema)
+		// Order matters due to foreign key relationships
+
+		// Get all workspaces to delete their sessions
+		var workspaces []*model.Workspace
+		if err := tx.Where("project_id = ?", id).Find(&workspaces).Error; err != nil {
+			return err
+		}
+		for _, ws := range workspaces {
+			// Delete messages and terminal history for each session
+			if err := tx.Where("session_id IN (SELECT id FROM sessions WHERE workspace_id = ?)", ws.ID).Delete(&model.Message{}).Error; err != nil {
+				return err
+			}
+			if err := tx.Where("session_id IN (SELECT id FROM sessions WHERE workspace_id = ?)", ws.ID).Delete(&model.TerminalHistory{}).Error; err != nil {
+				return err
+			}
+			// Delete sessions
+			if err := tx.Where("workspace_id = ?", ws.ID).Delete(&model.Session{}).Error; err != nil {
+				return err
+			}
+		}
+
+		// Delete workspaces
+		if err := tx.Where("project_id = ?", id).Delete(&model.Workspace{}).Error; err != nil {
+			return err
+		}
+
+		// Delete agent MCP servers
+		if err := tx.Where("agent_id IN (SELECT id FROM agents WHERE project_id = ?)", id).Delete(&model.AgentMCPServer{}).Error; err != nil {
+			return err
+		}
+
+		// Delete agents
+		if err := tx.Where("project_id = ?", id).Delete(&model.Agent{}).Error; err != nil {
+			return err
+		}
+
+		// Delete invitations
+		if err := tx.Where("project_id = ?", id).Delete(&model.ProjectInvitation{}).Error; err != nil {
+			return err
+		}
+
+		// Delete credentials
+		if err := tx.Where("project_id = ?", id).Delete(&model.Credential{}).Error; err != nil {
+			return err
+		}
+
+		// Delete members
+		if err := tx.Where("project_id = ?", id).Delete(&model.ProjectMember{}).Error; err != nil {
+			return err
+		}
+
+		// Finally delete the project
+		return tx.Delete(&model.Project{}, "id = ?", id).Error
+	})
+}
+
+// --- Project Members ---
+
+func (s *Store) GetProjectMember(ctx context.Context, projectID, userID string) (*model.ProjectMember, error) {
+	var member model.ProjectMember
+	if err := s.db.WithContext(ctx).First(&member, "project_id = ? AND user_id = ?", projectID, userID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+	return &member, nil
+}
+
+func (s *Store) ListProjectMembers(ctx context.Context, projectID string) ([]*model.ProjectMember, error) {
+	var members []*model.ProjectMember
+	err := s.db.WithContext(ctx).Preload("User").Where("project_id = ?", projectID).Find(&members).Error
+	return members, err
+}
+
+func (s *Store) CreateProjectMember(ctx context.Context, member *model.ProjectMember) error {
+	return s.db.WithContext(ctx).Create(member).Error
+}
+
+func (s *Store) DeleteProjectMember(ctx context.Context, projectID, userID string) error {
+	return s.db.WithContext(ctx).Delete(&model.ProjectMember{}, "project_id = ? AND user_id = ?", projectID, userID).Error
+}
+
+// --- Project Invitations ---
+
+func (s *Store) GetInvitationByToken(ctx context.Context, token string) (*model.ProjectInvitation, error) {
+	var invitation model.ProjectInvitation
+	if err := s.db.WithContext(ctx).First(&invitation, "token = ?", token).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+	return &invitation, nil
+}
+
+func (s *Store) CreateInvitation(ctx context.Context, invitation *model.ProjectInvitation) error {
+	return s.db.WithContext(ctx).Create(invitation).Error
+}
+
+func (s *Store) DeleteInvitation(ctx context.Context, id string) error {
+	return s.db.WithContext(ctx).Delete(&model.ProjectInvitation{}, "id = ?", id).Error
+}
+
+// --- Workspaces ---
+
+func (s *Store) GetWorkspaceByID(ctx context.Context, id string) (*model.Workspace, error) {
+	var workspace model.Workspace
+	if err := s.db.WithContext(ctx).First(&workspace, "id = ?", id).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+	return &workspace, nil
+}
+
+func (s *Store) ListWorkspacesByProject(ctx context.Context, projectID string) ([]*model.Workspace, error) {
+	var workspaces []*model.Workspace
+	err := s.db.WithContext(ctx).Where("project_id = ?", projectID).Find(&workspaces).Error
+	return workspaces, err
+}
+
+func (s *Store) CreateWorkspace(ctx context.Context, workspace *model.Workspace) error {
+	return s.db.WithContext(ctx).Create(workspace).Error
+}
+
+func (s *Store) UpdateWorkspace(ctx context.Context, workspace *model.Workspace) error {
+	return s.db.WithContext(ctx).Save(workspace).Error
+}
+
+func (s *Store) DeleteWorkspace(ctx context.Context, id string) error {
+	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// Delete messages and terminal history for all sessions in this workspace
+		if err := tx.Where("session_id IN (SELECT id FROM sessions WHERE workspace_id = ?)", id).Delete(&model.Message{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("session_id IN (SELECT id FROM sessions WHERE workspace_id = ?)", id).Delete(&model.TerminalHistory{}).Error; err != nil {
+			return err
+		}
+
+		// Delete sessions
+		if err := tx.Where("workspace_id = ?", id).Delete(&model.Session{}).Error; err != nil {
+			return err
+		}
+
+		// Delete the workspace
+		return tx.Delete(&model.Workspace{}, "id = ?", id).Error
+	})
+}
+
+// --- Sessions ---
+
+func (s *Store) GetSessionByID(ctx context.Context, id string) (*model.Session, error) {
+	var session model.Session
+	if err := s.db.WithContext(ctx).First(&session, "id = ?", id).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+	return &session, nil
+}
+
+func (s *Store) ListSessionsByWorkspace(ctx context.Context, workspaceID string) ([]*model.Session, error) {
+	var sessions []*model.Session
+	err := s.db.WithContext(ctx).Where("workspace_id = ?", workspaceID).Find(&sessions).Error
+	return sessions, err
+}
+
+func (s *Store) CreateSession(ctx context.Context, session *model.Session) error {
+	return s.db.WithContext(ctx).Create(session).Error
+}
+
+func (s *Store) UpdateSession(ctx context.Context, session *model.Session) error {
+	return s.db.WithContext(ctx).Save(session).Error
+}
+
+func (s *Store) DeleteSession(ctx context.Context, id string) error {
+	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// Delete messages
+		if err := tx.Where("session_id = ?", id).Delete(&model.Message{}).Error; err != nil {
+			return err
+		}
+
+		// Delete terminal history
+		if err := tx.Where("session_id = ?", id).Delete(&model.TerminalHistory{}).Error; err != nil {
+			return err
+		}
+
+		// Delete the session
+		return tx.Delete(&model.Session{}, "id = ?", id).Error
+	})
+}
+
+// --- Agents ---
+
+func (s *Store) GetAgentByID(ctx context.Context, id string) (*model.Agent, error) {
+	var agent model.Agent
+	if err := s.db.WithContext(ctx).First(&agent, "id = ?", id).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+	return &agent, nil
+}
+
+func (s *Store) GetDefaultAgent(ctx context.Context, projectID string) (*model.Agent, error) {
+	var agent model.Agent
+	if err := s.db.WithContext(ctx).First(&agent, "project_id = ? AND is_default = ?", projectID, true).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+	return &agent, nil
+}
+
+func (s *Store) ListAgentsByProject(ctx context.Context, projectID string) ([]*model.Agent, error) {
+	var agents []*model.Agent
+	err := s.db.WithContext(ctx).Where("project_id = ?", projectID).Find(&agents).Error
+	return agents, err
+}
+
+func (s *Store) CreateAgent(ctx context.Context, agent *model.Agent) error {
+	return s.db.WithContext(ctx).Create(agent).Error
+}
+
+func (s *Store) UpdateAgent(ctx context.Context, agent *model.Agent) error {
+	return s.db.WithContext(ctx).Save(agent).Error
+}
+
+func (s *Store) DeleteAgent(ctx context.Context, id string) error {
+	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// Delete MCP servers
+		if err := tx.Where("agent_id = ?", id).Delete(&model.AgentMCPServer{}).Error; err != nil {
+			return err
+		}
+
+		// Nullify agent references in sessions (don't delete sessions)
+		if err := tx.Model(&model.Session{}).Where("agent_id = ?", id).Update("agent_id", nil).Error; err != nil {
+			return err
+		}
+
+		// Delete the agent
+		return tx.Delete(&model.Agent{}, "id = ?", id).Error
+	})
+}
+
+func (s *Store) SetDefaultAgent(ctx context.Context, projectID, agentID string) error {
+	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// Clear existing default
+		if err := tx.Model(&model.Agent{}).Where("project_id = ?", projectID).Update("is_default", false).Error; err != nil {
+			return err
+		}
+		// Set new default
+		return tx.Model(&model.Agent{}).Where("id = ?", agentID).Update("is_default", true).Error
+	})
+}
+
+// --- Agent MCP Servers ---
+
+func (s *Store) ListAgentMCPServers(ctx context.Context, agentID string) ([]*model.AgentMCPServer, error) {
+	var servers []*model.AgentMCPServer
+	err := s.db.WithContext(ctx).Where("agent_id = ?", agentID).Find(&servers).Error
+	return servers, err
+}
+
+func (s *Store) CreateAgentMCPServer(ctx context.Context, server *model.AgentMCPServer) error {
+	return s.db.WithContext(ctx).Create(server).Error
+}
+
+func (s *Store) DeleteAgentMCPServersByAgent(ctx context.Context, agentID string) error {
+	return s.db.WithContext(ctx).Delete(&model.AgentMCPServer{}, "agent_id = ?", agentID).Error
+}
+
+// --- Messages ---
+
+func (s *Store) ListMessagesBySession(ctx context.Context, sessionID string) ([]*model.Message, error) {
+	var messages []*model.Message
+	err := s.db.WithContext(ctx).Where("session_id = ?", sessionID).Order("turn ASC").Find(&messages).Error
+	return messages, err
+}
+
+func (s *Store) CreateMessage(ctx context.Context, message *model.Message) error {
+	return s.db.WithContext(ctx).Create(message).Error
+}
+
+// --- Credentials ---
+
+func (s *Store) GetCredentialByProvider(ctx context.Context, projectID, provider string) (*model.Credential, error) {
+	var credential model.Credential
+	if err := s.db.WithContext(ctx).First(&credential, "project_id = ? AND provider = ?", projectID, provider).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+	return &credential, nil
+}
+
+func (s *Store) ListCredentialsByProject(ctx context.Context, projectID string) ([]*model.Credential, error) {
+	var credentials []*model.Credential
+	err := s.db.WithContext(ctx).Where("project_id = ?", projectID).Find(&credentials).Error
+	return credentials, err
+}
+
+func (s *Store) CreateCredential(ctx context.Context, credential *model.Credential) error {
+	return s.db.WithContext(ctx).Create(credential).Error
+}
+
+func (s *Store) UpdateCredential(ctx context.Context, credential *model.Credential) error {
+	return s.db.WithContext(ctx).Save(credential).Error
+}
+
+func (s *Store) DeleteCredential(ctx context.Context, projectID, provider string) error {
+	return s.db.WithContext(ctx).Delete(&model.Credential{}, "project_id = ? AND provider = ?", projectID, provider).Error
+}
+
+// --- Terminal History ---
+
+func (s *Store) ListTerminalHistory(ctx context.Context, sessionID string, limit int) ([]*model.TerminalHistory, error) {
+	var history []*model.TerminalHistory
+	query := s.db.WithContext(ctx).Where("session_id = ?", sessionID).Order("created_at DESC")
+	if limit > 0 {
+		query = query.Limit(limit)
+	}
+	err := query.Find(&history).Error
+	return history, err
+}
+
+func (s *Store) CreateTerminalHistory(ctx context.Context, entry *model.TerminalHistory) error {
+	return s.db.WithContext(ctx).Create(entry).Error
+}

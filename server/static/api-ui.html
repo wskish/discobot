@@ -1,0 +1,831 @@
+<!DOCTYPE html>
+<!--
+    Octobot API Explorer
+
+    NOTE: This file must be kept in sync with API changes.
+    When adding, modifying, or removing API endpoints, update the
+    API_ENDPOINTS array in this file to reflect those changes.
+-->
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Octobot API Explorer</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        :root {
+            --bg: #0d1117;
+            --bg-secondary: #161b22;
+            --bg-tertiary: #21262d;
+            --border: #30363d;
+            --text: #c9d1d9;
+            --text-muted: #8b949e;
+            --accent: #58a6ff;
+            --success: #3fb950;
+            --warning: #d29922;
+            --error: #f85149;
+            --get: #3fb950;
+            --post: #58a6ff;
+            --put: #d29922;
+            --delete: #f85149;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.5;
+        }
+
+        .container {
+            display: flex;
+            height: 100vh;
+        }
+
+        /* Sidebar */
+        .sidebar {
+            width: 320px;
+            background: var(--bg-secondary);
+            border-right: 1px solid var(--border);
+            overflow-y: auto;
+            flex-shrink: 0;
+        }
+
+        .sidebar-header {
+            padding: 16px;
+            border-bottom: 1px solid var(--border);
+            position: sticky;
+            top: 0;
+            background: var(--bg-secondary);
+            z-index: 10;
+        }
+
+        .sidebar-header h1 {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 12px;
+        }
+
+        .search-input {
+            width: 100%;
+            padding: 8px 12px;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text);
+            font-size: 14px;
+        }
+
+        .search-input:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+
+        .endpoint-group {
+            border-bottom: 1px solid var(--border);
+        }
+
+        .group-header {
+            padding: 12px 16px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            color: var(--text-muted);
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .group-header:hover {
+            background: var(--bg-tertiary);
+        }
+
+        .endpoint-list {
+            display: none;
+        }
+
+        .endpoint-group.open .endpoint-list {
+            display: block;
+        }
+
+        .endpoint-item {
+            padding: 8px 16px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+        }
+
+        .endpoint-item:hover {
+            background: var(--bg-tertiary);
+        }
+
+        .endpoint-item.active {
+            background: var(--bg-tertiary);
+            border-left: 2px solid var(--accent);
+        }
+
+        .method-badge {
+            font-size: 10px;
+            font-weight: 700;
+            padding: 2px 6px;
+            border-radius: 4px;
+            text-transform: uppercase;
+            min-width: 50px;
+            text-align: center;
+        }
+
+        .method-badge.get { background: var(--get); color: #000; }
+        .method-badge.post { background: var(--post); color: #000; }
+        .method-badge.put { background: var(--put); color: #000; }
+        .method-badge.delete { background: var(--delete); color: #fff; }
+
+        .endpoint-path {
+            color: var(--text-muted);
+            font-family: monospace;
+            font-size: 12px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        /* Main content */
+        .main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .main-header {
+            padding: 16px 24px;
+            border-bottom: 1px solid var(--border);
+            background: var(--bg-secondary);
+        }
+
+        .main-header h2 {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .main-header .path {
+            font-family: monospace;
+            color: var(--text-muted);
+            font-size: 14px;
+        }
+
+        .main-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 24px;
+        }
+
+        .section {
+            margin-bottom: 24px;
+        }
+
+        .section-title {
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 12px;
+            color: var(--text-muted);
+        }
+
+        .params-table {
+            width: 100%;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            overflow: hidden;
+        }
+
+        .param-row {
+            display: flex;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .param-row:last-child {
+            border-bottom: none;
+        }
+
+        .param-name {
+            width: 150px;
+            padding: 10px 12px;
+            background: var(--bg-secondary);
+            font-family: monospace;
+            font-size: 13px;
+            border-right: 1px solid var(--border);
+        }
+
+        .param-input {
+            flex: 1;
+            padding: 10px 12px;
+            background: var(--bg);
+            border: none;
+            color: var(--text);
+            font-size: 13px;
+        }
+
+        .param-input:focus {
+            outline: none;
+            background: var(--bg-tertiary);
+        }
+
+        .body-editor {
+            width: 100%;
+            min-height: 200px;
+            padding: 12px;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text);
+            font-family: monospace;
+            font-size: 13px;
+            resize: vertical;
+        }
+
+        .body-editor:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+
+        .actions {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 24px;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+
+        .btn:hover {
+            opacity: 0.9;
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .btn-primary {
+            background: var(--accent);
+            color: #000;
+        }
+
+        .btn-secondary {
+            background: var(--bg-tertiary);
+            color: var(--text);
+            border: 1px solid var(--border);
+        }
+
+        /* Response */
+        .response-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+
+        .status-badge {
+            padding: 4px 12px;
+            border-radius: 4px;
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        .status-badge.success { background: var(--success); color: #000; }
+        .status-badge.error { background: var(--error); color: #fff; }
+        .status-badge.warning { background: var(--warning); color: #000; }
+
+        .response-time {
+            color: var(--text-muted);
+            font-size: 13px;
+        }
+
+        .response-body {
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 12px;
+            font-family: monospace;
+            font-size: 13px;
+            white-space: pre-wrap;
+            word-break: break-word;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .response-body.error {
+            border-color: var(--error);
+        }
+
+        /* Tabs */
+        .tabs {
+            display: flex;
+            gap: 4px;
+            margin-bottom: 12px;
+        }
+
+        .tab {
+            padding: 8px 16px;
+            background: transparent;
+            border: none;
+            color: var(--text-muted);
+            font-size: 13px;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+        }
+
+        .tab:hover {
+            color: var(--text);
+        }
+
+        .tab.active {
+            color: var(--accent);
+            border-bottom-color: var(--accent);
+        }
+
+        /* Auth status */
+        .auth-status {
+            padding: 12px 16px;
+            background: var(--bg-tertiary);
+            border-bottom: 1px solid var(--border);
+            font-size: 13px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .auth-indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+        }
+
+        .auth-indicator.authenticated { background: var(--success); }
+        .auth-indicator.unauthenticated { background: var(--error); }
+
+        /* Empty state */
+        .empty-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            color: var(--text-muted);
+        }
+
+        .empty-state svg {
+            width: 64px;
+            height: 64px;
+            margin-bottom: 16px;
+            opacity: 0.5;
+        }
+
+        /* Loading */
+        .loading {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid var(--border);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--bg);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--border);
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--text-muted);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <h1>Octobot API</h1>
+                <input type="text" class="search-input" placeholder="Search endpoints..." id="search">
+            </div>
+            <div class="auth-status">
+                <span class="auth-indicator" id="authIndicator"></span>
+                <span id="authStatus">Checking...</span>
+            </div>
+            <div id="endpointList"></div>
+        </aside>
+
+        <main class="main">
+            <div id="mainContent">
+                <div class="empty-state">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                    <p>Select an endpoint from the sidebar to get started</p>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        // API endpoint definitions
+        const API_ENDPOINTS = [
+            // Health
+            { group: 'Health', method: 'GET', path: '/health', description: 'Health check' },
+
+            // Auth
+            { group: 'Auth', method: 'GET', path: '/auth/login/{provider}', description: 'Start OAuth login', params: [{ name: 'provider', in: 'path', required: true, example: 'github' }] },
+            { group: 'Auth', method: 'GET', path: '/auth/callback/{provider}', description: 'OAuth callback', params: [{ name: 'provider', in: 'path', required: true }, { name: 'code', in: 'query' }, { name: 'state', in: 'query' }] },
+            { group: 'Auth', method: 'GET', path: '/auth/me', description: 'Get current user' },
+            { group: 'Auth', method: 'POST', path: '/auth/logout', description: 'Logout' },
+
+            // Projects
+            { group: 'Projects', method: 'GET', path: '/api/projects', description: 'List projects' },
+            { group: 'Projects', method: 'POST', path: '/api/projects', description: 'Create project', body: { name: 'My Project', slug: 'my-project' } },
+            { group: 'Projects', method: 'GET', path: '/api/projects/{projectId}', description: 'Get project', params: [{ name: 'projectId', in: 'path', required: true }] },
+            { group: 'Projects', method: 'PUT', path: '/api/projects/{projectId}', description: 'Update project', params: [{ name: 'projectId', in: 'path', required: true }], body: { name: 'Updated Name' } },
+            { group: 'Projects', method: 'DELETE', path: '/api/projects/{projectId}', description: 'Delete project', params: [{ name: 'projectId', in: 'path', required: true }] },
+
+            // Project Members
+            { group: 'Members', method: 'GET', path: '/api/projects/{projectId}/members', description: 'List members', params: [{ name: 'projectId', in: 'path', required: true }] },
+            { group: 'Members', method: 'DELETE', path: '/api/projects/{projectId}/members/{userId}', description: 'Remove member', params: [{ name: 'projectId', in: 'path', required: true }, { name: 'userId', in: 'path', required: true }] },
+            { group: 'Members', method: 'POST', path: '/api/projects/{projectId}/invitations', description: 'Create invitation', params: [{ name: 'projectId', in: 'path', required: true }], body: { email: 'user@example.com', role: 'member' } },
+            { group: 'Members', method: 'POST', path: '/api/projects/{projectId}/invitations/{token}/accept', description: 'Accept invitation', params: [{ name: 'projectId', in: 'path', required: true }, { name: 'token', in: 'path', required: true }] },
+
+            // Workspaces
+            { group: 'Workspaces', method: 'GET', path: '/api/projects/{projectId}/workspaces', description: 'List workspaces', params: [{ name: 'projectId', in: 'path', required: true }] },
+            { group: 'Workspaces', method: 'POST', path: '/api/projects/{projectId}/workspaces', description: 'Create workspace', params: [{ name: 'projectId', in: 'path', required: true }], body: { name: 'My Workspace', path: '/home/user/code', source_type: 'local' } },
+            { group: 'Workspaces', method: 'GET', path: '/api/projects/{projectId}/workspaces/{workspaceId}', description: 'Get workspace', params: [{ name: 'projectId', in: 'path', required: true }, { name: 'workspaceId', in: 'path', required: true }] },
+            { group: 'Workspaces', method: 'PUT', path: '/api/projects/{projectId}/workspaces/{workspaceId}', description: 'Update workspace', params: [{ name: 'projectId', in: 'path', required: true }, { name: 'workspaceId', in: 'path', required: true }], body: { name: 'Updated Name' } },
+            { group: 'Workspaces', method: 'DELETE', path: '/api/projects/{projectId}/workspaces/{workspaceId}', description: 'Delete workspace', params: [{ name: 'projectId', in: 'path', required: true }, { name: 'workspaceId', in: 'path', required: true }] },
+
+            // Sessions
+            { group: 'Sessions', method: 'GET', path: '/api/projects/{projectId}/workspaces/{workspaceId}/sessions', description: 'List sessions', params: [{ name: 'projectId', in: 'path', required: true }, { name: 'workspaceId', in: 'path', required: true }] },
+            { group: 'Sessions', method: 'POST', path: '/api/projects/{projectId}/workspaces/{workspaceId}/sessions', description: 'Create session', params: [{ name: 'projectId', in: 'path', required: true }, { name: 'workspaceId', in: 'path', required: true }], body: { name: 'New Session' } },
+            { group: 'Sessions', method: 'GET', path: '/api/projects/{projectId}/sessions/{sessionId}', description: 'Get session', params: [{ name: 'projectId', in: 'path', required: true }, { name: 'sessionId', in: 'path', required: true }] },
+            { group: 'Sessions', method: 'PUT', path: '/api/projects/{projectId}/sessions/{sessionId}', description: 'Update session', params: [{ name: 'projectId', in: 'path', required: true }, { name: 'sessionId', in: 'path', required: true }], body: { name: 'Updated Session', status: 'closed' } },
+            { group: 'Sessions', method: 'DELETE', path: '/api/projects/{projectId}/sessions/{sessionId}', description: 'Delete session', params: [{ name: 'projectId', in: 'path', required: true }, { name: 'sessionId', in: 'path', required: true }] },
+            { group: 'Sessions', method: 'GET', path: '/api/projects/{projectId}/sessions/{sessionId}/files', description: 'Get session files', params: [{ name: 'projectId', in: 'path', required: true }, { name: 'sessionId', in: 'path', required: true }] },
+            { group: 'Sessions', method: 'GET', path: '/api/projects/{projectId}/sessions/{sessionId}/messages', description: 'List messages', params: [{ name: 'projectId', in: 'path', required: true }, { name: 'sessionId', in: 'path', required: true }] },
+
+            // Agents
+            { group: 'Agents', method: 'GET', path: '/api/projects/{projectId}/agents', description: 'List agents', params: [{ name: 'projectId', in: 'path', required: true }] },
+            { group: 'Agents', method: 'POST', path: '/api/projects/{projectId}/agents', description: 'Create agent', params: [{ name: 'projectId', in: 'path', required: true }], body: { name: 'My Agent', agent_type: 'claude-code' } },
+            { group: 'Agents', method: 'GET', path: '/api/projects/{projectId}/agents/types', description: 'Get agent types', params: [{ name: 'projectId', in: 'path', required: true }] },
+            { group: 'Agents', method: 'POST', path: '/api/projects/{projectId}/agents/default', description: 'Set default agent', params: [{ name: 'projectId', in: 'path', required: true }], body: { agent_id: '' } },
+            { group: 'Agents', method: 'GET', path: '/api/projects/{projectId}/agents/{agentId}', description: 'Get agent', params: [{ name: 'projectId', in: 'path', required: true }, { name: 'agentId', in: 'path', required: true }] },
+            { group: 'Agents', method: 'PUT', path: '/api/projects/{projectId}/agents/{agentId}', description: 'Update agent', params: [{ name: 'projectId', in: 'path', required: true }, { name: 'agentId', in: 'path', required: true }], body: { name: 'Updated Agent' } },
+            { group: 'Agents', method: 'DELETE', path: '/api/projects/{projectId}/agents/{agentId}', description: 'Delete agent', params: [{ name: 'projectId', in: 'path', required: true }, { name: 'agentId', in: 'path', required: true }] },
+
+            // Credentials
+            { group: 'Credentials', method: 'GET', path: '/api/projects/{projectId}/credentials', description: 'List credentials', params: [{ name: 'projectId', in: 'path', required: true }] },
+            { group: 'Credentials', method: 'POST', path: '/api/projects/{projectId}/credentials', description: 'Create credential', params: [{ name: 'projectId', in: 'path', required: true }], body: { provider: 'anthropic', name: 'My API Key', api_key: 'sk-...' } },
+            { group: 'Credentials', method: 'GET', path: '/api/projects/{projectId}/credentials/{provider}', description: 'Get credential', params: [{ name: 'projectId', in: 'path', required: true }, { name: 'provider', in: 'path', required: true, example: 'anthropic' }] },
+            { group: 'Credentials', method: 'DELETE', path: '/api/projects/{projectId}/credentials/{provider}', description: 'Delete credential', params: [{ name: 'projectId', in: 'path', required: true }, { name: 'provider', in: 'path', required: true }] },
+
+            // Anthropic OAuth
+            { group: 'Credentials', method: 'POST', path: '/api/projects/{projectId}/credentials/anthropic/authorize', description: 'Anthropic OAuth authorize', params: [{ name: 'projectId', in: 'path', required: true }], body: { redirect_uri: 'http://localhost:3000/callback' } },
+            { group: 'Credentials', method: 'POST', path: '/api/projects/{projectId}/credentials/anthropic/exchange', description: 'Anthropic OAuth exchange', params: [{ name: 'projectId', in: 'path', required: true }], body: { code: '', redirect_uri: '', code_verifier: '' } },
+
+            // GitHub Copilot
+            { group: 'Credentials', method: 'POST', path: '/api/projects/{projectId}/credentials/github-copilot/device-code', description: 'GitHub Copilot device code', params: [{ name: 'projectId', in: 'path', required: true }] },
+            { group: 'Credentials', method: 'POST', path: '/api/projects/{projectId}/credentials/github-copilot/poll', description: 'GitHub Copilot poll', params: [{ name: 'projectId', in: 'path', required: true }], body: { device_code: '' } },
+
+            // Codex OAuth
+            { group: 'Credentials', method: 'POST', path: '/api/projects/{projectId}/credentials/codex/authorize', description: 'Codex OAuth authorize', params: [{ name: 'projectId', in: 'path', required: true }], body: { redirect_uri: 'http://localhost:3000/callback' } },
+            { group: 'Credentials', method: 'POST', path: '/api/projects/{projectId}/credentials/codex/exchange', description: 'Codex OAuth exchange', params: [{ name: 'projectId', in: 'path', required: true }], body: { code: '', redirect_uri: '', code_verifier: '' } },
+
+            // Files
+            { group: 'Files', method: 'GET', path: '/api/projects/{projectId}/files/{fileId}', description: 'Get file', params: [{ name: 'projectId', in: 'path', required: true }, { name: 'fileId', in: 'path', required: true }] },
+
+            // Suggestions
+            { group: 'Other', method: 'GET', path: '/api/projects/{projectId}/suggestions', description: 'Get suggestions', params: [{ name: 'projectId', in: 'path', required: true }, { name: 'q', in: 'query', example: '/home' }] },
+
+            // Terminal
+            { group: 'Terminal', method: 'GET', path: '/api/projects/{projectId}/terminal/history', description: 'Terminal history', params: [{ name: 'projectId', in: 'path', required: true }] },
+            { group: 'Terminal', method: 'GET', path: '/api/projects/{projectId}/terminal/status', description: 'Terminal status', params: [{ name: 'projectId', in: 'path', required: true }] },
+        ];
+
+        // State
+        let currentEndpoint = null;
+        let currentUser = null;
+        let paramValues = {};
+
+        // Group endpoints
+        function groupEndpoints(endpoints) {
+            const groups = {};
+            endpoints.forEach(ep => {
+                if (!groups[ep.group]) groups[ep.group] = [];
+                groups[ep.group].push(ep);
+            });
+            return groups;
+        }
+
+        // Render sidebar
+        function renderSidebar(filter = '') {
+            const groups = groupEndpoints(API_ENDPOINTS);
+            const container = document.getElementById('endpointList');
+            container.innerHTML = '';
+
+            Object.entries(groups).forEach(([groupName, endpoints]) => {
+                const filtered = endpoints.filter(ep =>
+                    filter === '' ||
+                    ep.path.toLowerCase().includes(filter.toLowerCase()) ||
+                    ep.description.toLowerCase().includes(filter.toLowerCase())
+                );
+
+                if (filtered.length === 0) return;
+
+                const group = document.createElement('div');
+                group.className = 'endpoint-group open';
+                group.innerHTML = `
+                    <div class="group-header">
+                        <span>${groupName}</span>
+                        <span>${filtered.length}</span>
+                    </div>
+                    <div class="endpoint-list">
+                        ${filtered.map((ep, idx) => `
+                            <div class="endpoint-item" data-group="${groupName}" data-idx="${endpoints.indexOf(ep)}">
+                                <span class="method-badge ${ep.method.toLowerCase()}">${ep.method}</span>
+                                <span class="endpoint-path">${ep.path}</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+
+                group.querySelector('.group-header').onclick = () => {
+                    group.classList.toggle('open');
+                };
+
+                group.querySelectorAll('.endpoint-item').forEach(item => {
+                    item.onclick = () => {
+                        const ep = API_ENDPOINTS.find(e => e.group === item.dataset.group && endpoints.indexOf(e) === parseInt(item.dataset.idx));
+                        selectEndpoint(ep);
+                        document.querySelectorAll('.endpoint-item').forEach(i => i.classList.remove('active'));
+                        item.classList.add('active');
+                    };
+                });
+
+                container.appendChild(group);
+            });
+        }
+
+        // Select endpoint
+        function selectEndpoint(endpoint) {
+            currentEndpoint = endpoint;
+            paramValues = {};
+
+            const pathParams = endpoint.params?.filter(p => p.in === 'path') || [];
+            const queryParams = endpoint.params?.filter(p => p.in === 'query') || [];
+            const hasBody = ['POST', 'PUT', 'PATCH'].includes(endpoint.method);
+
+            document.getElementById('mainContent').innerHTML = `
+                <div class="main-header">
+                    <h2><span class="method-badge ${endpoint.method.toLowerCase()}">${endpoint.method}</span> ${endpoint.description}</h2>
+                    <div class="path">${endpoint.path}</div>
+                </div>
+                <div class="main-content">
+                    ${pathParams.length > 0 ? `
+                        <div class="section">
+                            <div class="section-title">Path Parameters</div>
+                            <div class="params-table">
+                                ${pathParams.map(p => `
+                                    <div class="param-row">
+                                        <div class="param-name">${p.name}${p.required ? '*' : ''}</div>
+                                        <input class="param-input" type="text"
+                                            data-param="${p.name}" data-in="path"
+                                            placeholder="${p.example || p.name}"
+                                            value="${p.example || ''}">
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    ` : ''}
+
+                    ${queryParams.length > 0 ? `
+                        <div class="section">
+                            <div class="section-title">Query Parameters</div>
+                            <div class="params-table">
+                                ${queryParams.map(p => `
+                                    <div class="param-row">
+                                        <div class="param-name">${p.name}${p.required ? '*' : ''}</div>
+                                        <input class="param-input" type="text"
+                                            data-param="${p.name}" data-in="query"
+                                            placeholder="${p.example || p.name}"
+                                            value="${p.example || ''}">
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    ` : ''}
+
+                    ${hasBody ? `
+                        <div class="section">
+                            <div class="section-title">Request Body</div>
+                            <textarea class="body-editor" id="requestBody">${JSON.stringify(endpoint.body || {}, null, 2)}</textarea>
+                        </div>
+                    ` : ''}
+
+                    <div class="actions">
+                        <button class="btn btn-primary" id="sendBtn">Send Request</button>
+                        <button class="btn btn-secondary" id="clearBtn">Clear</button>
+                    </div>
+
+                    <div class="section" id="responseSection" style="display: none;">
+                        <div class="section-title">Response</div>
+                        <div class="response-header">
+                            <span class="status-badge" id="statusBadge"></span>
+                            <span class="response-time" id="responseTime"></span>
+                        </div>
+                        <div class="tabs">
+                            <button class="tab active" data-tab="body">Body</button>
+                            <button class="tab" data-tab="headers">Headers</button>
+                        </div>
+                        <pre class="response-body" id="responseBody"></pre>
+                        <pre class="response-body" id="responseHeaders" style="display: none;"></pre>
+                    </div>
+                </div>
+            `;
+
+            // Bind events
+            document.getElementById('sendBtn').onclick = sendRequest;
+            document.getElementById('clearBtn').onclick = () => {
+                document.getElementById('responseSection').style.display = 'none';
+            };
+
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.onclick = () => {
+                    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                    tab.classList.add('active');
+                    document.getElementById('responseBody').style.display = tab.dataset.tab === 'body' ? 'block' : 'none';
+                    document.getElementById('responseHeaders').style.display = tab.dataset.tab === 'headers' ? 'block' : 'none';
+                };
+            });
+        }
+
+        // Build URL
+        function buildUrl() {
+            let path = currentEndpoint.path;
+
+            // Replace path params
+            document.querySelectorAll('.param-input[data-in="path"]').forEach(input => {
+                path = path.replace(`{${input.dataset.param}}`, encodeURIComponent(input.value));
+            });
+
+            // Add query params
+            const queryParams = [];
+            document.querySelectorAll('.param-input[data-in="query"]').forEach(input => {
+                if (input.value) {
+                    queryParams.push(`${input.dataset.param}=${encodeURIComponent(input.value)}`);
+                }
+            });
+
+            if (queryParams.length > 0) {
+                path += '?' + queryParams.join('&');
+            }
+
+            return path;
+        }
+
+        // Send request
+        async function sendRequest() {
+            const btn = document.getElementById('sendBtn');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="loading"></span> Sending...';
+
+            const url = buildUrl();
+            const options = {
+                method: currentEndpoint.method,
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                credentials: 'include',
+            };
+
+            if (['POST', 'PUT', 'PATCH'].includes(currentEndpoint.method)) {
+                const bodyEditor = document.getElementById('requestBody');
+                if (bodyEditor) {
+                    try {
+                        options.body = bodyEditor.value;
+                    } catch (e) {
+                        options.body = bodyEditor.value;
+                    }
+                }
+            }
+
+            const startTime = performance.now();
+
+            try {
+                const response = await fetch(url, options);
+                const endTime = performance.now();
+                const duration = Math.round(endTime - startTime);
+
+                const responseSection = document.getElementById('responseSection');
+                const statusBadge = document.getElementById('statusBadge');
+                const responseTime = document.getElementById('responseTime');
+                const responseBody = document.getElementById('responseBody');
+                const responseHeaders = document.getElementById('responseHeaders');
+
+                responseSection.style.display = 'block';
+                statusBadge.textContent = `${response.status} ${response.statusText}`;
+                statusBadge.className = 'status-badge ' + (response.ok ? 'success' : response.status >= 500 ? 'error' : 'warning');
+                responseTime.textContent = `${duration}ms`;
+
+                // Parse response
+                const contentType = response.headers.get('content-type');
+                let body;
+                if (contentType?.includes('application/json')) {
+                    body = await response.json();
+                    responseBody.textContent = JSON.stringify(body, null, 2);
+                } else {
+                    body = await response.text();
+                    responseBody.textContent = body;
+                }
+
+                responseBody.className = 'response-body' + (response.ok ? '' : ' error');
+
+                // Headers
+                const headers = {};
+                response.headers.forEach((value, key) => {
+                    headers[key] = value;
+                });
+                responseHeaders.textContent = JSON.stringify(headers, null, 2);
+
+            } catch (error) {
+                const responseSection = document.getElementById('responseSection');
+                const statusBadge = document.getElementById('statusBadge');
+                const responseBody = document.getElementById('responseBody');
+
+                responseSection.style.display = 'block';
+                statusBadge.textContent = 'Error';
+                statusBadge.className = 'status-badge error';
+                responseBody.textContent = error.message;
+                responseBody.className = 'response-body error';
+            }
+
+            btn.disabled = false;
+            btn.textContent = 'Send Request';
+        }
+
+        // Check auth status
+        async function checkAuth() {
+            const indicator = document.getElementById('authIndicator');
+            const status = document.getElementById('authStatus');
+
+            try {
+                const response = await fetch('/auth/me', { credentials: 'include' });
+                if (response.ok) {
+                    const user = await response.json();
+                    currentUser = user;
+                    indicator.className = 'auth-indicator authenticated';
+                    status.textContent = `Logged in as ${user.email}`;
+                } else {
+                    indicator.className = 'auth-indicator unauthenticated';
+                    status.innerHTML = 'Not authenticated - <a href="/auth/login/github" style="color: var(--accent)">Login with GitHub</a>';
+                }
+            } catch (e) {
+                indicator.className = 'auth-indicator unauthenticated';
+                status.textContent = 'Could not check auth status';
+            }
+        }
+
+        // Initialize
+        document.getElementById('search').oninput = (e) => {
+            renderSidebar(e.target.value);
+        };
+
+        renderSidebar();
+        checkAuth();
+    </script>
+</body>
+</html>
