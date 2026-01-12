@@ -11,7 +11,7 @@ export function useSuggestions(query: string, type?: "path" | "repo") {
 	);
 
 	return {
-		suggestions: data || [],
+		suggestions: data?.suggestions || [],
 		isLoading,
 		error,
 	};

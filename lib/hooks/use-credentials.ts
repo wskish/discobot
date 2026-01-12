@@ -27,7 +27,7 @@ export function useCredentials() {
 	};
 
 	return {
-		credentials: data || [],
+		credentials: data?.credentials || [],
 		isLoading,
 		error,
 		createCredential,
