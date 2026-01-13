@@ -21,7 +21,7 @@ import {
 	DropdownMenuItem,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import type { Session, Workspace } from "@/lib/api-types";
+import type { Session, Workspace, WorkspaceStatus } from "@/lib/api-types";
 import { useDeleteSession } from "@/lib/hooks/use-sessions";
 import { cn } from "@/lib/utils";
 
@@ -176,15 +176,16 @@ function WorkspaceNode({
 					) : (
 						<ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
 					)}
-					{workspace.sourceType === "git" ? (
-						isGitHub ? (
-							<SiGithub className="h-4 w-4 shrink-0" />
+					{getWorkspaceStatusIndicator(workspace.status) ??
+						(workspace.sourceType === "git" ? (
+							isGitHub ? (
+								<SiGithub className="h-4 w-4 shrink-0" />
+							) : (
+								<GitBranch className="h-4 w-4 text-orange-500 shrink-0" />
+							)
 						) : (
-							<GitBranch className="h-4 w-4 text-orange-500 shrink-0" />
-						)
-					) : (
-						<HardDrive className="h-4 w-4 text-blue-500 shrink-0" />
-					)}
+							<HardDrive className="h-4 w-4 text-blue-500 shrink-0" />
+						))}
 					<span className="font-mono truncate text-sm">{displayPath}</span>
 				</div>
 				<div className="flex items-center gap-0.5">
@@ -242,14 +243,33 @@ function WorkspaceNode({
 	);
 }
 
-function getStatusIndicator(status: Session["status"]) {
+function getSessionStatusIndicator(status: Session["status"]) {
 	switch (status) {
+		case "initializing":
+		case "cloning":
+		case "creating_container":
+		case "starting_agent":
+			return <Loader2 className="h-2.5 w-2.5 text-yellow-500 animate-spin" />;
 		case "running":
-			return <Loader2 className="h-2.5 w-2.5 text-green-500 animate-spin" />;
-		case "open":
-			return <Circle className="h-2.5 w-2.5 text-blue-500 fill-blue-500" />;
+			return <Circle className="h-2.5 w-2.5 text-green-500 fill-green-500" />;
+		case "error":
+			return (
+				<Circle className="h-2.5 w-2.5 text-destructive fill-destructive" />
+			);
 		case "closed":
 			return <Archive className="h-2.5 w-2.5 text-muted-foreground" />;
+	}
+}
+
+function getWorkspaceStatusIndicator(status: WorkspaceStatus) {
+	switch (status) {
+		case "initializing":
+		case "cloning":
+			return <Loader2 className="h-3.5 w-3.5 text-yellow-500 animate-spin" />;
+		case "error":
+			return <Circle className="h-3 w-3 text-destructive fill-destructive" />;
+		default:
+			return null;
 	}
 }
 
@@ -288,7 +308,7 @@ function SessionNode({
 				className="flex items-center gap-1.5 min-w-0 flex-1"
 			>
 				<span className="shrink-0 flex items-center justify-center w-4 h-4">
-					{getStatusIndicator(session.status)}
+					{getSessionStatusIndicator(session.status)}
 				</span>
 				<span className="truncate text-sm">{session.name}</span>
 			</button>

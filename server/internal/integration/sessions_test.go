@@ -3,7 +3,6 @@ package integration
 import (
 	"net/http"
 	"testing"
-
 )
 
 func TestListSessionsByWorkspace_Empty(t *testing.T) {
@@ -48,8 +47,8 @@ func TestCreateSession(t *testing.T) {
 	if session["name"] != "New Session" {
 		t.Errorf("Expected name 'New Session', got '%v'", session["name"])
 	}
-	if session["status"] != "open" {
-		t.Errorf("Expected status 'open', got '%v'", session["status"])
+	if session["status"] != "initializing" {
+		t.Errorf("Expected status 'initializing', got '%v'", session["status"])
 	}
 }
 
@@ -77,17 +76,25 @@ func TestCreateSession_WithAgent(t *testing.T) {
 	}
 }
 
-func TestCreateSession_MissingName(t *testing.T) {
+func TestCreateSession_DefaultName(t *testing.T) {
 	ts := NewTestServer(t)
 	user := ts.CreateTestUser("test@example.com")
 	project := ts.CreateTestProject(user, "Test Project")
 	workspace := ts.CreateTestWorkspace(project, "/home/user/code")
 	client := ts.AuthenticatedClient(user)
 
+	// When name is not provided, it defaults to "New Session"
 	resp := client.Post("/api/projects/"+project.ID+"/workspaces/"+workspace.ID+"/sessions", map[string]string{})
 	defer resp.Body.Close()
 
-	AssertStatus(t, resp, http.StatusBadRequest)
+	AssertStatus(t, resp, http.StatusCreated)
+
+	var session map[string]interface{}
+	ParseJSON(t, resp, &session)
+
+	if session["name"] != "New Session" {
+		t.Errorf("Expected default name 'New Session', got '%v'", session["name"])
+	}
 }
 
 func TestGetSession(t *testing.T) {

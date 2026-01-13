@@ -165,15 +165,26 @@ func (s *AgentMCPServer) BeforeCreate(tx *gorm.DB) error {
 	return nil
 }
 
+// Workspace status constants representing the lifecycle of a workspace
+const (
+	WorkspaceStatusInitializing = "initializing" // Workspace just created, starting setup
+	WorkspaceStatusCloning      = "cloning"      // Cloning git repository
+	WorkspaceStatusReady        = "ready"        // Workspace is ready for use
+	WorkspaceStatusError        = "error"        // Something failed during setup
+)
+
 // Workspace represents a working directory (local folder or git repo).
 type Workspace struct {
-	ID         string    `gorm:"primaryKey;type:text" json:"id"`
-	ProjectID  string    `gorm:"column:project_id;not null;type:text;index" json:"project_id"`
-	Name       string    `gorm:"not null;type:text" json:"name"`
-	Path       string    `gorm:"not null;type:text" json:"path"`
-	SourceType string    `gorm:"column:source_type;not null;type:text" json:"source_type"`
-	CreatedAt  time.Time `gorm:"autoCreateTime" json:"created_at"`
-	UpdatedAt  time.Time `gorm:"autoUpdateTime" json:"updated_at"`
+	ID           string    `gorm:"primaryKey;type:text" json:"id"`
+	ProjectID    string    `gorm:"column:project_id;not null;type:text;index" json:"projectId"`
+	Name         string    `gorm:"not null;type:text" json:"name"`
+	Path         string    `gorm:"not null;type:text" json:"path"`
+	SourceType   string    `gorm:"column:source_type;not null;type:text" json:"sourceType"`
+	Status       string    `gorm:"not null;type:text;default:initializing" json:"status"`
+	ErrorMessage *string   `gorm:"column:error_message;type:text" json:"errorMessage,omitempty"`
+	Commit       *string   `gorm:"type:text" json:"commit,omitempty"`
+	CreatedAt    time.Time `gorm:"autoCreateTime" json:"createdAt"`
+	UpdatedAt    time.Time `gorm:"autoUpdateTime" json:"updatedAt"`
 
 	Project  *Project  `gorm:"foreignKey:ProjectID" json:"-"`
 	Sessions []Session `gorm:"foreignKey:WorkspaceID" json:"-"`
@@ -188,17 +199,31 @@ func (w *Workspace) BeforeCreate(tx *gorm.DB) error {
 	return nil
 }
 
+// Session status constants representing the lifecycle of a session
+const (
+	SessionStatusInitializing      = "initializing"       // Session just created, starting setup
+	SessionStatusCloning           = "cloning"            // Cloning git repository
+	SessionStatusCreatingContainer = "creating_container" // Creating Docker container
+	SessionStatusStartingAgent     = "starting_agent"     // Running agent start command
+	SessionStatusRunning           = "running"            // Session is ready for use
+	SessionStatusError             = "error"              // Something failed during setup
+	SessionStatusClosed            = "closed"             // Session has been archived
+)
+
 // Session represents a chat thread within a workspace.
 type Session struct {
-	ID          string    `gorm:"primaryKey;type:text" json:"id"`
-	WorkspaceID string    `gorm:"column:workspace_id;not null;type:text;index" json:"workspace_id"`
-	AgentID     *string   `gorm:"column:agent_id;type:text;index" json:"agent_id,omitempty"`
-	Name        string    `gorm:"not null;type:text" json:"name"`
-	Description *string   `gorm:"type:text" json:"description,omitempty"`
-	Status      string    `gorm:"not null;type:text;default:open" json:"status"`
-	CreatedAt   time.Time `gorm:"autoCreateTime" json:"created_at"`
-	UpdatedAt   time.Time `gorm:"autoUpdateTime" json:"updated_at"`
+	ID           string    `gorm:"primaryKey;type:text" json:"id"`
+	ProjectID    string    `gorm:"column:project_id;not null;type:text;index" json:"projectId"`
+	WorkspaceID  string    `gorm:"column:workspace_id;not null;type:text;index" json:"workspaceId"`
+	AgentID      *string   `gorm:"column:agent_id;type:text;index" json:"agentId,omitempty"`
+	Name         string    `gorm:"not null;type:text" json:"name"`
+	Description  *string   `gorm:"type:text" json:"description,omitempty"`
+	Status       string    `gorm:"not null;type:text;default:initializing" json:"status"`
+	ErrorMessage *string   `gorm:"column:error_message;type:text" json:"errorMessage,omitempty"`
+	CreatedAt    time.Time `gorm:"autoCreateTime" json:"createdAt"`
+	UpdatedAt    time.Time `gorm:"autoUpdateTime" json:"updatedAt"`
 
+	Project   *Project   `gorm:"foreignKey:ProjectID" json:"-"`
 	Workspace *Workspace `gorm:"foreignKey:WorkspaceID" json:"-"`
 	Agent     *Agent     `gorm:"foreignKey:AgentID" json:"-"`
 	Messages  []Message  `gorm:"foreignKey:SessionID" json:"-"`
@@ -279,6 +304,33 @@ func (t *TerminalHistory) BeforeCreate(tx *gorm.DB) error {
 	return nil
 }
 
+// Event type constants
+const (
+	EventTypeSessionUpdated = "session_updated"
+)
+
+// ProjectEvent represents a persisted event for a project.
+// Events are used for SSE streaming to clients.
+type ProjectEvent struct {
+	ID        string          `gorm:"primaryKey;type:text" json:"id"`
+	Seq       int64           `gorm:"column:seq;autoIncrement;uniqueIndex" json:"seq"`
+	ProjectID string          `gorm:"column:project_id;not null;type:text;index:idx_project_seq,priority:1" json:"projectId"`
+	Type      string          `gorm:"not null;type:text" json:"type"`
+	Data      json.RawMessage `gorm:"type:text;not null" json:"data"`
+	CreatedAt time.Time       `gorm:"autoCreateTime;index:idx_project_seq,priority:2" json:"createdAt"`
+
+	Project *Project `gorm:"foreignKey:ProjectID" json:"-"`
+}
+
+func (ProjectEvent) TableName() string { return "project_events" }
+
+func (e *ProjectEvent) BeforeCreate(tx *gorm.DB) error {
+	if e.ID == "" {
+		e.ID = uuid.New().String()
+	}
+	return nil
+}
+
 // AllModels returns all model types for migration.
 func AllModels() []interface{} {
 	return []interface{}{
@@ -294,6 +346,7 @@ func AllModels() []interface{} {
 		&Message{},
 		&Credential{},
 		&TerminalHistory{},
+		&ProjectEvent{},
 		&Job{},
 		&DispatcherLeader{},
 	}

@@ -6,8 +6,9 @@ import (
 	"errors"
 	"time"
 
-	"github.com/anthropics/octobot/server/internal/model"
 	"gorm.io/gorm"
+
+	"github.com/anthropics/octobot/server/internal/model"
 )
 
 // Common errors
@@ -676,4 +677,87 @@ func (s *Store) ReleaseLeadership(ctx context.Context, serverID string) error {
 	return s.db.WithContext(ctx).
 		Where("id = ? AND server_id = ?", model.DispatcherLeaderSingletonID, serverID).
 		Delete(&model.DispatcherLeader{}).Error
+}
+
+// --- Project Events ---
+
+// CreateProjectEvent persists a new event for a project.
+func (s *Store) CreateProjectEvent(ctx context.Context, event *model.ProjectEvent) error {
+	return s.db.WithContext(ctx).Create(event).Error
+}
+
+// ListProjectEventsSince returns all events for a project created after the given time.
+// Events are returned in ascending order by creation time.
+func (s *Store) ListProjectEventsSince(ctx context.Context, projectID string, since time.Time) ([]model.ProjectEvent, error) {
+	var events []model.ProjectEvent
+	err := s.db.WithContext(ctx).
+		Where("project_id = ? AND created_at > ?", projectID, since).
+		Order("created_at ASC").
+		Find(&events).Error
+	if err != nil {
+		return nil, err
+	}
+	return events, nil
+}
+
+// ListProjectEventsAfterID returns all events for a project created after the event with the given ID.
+// This is useful for resuming from a specific event ID.
+func (s *Store) ListProjectEventsAfterID(ctx context.Context, projectID, afterID string) ([]model.ProjectEvent, error) {
+	// First get the timestamp of the reference event
+	var refEvent model.ProjectEvent
+	if err := s.db.WithContext(ctx).First(&refEvent, "id = ?", afterID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			// If reference event not found, return all events
+			return s.ListProjectEventsSince(ctx, projectID, time.Time{})
+		}
+		return nil, err
+	}
+
+	var events []model.ProjectEvent
+	err := s.db.WithContext(ctx).
+		Where("project_id = ? AND created_at > ?", projectID, refEvent.CreatedAt).
+		Order("created_at ASC").
+		Find(&events).Error
+	if err != nil {
+		return nil, err
+	}
+	return events, nil
+}
+
+// ListEventsAfterSeq returns all events (across all projects) with seq > afterSeq.
+// Events are returned in ascending order by sequence number.
+// This is used by the event poller to fetch new events globally.
+func (s *Store) ListEventsAfterSeq(ctx context.Context, afterSeq int64, limit int) ([]model.ProjectEvent, error) {
+	var events []model.ProjectEvent
+	query := s.db.WithContext(ctx).
+		Where("seq > ?", afterSeq).
+		Order("seq ASC")
+	if limit > 0 {
+		query = query.Limit(limit)
+	}
+	if err := query.Find(&events).Error; err != nil {
+		return nil, err
+	}
+	return events, nil
+}
+
+// GetMaxEventSeq returns the maximum sequence number of all events.
+// Returns 0 if there are no events.
+func (s *Store) GetMaxEventSeq(ctx context.Context) (int64, error) {
+	var maxSeq int64
+	err := s.db.WithContext(ctx).
+		Model(&model.ProjectEvent{}).
+		Select("COALESCE(MAX(seq), 0)").
+		Scan(&maxSeq).Error
+	return maxSeq, err
+}
+
+// DeleteOldProjectEvents deletes events older than the specified duration.
+// This can be called periodically to clean up old events.
+func (s *Store) DeleteOldProjectEvents(ctx context.Context, olderThan time.Duration) (int64, error) {
+	cutoff := time.Now().Add(-olderThan)
+	result := s.db.WithContext(ctx).
+		Where("created_at < ?", cutoff).
+		Delete(&model.ProjectEvent{})
+	return result.RowsAffected, result.Error
 }

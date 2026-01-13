@@ -2,11 +2,14 @@
 
 import { SiGithub } from "@icons-pack/react-simple-icons";
 import {
+	AlertCircle,
 	Bot,
+	CheckCircle,
 	ChevronDown,
 	Copy,
 	GitBranch,
 	HardDrive,
+	Loader2,
 	MessageSquare,
 	Play,
 	Plus,
@@ -45,7 +48,13 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import type { Agent, SupportedAgentType, Workspace } from "@/lib/api-types";
+import type {
+	Agent,
+	Session,
+	SessionStatus,
+	SupportedAgentType,
+	Workspace,
+} from "@/lib/api-types";
 import { cn } from "@/lib/utils";
 
 function getWorkspaceType(path: string): "github" | "git" | "local" {
@@ -125,8 +134,67 @@ interface ChatPanelProps {
 	selectedAgentId?: string | null;
 	onAddAgent?: () => void;
 	agentTypes?: SupportedAgentType[];
+	session?: Session | null;
 	sessionAgent?: Agent | null;
 	sessionWorkspace?: Workspace | null;
+}
+
+// Map session status to human-readable text and icons
+function getStatusDisplay(status: SessionStatus): {
+	text: string;
+	icon: React.ReactNode;
+	isLoading: boolean;
+} {
+	switch (status) {
+		case "initializing":
+			return {
+				text: "Initializing session...",
+				icon: <Loader2 className="h-4 w-4 animate-spin" />,
+				isLoading: true,
+			};
+		case "cloning":
+			return {
+				text: "Cloning repository...",
+				icon: <Loader2 className="h-4 w-4 animate-spin" />,
+				isLoading: true,
+			};
+		case "creating_container":
+			return {
+				text: "Creating container...",
+				icon: <Loader2 className="h-4 w-4 animate-spin" />,
+				isLoading: true,
+			};
+		case "starting_agent":
+			return {
+				text: "Starting agent...",
+				icon: <Loader2 className="h-4 w-4 animate-spin" />,
+				isLoading: true,
+			};
+		case "running":
+			return {
+				text: "Ready",
+				icon: <CheckCircle className="h-4 w-4 text-green-500" />,
+				isLoading: false,
+			};
+		case "error":
+			return {
+				text: "Error",
+				icon: <AlertCircle className="h-4 w-4 text-destructive" />,
+				isLoading: false,
+			};
+		case "closed":
+			return {
+				text: "Closed",
+				icon: <CheckCircle className="h-4 w-4 text-muted-foreground" />,
+				isLoading: false,
+			};
+		default:
+			return {
+				text: String(status),
+				icon: null,
+				isLoading: false,
+			};
+	}
 }
 
 export function ChatPanel({
@@ -141,6 +209,7 @@ export function ChatPanel({
 	selectedAgentId,
 	onAddAgent,
 	agentTypes = [],
+	session,
 	sessionAgent,
 	sessionWorkspace,
 }: ChatPanelProps) {
@@ -461,6 +530,28 @@ export function ChatPanel({
 					</p>
 				</div>
 			</div>
+
+			{/* Session status indicator - shows during initialization */}
+			{session &&
+				session.status !== "running" &&
+				session.status !== "closed" && (
+					<div
+						className={cn(
+							"flex items-center justify-center gap-2 py-3 px-4 border-b",
+							session.status === "error"
+								? "bg-destructive/10 border-destructive/20 text-destructive"
+								: "bg-muted/50 border-border text-muted-foreground",
+						)}
+					>
+						{getStatusDisplay(session.status).icon}
+						<span className="text-sm font-medium">
+							{getStatusDisplay(session.status).text}
+						</span>
+						{session.status === "error" && session.errorMessage && (
+							<span className="text-sm">: {session.errorMessage}</span>
+						)}
+					</div>
+				)}
 
 			{/* Agent/Workspace selectors - fade out in conversation mode */}
 			<div

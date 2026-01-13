@@ -10,22 +10,46 @@ export interface FileNode {
 	changed?: boolean;
 }
 
+// Session status values representing the lifecycle of a session
+export type SessionStatus =
+	| "initializing" // Session just created, starting setup
+	| "cloning" // Cloning git repository
+	| "creating_container" // Creating Docker container
+	| "starting_agent" // Running agent start command
+	| "running" // Session is ready for use
+	| "error" // Something failed during setup
+	| "closed"; // Session has been archived
+
 export interface Session {
 	id: string;
 	name: string;
 	description: string;
 	timestamp: string;
-	status: "open" | "running" | "closed";
+	status: SessionStatus;
+	/** Error message if status is "error" */
+	errorMessage?: string;
 	files: FileNode[];
 	workspaceId?: string;
 	agentId?: string;
 }
+
+// Workspace status values representing the lifecycle of a workspace
+export type WorkspaceStatus =
+	| "initializing" // Workspace just created, starting setup
+	| "cloning" // Cloning git repository
+	| "ready" // Workspace is ready for use
+	| "error"; // Something failed during setup
 
 export interface Workspace {
 	id: string;
 	name: string;
 	path: string;
 	sourceType: "local" | "git";
+	status: WorkspaceStatus;
+	/** Error message if status is "error" */
+	errorMessage?: string;
+	/** Current commit SHA (if git workspace) */
+	commit?: string;
 	sessions: Session[];
 }
 
@@ -130,7 +154,7 @@ export interface CreateSessionRequest {
 
 export interface UpdateSessionRequest {
 	name?: string;
-	status?: Session["status"];
+	status?: SessionStatus;
 }
 
 export interface CreateAgentRequest {
