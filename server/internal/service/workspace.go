@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"path/filepath"
 
 	"github.com/anthropics/octobot/server/internal/events"
 	"github.com/anthropics/octobot/server/internal/git"
@@ -15,7 +14,6 @@ import (
 // Workspace represents a workspace with its sessions (for API responses)
 type Workspace struct {
 	ID           string     `json:"id"`
-	Name         string     `json:"name"`
 	Path         string     `json:"path"`
 	SourceType   string     `json:"sourceType"`
 	Status       string     `json:"status"`
@@ -67,15 +65,8 @@ func (s *WorkspaceService) GetWorkspace(ctx context.Context, workspaceID string)
 
 // CreateWorkspace creates a new workspace with initializing status
 func (s *WorkspaceService) CreateWorkspace(ctx context.Context, projectID, path, sourceType string) (*Workspace, error) {
-	// Derive name from path
-	name := filepath.Base(path)
-	if name == "" || name == "." || name == "/" {
-		name = path
-	}
-
 	ws := &model.Workspace{
 		ProjectID:  projectID,
-		Name:       name,
 		Path:       path,
 		SourceType: sourceType,
 		Status:     model.WorkspaceStatusInitializing,
@@ -88,13 +79,12 @@ func (s *WorkspaceService) CreateWorkspace(ctx context.Context, projectID, path,
 }
 
 // UpdateWorkspace updates a workspace
-func (s *WorkspaceService) UpdateWorkspace(ctx context.Context, workspaceID, name, path string) (*Workspace, error) {
+func (s *WorkspaceService) UpdateWorkspace(ctx context.Context, workspaceID, path string) (*Workspace, error) {
 	ws, err := s.store.GetWorkspaceByID(ctx, workspaceID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get workspace: %w", err)
 	}
 
-	ws.Name = name
 	ws.Path = path
 	if err := s.store.UpdateWorkspace(ctx, ws); err != nil {
 		return nil, fmt.Errorf("failed to update workspace: %w", err)
@@ -107,7 +97,6 @@ func (s *WorkspaceService) UpdateWorkspace(ctx context.Context, workspaceID, nam
 func (s *WorkspaceService) mapWorkspace(ws *model.Workspace) *Workspace {
 	result := &Workspace{
 		ID:         ws.ID,
-		Name:       ws.Name,
 		Path:       ws.Path,
 		SourceType: ws.SourceType,
 		Status:     ws.Status,

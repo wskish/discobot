@@ -80,7 +80,6 @@ func (h *Handler) UpdateWorkspace(w http.ResponseWriter, r *http.Request) {
 	workspaceID := chi.URLParam(r, "workspaceId")
 
 	var req struct {
-		Name string `json:"name"`
 		Path string `json:"path"`
 	}
 	if err := h.DecodeJSON(r, &req); err != nil {
@@ -88,7 +87,7 @@ func (h *Handler) UpdateWorkspace(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	workspace, err := h.workspaceService().UpdateWorkspace(r.Context(), workspaceID, req.Name, req.Path)
+	workspace, err := h.workspaceService().UpdateWorkspace(r.Context(), workspaceID, req.Path)
 	if err != nil {
 		h.Error(w, http.StatusInternalServerError, "Failed to update workspace")
 		return

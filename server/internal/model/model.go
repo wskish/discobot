@@ -177,7 +177,6 @@ const (
 type Workspace struct {
 	ID           string    `gorm:"primaryKey;type:text" json:"id"`
 	ProjectID    string    `gorm:"column:project_id;not null;type:text;index" json:"projectId"`
-	Name         string    `gorm:"not null;type:text" json:"name"`
 	Path         string    `gorm:"not null;type:text" json:"path"`
 	SourceType   string    `gorm:"column:source_type;not null;type:text" json:"sourceType"`
 	Status       string    `gorm:"not null;type:text;default:initializing" json:"status"`

@@ -466,7 +466,6 @@ func (ts *TestServer) CreateTestWorkspace(project *model.Project, path string) *
 
 	workspace := &model.Workspace{
 		ProjectID:  project.ID,
-		Name:       path,
 		Path:       path,
 		SourceType: "local",
 	}

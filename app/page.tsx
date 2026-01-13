@@ -271,28 +271,6 @@ export default function IDEChatPage() {
 		}
 	};
 
-	const handleCloseSession = React.useCallback(
-		async (saveChanges: boolean) => {
-			if (!selectedSession) return;
-
-			// TODO: If saveChanges is true, push file changes first
-			if (saveChanges) {
-				console.log("Pushing changes for session:", selectedSession.id);
-				// In a real implementation, this would commit/push the changes
-			}
-
-			// Update session status to closed
-			await api.updateSession(selectedSession.id, { status: "closed" });
-
-			// Refresh workspaces to update the sidebar
-			mutateWorkspaces();
-
-			// Deselect the session
-			setSelectedSession(null);
-		},
-		[selectedSession, mutateWorkspaces],
-	);
-
 	// Loading state
 	if (workspacesLoading || agentsLoading) {
 		return (
@@ -308,16 +286,6 @@ export default function IDEChatPage() {
 				leftSidebarOpen={leftSidebarOpen}
 				onToggleSidebar={() => setLeftSidebarOpen(!leftSidebarOpen)}
 				onNewSession={handleNewSession}
-				workspaces={workspaces}
-				selectedSession={selectedSession}
-				sessionAgent={sessionAgent}
-				sessionWorkspace={sessionWorkspace}
-				agentTypes={agentTypes}
-				onWorkspaceSelect={handleWorkspaceSelect}
-				onSessionSelect={handleSessionSelect}
-				credentialsOpen={credentialsOpen}
-				onCredentialsOpenChange={handleCredentialsOpenChange}
-				credentialsInitialProviderId={credentialsInitialProviderId}
 			/>
 
 			<div className="flex-1 flex overflow-hidden">
@@ -351,7 +319,6 @@ export default function IDEChatPage() {
 					messages={messages}
 					sessionAgent={sessionAgent}
 					sessionWorkspace={sessionWorkspace}
-					onCloseSession={handleCloseSession}
 				/>
 			</div>
 

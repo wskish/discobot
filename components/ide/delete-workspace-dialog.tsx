@@ -14,6 +14,30 @@ import {
 } from "@/components/ui/dialog";
 import type { Workspace } from "@/lib/api-types";
 
+/** Derives a display name from a workspace path */
+function getWorkspaceDisplayName(path: string, sourceType: "local" | "git") {
+	if (sourceType === "local") {
+		// For local paths, use the last segment
+		const segments = path.split("/").filter(Boolean);
+		return segments[segments.length - 1] || path;
+	}
+
+	// For git URLs, extract repo name
+	const githubMatch = path.match(/github\.com[/:]([^/]+\/[^/]+?)(?:\.git)?$/);
+	if (githubMatch) {
+		return githubMatch[1];
+	}
+
+	// Strip protocol and .git suffix for other git URLs
+	return (
+		path
+			.replace(/^(https?:\/\/|git@|ssh:\/\/)/, "")
+			.replace(/\.git$/, "")
+			.split("/")
+			.pop() || path
+	);
+}
+
 interface DeleteWorkspaceDialogProps {
 	open: boolean;
 	onOpenChange: (open: boolean) => void;
@@ -49,6 +73,11 @@ export function DeleteWorkspaceDialog({
 
 	if (!workspace) return null;
 
+	const displayName = getWorkspaceDisplayName(
+		workspace.path,
+		workspace.sourceType,
+	);
+
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
 			<DialogContent className="sm:max-w-md">
@@ -58,8 +87,8 @@ export function DeleteWorkspaceDialog({
 						Delete Workspace
 					</DialogTitle>
 					<DialogDescription>
-						Are you sure you want to delete &quot;{workspace.name}&quot;? This
-						will remove the workspace and all its sessions from Octobot.
+						Are you sure you want to delete &quot;{displayName}&quot;? This will
+						remove the workspace and all its sessions from Octobot.
 					</DialogDescription>
 				</DialogHeader>
 

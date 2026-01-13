@@ -42,7 +42,6 @@ export type WorkspaceStatus =
 
 export interface Workspace {
 	id: string;
-	name: string;
 	path: string;
 	sourceType: "local" | "git";
 	status: WorkspaceStatus;
