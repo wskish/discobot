@@ -10,7 +10,6 @@ import { Button } from "@/components/ui/button";
 import type {
 	Agent,
 	ChatMessage,
-	Session,
 	SupportedAgentType,
 	Workspace,
 } from "@/lib/api-types";
@@ -27,7 +26,6 @@ interface BottomPanelProps {
 	onMaximize: () => void;
 	// Chat props
 	messages: ChatMessage[];
-	session: Session | null;
 	sessionAgent: Agent | null;
 	sessionWorkspace: Workspace | null;
 	agentTypes: SupportedAgentType[];
@@ -43,7 +41,6 @@ export function BottomPanel({
 	onMinimize,
 	onMaximize,
 	messages,
-	session,
 	sessionAgent,
 	sessionWorkspace,
 	agentTypes,
@@ -51,14 +48,13 @@ export function BottomPanel({
 }: BottomPanelProps) {
 	return (
 		<div className="flex flex-col overflow-hidden" style={style}>
-			{/* Header with view toggle and panel controls */}
-			<div className="h-10 flex items-center justify-between px-3 bg-muted/30 border-b border-border shrink-0">
-				{/* Left: Chat/Terminal toggle */}
-				<div className="flex items-center gap-1">
+			{/* Bottom panel header */}
+			<div className="h-10 flex items-center justify-between px-2 bg-muted/30 border-b border-border shrink-0">
+				<div className="flex items-center gap-2">
 					<Button
 						variant={view === "chat" ? "secondary" : "ghost"}
 						size="sm"
-						className="h-7 text-xs px-3"
+						className="h-6 text-xs"
 						onClick={() => onViewChange("chat")}
 					>
 						Chat
@@ -66,14 +62,12 @@ export function BottomPanel({
 					<Button
 						variant={view === "terminal" ? "secondary" : "ghost"}
 						size="sm"
-						className="h-7 text-xs px-3"
+						className="h-6 text-xs"
 						onClick={() => onViewChange("terminal")}
 					>
 						Terminal
 					</Button>
 				</div>
-
-				{/* Right: Panel controls (only when diff panel is open) */}
 				{showPanelControls && (
 					<PanelControls
 						state={panelState}
@@ -94,7 +88,6 @@ export function BottomPanel({
 						<ChatPanel
 							initialMessages={messages}
 							className="h-full"
-							session={session}
 							sessionAgent={sessionAgent}
 							sessionWorkspace={sessionWorkspace}
 							agentTypes={agentTypes}
