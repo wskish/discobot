@@ -10,21 +10,24 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/go-chi/chi/v5"
+	chimiddleware "github.com/go-chi/chi/v5/middleware"
+	"github.com/go-chi/cors"
+	"github.com/joho/godotenv"
+
 	"github.com/anthropics/octobot/server/internal/config"
 	"github.com/anthropics/octobot/server/internal/container"
 	"github.com/anthropics/octobot/server/internal/container/docker"
 	"github.com/anthropics/octobot/server/internal/database"
 	"github.com/anthropics/octobot/server/internal/dispatcher"
+	"github.com/anthropics/octobot/server/internal/events"
 	"github.com/anthropics/octobot/server/internal/git"
 	"github.com/anthropics/octobot/server/internal/handler"
+	"github.com/anthropics/octobot/server/internal/jobs"
 	"github.com/anthropics/octobot/server/internal/middleware"
 	"github.com/anthropics/octobot/server/internal/service"
 	"github.com/anthropics/octobot/server/internal/store"
 	"github.com/anthropics/octobot/server/static"
-	"github.com/go-chi/chi/v5"
-	chimiddleware "github.com/go-chi/chi/v5/middleware"
-	"github.com/go-chi/cors"
-	"github.com/joho/godotenv"
 )
 
 func main() {
@@ -66,47 +69,44 @@ func main() {
 	// Create store
 	s := store.New(db.DB)
 
-	// Initialize git provider
-	gitProvider, err := git.NewLocalProvider(cfg.GitDir)
+	// Initialize git provider (required)
+	gitProvider, err := git.NewLocalProvider(cfg.WorkspaceDir)
 	if err != nil {
-		log.Printf("Warning: Failed to initialize git provider: %v", err)
-		log.Println("Git operations will not be available")
+		log.Fatalf("Failed to initialize git provider: %v", err)
+	}
+	log.Printf("Git provider initialized at %s", cfg.WorkspaceDir)
+
+	// Initialize container runtime (currently only Docker is supported)
+	var containerRuntime container.Runtime
+	if dockerRuntime, dockerErr := docker.NewProvider(cfg); dockerErr != nil {
+		log.Printf("Warning: Failed to initialize Docker runtime: %v", dockerErr)
+		log.Println("Terminal/container operations will not be available")
 	} else {
-		log.Printf("Git provider initialized at %s", cfg.GitDir)
+		containerRuntime = dockerRuntime
+		log.Printf("Container runtime initialized (type: docker)")
 	}
 
-	// Initialize container runtime
-	var containerRuntime container.Runtime
-	switch cfg.ContainerRuntime {
-	case "docker", "":
-		containerRuntime, err = docker.NewProvider(cfg)
-		if err != nil {
-			log.Printf("Warning: Failed to initialize Docker runtime: %v", err)
-			log.Println("Terminal/container operations will not be available")
-		} else {
-			log.Printf("Container runtime initialized (type: docker)")
-		}
-	case "kubernetes":
-		log.Println("Warning: Kubernetes runtime not yet implemented")
-		log.Println("Terminal/container operations will not be available")
-	case "cloudflare":
-		log.Println("Warning: Cloudflare runtime not yet implemented")
-		log.Println("Terminal/container operations will not be available")
-	default:
-		log.Printf("Warning: Unknown container runtime: %s", cfg.ContainerRuntime)
-		log.Println("Terminal/container operations will not be available")
+	// Create event poller and broker for SSE
+	eventPoller := events.NewPoller(s, events.DefaultPollerConfig())
+	if err := eventPoller.Start(context.Background()); err != nil {
+		log.Fatalf("Failed to start event poller: %v", err)
 	}
+	eventBroker := events.NewBroker(s, eventPoller)
 
 	// Initialize and start job dispatcher
 	var disp *dispatcher.Service
 	if cfg.DispatcherEnabled {
 		disp = dispatcher.NewService(s, cfg)
 
-		// Register executors if container runtime is available
+		// Register workspace init executor
+		workspaceSvc := service.NewWorkspaceService(s, gitProvider, eventBroker)
+		disp.RegisterExecutor(jobs.NewWorkspaceInitExecutor(workspaceSvc))
+
+		// Register session init executor if container runtime is available
 		if containerRuntime != nil {
-			containerSvc := service.NewContainerService(s, containerRuntime, cfg)
-			disp.RegisterExecutor(dispatcher.NewContainerCreateExecutor(containerSvc))
-			disp.RegisterExecutor(dispatcher.NewContainerDestroyExecutor(containerSvc))
+			sessionSvc := service.NewSessionService(s)
+			sessionSvc.SetRuntimeDependencies(gitProvider, containerRuntime, eventBroker)
+			disp.RegisterExecutor(jobs.NewSessionInitExecutor(sessionSvc))
 		}
 
 		disp.Start(context.Background())
@@ -136,24 +136,24 @@ func main() {
 	}))
 
 	// Health check endpoint
-	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
+	r.Get("/health", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(`{"status":"ok"}`))
+		_, _ = w.Write([]byte(`{"status":"ok"}`))
 	})
 
 	// API UI - serve the embedded static HTML file
-	r.Get("/api/ui", func(w http.ResponseWriter, r *http.Request) {
+	r.Get("/api/ui", func(w http.ResponseWriter, _ *http.Request) {
 		content, err := static.Files.ReadFile("api-ui.html")
 		if err != nil {
 			http.Error(w, "API UI not found", http.StatusInternalServerError)
 			return
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.Write(content)
+		_, _ = w.Write(content)
 	})
 
 	// Initialize handlers
-	h := handler.NewWithProviders(s, cfg, gitProvider, containerRuntime)
+	h := handler.New(s, cfg, gitProvider, containerRuntime, eventBroker)
 
 	// Wire up job queue notification to dispatcher for immediate execution
 	if disp != nil {
@@ -184,6 +184,9 @@ func main() {
 		r.Route("/projects/{projectId}", func(r chi.Router) {
 			// Project membership middleware
 			r.Use(middleware.ProjectMember(s))
+
+			// SSE events endpoint (must be before other routes to avoid timeout middleware)
+			r.Get("/events", h.Events)
 
 			r.Get("/", h.GetProject)
 			r.Put("/", h.UpdateProject)
@@ -308,6 +311,9 @@ func main() {
 	if disp != nil {
 		disp.Stop()
 	}
+
+	// Stop event poller
+	eventPoller.Stop()
 
 	// Close handler resources (stops Codex callback server, etc.)
 	h.Close()

@@ -7,10 +7,11 @@ import (
 	"sort"
 	"sync"
 
+	"github.com/go-chi/chi/v5"
+
 	"github.com/anthropics/octobot/server/internal/middleware"
 	"github.com/anthropics/octobot/server/internal/service"
 	"github.com/anthropics/octobot/server/static"
-	"github.com/go-chi/chi/v5"
 )
 
 // Icon represents an icon with theme support

@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import {
 	Dialog,
 	DialogContent,
+	DialogDescription,
 	DialogFooter,
 	DialogHeader,
 	DialogTitle,
@@ -40,6 +41,9 @@ export function AddWorkspaceDialog({
 			<DialogContent className="sm:max-w-md">
 				<DialogHeader>
 					<DialogTitle>Add Workspace</DialogTitle>
+					<DialogDescription>
+						Create a new workspace from a local folder or git repository.
+					</DialogDescription>
 				</DialogHeader>
 				<div className="py-4">
 					<WorkspaceForm

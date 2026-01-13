@@ -26,24 +26,26 @@ func NewGitService(s *store.Store, provider git.Provider) *GitService {
 // EnsureWorkspaceRepo ensures the workspace's repository is set up.
 // For git-sourced workspaces, this clones/fetches the repo.
 // For local workspaces, this validates the path.
-func (s *GitService) EnsureWorkspaceRepo(ctx context.Context, workspaceID string) (string, error) {
+// Returns the working directory path and the current HEAD commit SHA.
+func (s *GitService) EnsureWorkspaceRepo(ctx context.Context, workspaceID string) (string, string, error) {
 	ws, err := s.store.GetWorkspaceByID(ctx, workspaceID)
 	if err != nil {
-		return "", fmt.Errorf("workspace not found: %w", err)
+		return "", "", fmt.Errorf("workspace not found: %w", err)
 	}
 
 	// Use Path as source - could be a git URL or local path
-	return s.provider.EnsureWorkspace(ctx, workspaceID, ws.Path, "")
+	return s.provider.EnsureWorkspace(ctx, ws.ProjectID, workspaceID, ws.Path, "")
 }
 
 // EnsureWorkspaceRepoAtRef ensures the workspace's repository at a specific ref.
-func (s *GitService) EnsureWorkspaceRepoAtRef(ctx context.Context, workspaceID, ref string) (string, error) {
+// Returns the working directory path and the current HEAD commit SHA.
+func (s *GitService) EnsureWorkspaceRepoAtRef(ctx context.Context, workspaceID, ref string) (string, string, error) {
 	ws, err := s.store.GetWorkspaceByID(ctx, workspaceID)
 	if err != nil {
-		return "", fmt.Errorf("workspace not found: %w", err)
+		return "", "", fmt.Errorf("workspace not found: %w", err)
 	}
 
-	return s.provider.EnsureWorkspace(ctx, workspaceID, ws.Path, ref)
+	return s.provider.EnsureWorkspace(ctx, ws.ProjectID, workspaceID, ws.Path, ref)
 }
 
 // Fetch fetches updates from remote for a workspace.

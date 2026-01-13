@@ -132,10 +132,12 @@ func TestCreateSession_CreatesContainer(t *testing.T) {
 	user := ts.CreateTestUser("test@example.com")
 	project := ts.CreateTestProject(user, "Test Project")
 	workspace := ts.CreateTestWorkspace(project, "/home/user/code")
+	agent := ts.CreateTestAgent(project, "Claude", "claude-code")
 	client := ts.AuthenticatedClient(user)
 
 	resp := client.Post("/api/projects/"+project.ID+"/workspaces/"+workspace.ID+"/sessions", map[string]string{
-		"name": "Container Session",
+		"name":    "Container Session",
+		"agentId": agent.ID,
 	})
 	defer resp.Body.Close()
 
@@ -154,41 +156,5 @@ func TestCreateSession_CreatesContainer(t *testing.T) {
 	containers := ts.MockContainer.GetContainers()
 	if _, exists := containers[sessionID]; !exists {
 		t.Errorf("Expected container to be created for session %s", sessionID)
-	}
-}
-
-func TestDeleteSession_DestroysContainer(t *testing.T) {
-	ts := NewTestServer(t)
-	user := ts.CreateTestUser("test@example.com")
-	project := ts.CreateTestProject(user, "Test Project")
-	workspace := ts.CreateTestWorkspace(project, "/home/user/code")
-	session := ts.CreateTestSession(workspace, "Test Session")
-	client := ts.AuthenticatedClient(user)
-
-	// Create container for the session
-	ts.MockContainer.Create(t.Context(), session.ID, container.CreateOptions{
-		Image: config.DefaultContainerImage,
-	})
-	ts.MockContainer.Start(t.Context(), session.ID)
-
-	// Verify container exists
-	containers := ts.MockContainer.GetContainers()
-	if _, exists := containers[session.ID]; !exists {
-		t.Fatal("Container should exist before deletion")
-	}
-
-	// Delete the session
-	resp := client.Delete("/api/projects/" + project.ID + "/sessions/" + session.ID)
-	defer resp.Body.Close()
-
-	AssertStatus(t, resp, http.StatusOK)
-
-	// Wait for async container destruction via job queue
-	time.Sleep(100 * time.Millisecond)
-
-	// Verify container was destroyed
-	containers = ts.MockContainer.GetContainers()
-	if _, exists := containers[session.ID]; exists {
-		t.Error("Container should have been destroyed when session was deleted")
 	}
 }

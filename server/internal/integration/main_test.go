@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"testing"
-
 )
 
 var postgresCleanup func(success bool)

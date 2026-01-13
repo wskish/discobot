@@ -7,12 +7,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/anthropics/octobot/server/internal/config"
-	"github.com/anthropics/octobot/server/internal/model"
 	"github.com/glebarez/sqlite" // Pure Go SQLite driver (uses modernc.org/sqlite)
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
+
+	"github.com/anthropics/octobot/server/internal/config"
+	"github.com/anthropics/octobot/server/internal/model"
 )
 
 // DB wraps the GORM DB connection with additional context
@@ -50,10 +51,7 @@ func New(cfg *config.Config) (*DB, error) {
 	case "sqlite":
 		// For SQLite, we need to handle the DSN differently
 		// Remove "file:" prefix if present
-		sqliteDSN := dsn
-		if strings.HasPrefix(sqliteDSN, "file:") {
-			sqliteDSN = strings.TrimPrefix(sqliteDSN, "file:")
-		}
+		sqliteDSN := strings.TrimPrefix(dsn, "file:")
 		// glebarez/sqlite (modernc) handles pragmas differently
 		// For in-memory databases, use ":memory:"
 		// For file databases, just use the path

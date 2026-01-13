@@ -237,7 +237,7 @@ func (p *MockPTY) Write(b []byte) (int, error) {
 	return len(b), nil
 }
 
-func (p *MockPTY) Resize(rows, cols int) error {
+func (p *MockPTY) Resize(ctx context.Context, rows, cols int) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
@@ -253,6 +253,6 @@ func (p *MockPTY) Close() error {
 	return nil
 }
 
-func (p *MockPTY) Wait() (int, error) {
+func (p *MockPTY) Wait(ctx context.Context) (int, error) {
 	return 0, nil
 }

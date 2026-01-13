@@ -389,14 +389,20 @@ func TestGitLocalProviderCaching(t *testing.T) {
 	remoteRepo := createTestGitRepo(t)
 
 	// Clone to two different workspace IDs
-	workDir1, err := provider.EnsureWorkspace(t.Context(), "workspace-1", remoteRepo, "")
+	workDir1, commit1, err := provider.EnsureWorkspace(t.Context(), "test-project", "workspace-1", remoteRepo, "")
 	if err != nil {
 		t.Fatalf("Failed to ensure workspace 1: %v", err)
 	}
+	if commit1 == "" {
+		t.Error("Expected commit SHA to be returned for workspace 1")
+	}
 
-	workDir2, err := provider.EnsureWorkspace(t.Context(), "workspace-2", remoteRepo, "")
+	workDir2, commit2, err := provider.EnsureWorkspace(t.Context(), "test-project", "workspace-2", remoteRepo, "")
 	if err != nil {
 		t.Fatalf("Failed to ensure workspace 2: %v", err)
+	}
+	if commit2 == "" {
+		t.Error("Expected commit SHA to be returned for workspace 2")
 	}
 
 	// Verify they have different working directories

@@ -265,6 +265,6 @@ func generateSlug(name string) string {
 	slug = strings.Trim(slug, "-")
 	// Add random suffix for uniqueness
 	suffix := make([]byte, 4)
-	rand.Read(suffix)
+	_, _ = rand.Read(suffix)
 	return fmt.Sprintf("%s-%s", slug, hex.EncodeToString(suffix))
 }

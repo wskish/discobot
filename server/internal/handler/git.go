@@ -3,8 +3,9 @@ package handler
 import (
 	"net/http"
 
-	"github.com/anthropics/octobot/server/internal/git"
 	"github.com/go-chi/chi/v5"
+
+	"github.com/anthropics/octobot/server/internal/git"
 )
 
 // GetWorkspaceGitStatus returns the git status for a workspace
@@ -17,7 +18,7 @@ func (h *Handler) GetWorkspaceGitStatus(w http.ResponseWriter, r *http.Request) 
 	workspaceID := chi.URLParam(r, "workspaceId")
 
 	// Ensure the workspace repo is set up
-	if _, err := h.gitService.EnsureWorkspaceRepo(r.Context(), workspaceID); err != nil {
+	if _, _, err := h.gitService.EnsureWorkspaceRepo(r.Context(), workspaceID); err != nil {
 		h.Error(w, http.StatusInternalServerError, "Failed to initialize workspace: "+err.Error())
 		return
 	}
@@ -83,7 +84,7 @@ func (h *Handler) GetWorkspaceBranches(w http.ResponseWriter, r *http.Request) {
 	workspaceID := chi.URLParam(r, "workspaceId")
 
 	// Ensure the workspace repo is set up
-	if _, err := h.gitService.EnsureWorkspaceRepo(r.Context(), workspaceID); err != nil {
+	if _, _, err := h.gitService.EnsureWorkspaceRepo(r.Context(), workspaceID); err != nil {
 		h.Error(w, http.StatusInternalServerError, "Failed to initialize workspace: "+err.Error())
 		return
 	}
@@ -107,7 +108,7 @@ func (h *Handler) GetWorkspaceDiff(w http.ResponseWriter, r *http.Request) {
 	workspaceID := chi.URLParam(r, "workspaceId")
 
 	// Ensure the workspace repo is set up
-	if _, err := h.gitService.EnsureWorkspaceRepo(r.Context(), workspaceID); err != nil {
+	if _, _, err := h.gitService.EnsureWorkspaceRepo(r.Context(), workspaceID); err != nil {
 		h.Error(w, http.StatusInternalServerError, "Failed to initialize workspace: "+err.Error())
 		return
 	}
@@ -143,7 +144,7 @@ func (h *Handler) GetWorkspaceFileTree(w http.ResponseWriter, r *http.Request) {
 	ref := r.URL.Query().Get("ref")
 
 	// Ensure the workspace repo is set up
-	if _, err := h.gitService.EnsureWorkspaceRepo(r.Context(), workspaceID); err != nil {
+	if _, _, err := h.gitService.EnsureWorkspaceRepo(r.Context(), workspaceID); err != nil {
 		h.Error(w, http.StatusInternalServerError, "Failed to initialize workspace: "+err.Error())
 		return
 	}
@@ -174,7 +175,7 @@ func (h *Handler) GetWorkspaceFileContent(w http.ResponseWriter, r *http.Request
 	}
 
 	// Ensure the workspace repo is set up
-	if _, err := h.gitService.EnsureWorkspaceRepo(r.Context(), workspaceID); err != nil {
+	if _, _, err := h.gitService.EnsureWorkspaceRepo(r.Context(), workspaceID); err != nil {
 		h.Error(w, http.StatusInternalServerError, "Failed to initialize workspace: "+err.Error())
 		return
 	}
@@ -216,7 +217,7 @@ func (h *Handler) WriteWorkspaceFile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Ensure the workspace repo is set up
-	if _, err := h.gitService.EnsureWorkspaceRepo(r.Context(), workspaceID); err != nil {
+	if _, _, err := h.gitService.EnsureWorkspaceRepo(r.Context(), workspaceID); err != nil {
 		h.Error(w, http.StatusInternalServerError, "Failed to initialize workspace: "+err.Error())
 		return
 	}
@@ -251,7 +252,7 @@ func (h *Handler) StageWorkspaceFiles(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Ensure the workspace repo is set up
-	if _, err := h.gitService.EnsureWorkspaceRepo(r.Context(), workspaceID); err != nil {
+	if _, _, err := h.gitService.EnsureWorkspaceRepo(r.Context(), workspaceID); err != nil {
 		h.Error(w, http.StatusInternalServerError, "Failed to initialize workspace: "+err.Error())
 		return
 	}
@@ -289,7 +290,7 @@ func (h *Handler) CommitWorkspace(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Ensure the workspace repo is set up
-	if _, err := h.gitService.EnsureWorkspaceRepo(r.Context(), workspaceID); err != nil {
+	if _, _, err := h.gitService.EnsureWorkspaceRepo(r.Context(), workspaceID); err != nil {
 		h.Error(w, http.StatusInternalServerError, "Failed to initialize workspace: "+err.Error())
 		return
 	}
@@ -313,7 +314,7 @@ func (h *Handler) GetWorkspaceLog(w http.ResponseWriter, r *http.Request) {
 	workspaceID := chi.URLParam(r, "workspaceId")
 
 	// Ensure the workspace repo is set up
-	if _, err := h.gitService.EnsureWorkspaceRepo(r.Context(), workspaceID); err != nil {
+	if _, _, err := h.gitService.EnsureWorkspaceRepo(r.Context(), workspaceID); err != nil {
 		h.Error(w, http.StatusInternalServerError, "Failed to initialize workspace: "+err.Error())
 		return
 	}
@@ -325,7 +326,7 @@ func (h *Handler) GetWorkspaceLog(w http.ResponseWriter, r *http.Request) {
 	// Parse limit from query param
 	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
 		var limit int
-		if _, err := parseIntQuery(limitStr, &limit); err == nil && limit > 0 {
+		if parseIntQuery(limitStr, &limit) && limit > 0 {
 			opts.Limit = limit
 		}
 	}
@@ -340,14 +341,14 @@ func (h *Handler) GetWorkspaceLog(w http.ResponseWriter, r *http.Request) {
 }
 
 // parseIntQuery is a helper to parse int query params
-func parseIntQuery(s string, v *int) (bool, error) {
+func parseIntQuery(s string, v *int) bool {
 	var n int
 	for _, c := range s {
 		if c < '0' || c > '9' {
-			return false, nil
+			return false
 		}
 		n = n*10 + int(c-'0')
 	}
 	*v = n
-	return true, nil
+	return true
 }

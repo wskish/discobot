@@ -579,7 +579,7 @@
 
             // Sessions
             { group: 'Sessions', method: 'GET', path: '/api/projects/{projectId}/workspaces/{workspaceId}/sessions', description: 'List sessions', params: [{ name: 'projectId', in: 'path', required: true }, { name: 'workspaceId', in: 'path', required: true }] },
-            { group: 'Sessions', method: 'POST', path: '/api/projects/{projectId}/workspaces/{workspaceId}/sessions', description: 'Create session', params: [{ name: 'projectId', in: 'path', required: true }, { name: 'workspaceId', in: 'path', required: true }], body: { name: 'New Session' } },
+            { group: 'Sessions', method: 'POST', path: '/api/projects/{projectId}/workspaces/{workspaceId}/sessions', description: 'Create session', params: [{ name: 'projectId', in: 'path', required: true }, { name: 'workspaceId', in: 'path', required: true }], body: { name: 'New Session', agentId: '' } },
             { group: 'Sessions', method: 'GET', path: '/api/projects/{projectId}/sessions/{sessionId}', description: 'Get session', params: [{ name: 'projectId', in: 'path', required: true }, { name: 'sessionId', in: 'path', required: true }] },
             { group: 'Sessions', method: 'PUT', path: '/api/projects/{projectId}/sessions/{sessionId}', description: 'Update session', params: [{ name: 'projectId', in: 'path', required: true }, { name: 'sessionId', in: 'path', required: true }], body: { name: 'Updated Session', status: 'closed' } },
             { group: 'Sessions', method: 'DELETE', path: '/api/projects/{projectId}/sessions/{sessionId}', description: 'Delete session', params: [{ name: 'projectId', in: 'path', required: true }, { name: 'sessionId', in: 'path', required: true }] },
@@ -620,9 +620,29 @@
             // Suggestions
             { group: 'Other', method: 'GET', path: '/api/projects/{projectId}/suggestions', description: 'Get suggestions', params: [{ name: 'projectId', in: 'path', required: true }, { name: 'q', in: 'query', example: '/home' }] },
 
-            // Terminal
-            { group: 'Terminal', method: 'GET', path: '/api/projects/{projectId}/terminal/history', description: 'Terminal history', params: [{ name: 'projectId', in: 'path', required: true }] },
-            { group: 'Terminal', method: 'GET', path: '/api/projects/{projectId}/terminal/status', description: 'Terminal status', params: [{ name: 'projectId', in: 'path', required: true }] },
+            // Events (SSE)
+            { group: 'Events', method: 'GET', path: '/api/projects/{projectId}/events', description: 'SSE event stream', params: [{ name: 'projectId', in: 'path', required: true }, { name: 'since', in: 'query', example: '2024-01-15T10:30:00Z' }, { name: 'after', in: 'query', example: '' }] },
+
+            // Git Operations
+            { group: 'Git', method: 'GET', path: '/api/projects/{projectId}/workspaces/{workspaceId}/git/status', description: 'Get git status', params: [{ name: 'projectId', in: 'path', required: true }, { name: 'workspaceId', in: 'path', required: true }] },
+            { group: 'Git', method: 'POST', path: '/api/projects/{projectId}/workspaces/{workspaceId}/git/fetch', description: 'Fetch from remote', params: [{ name: 'projectId', in: 'path', required: true }, { name: 'workspaceId', in: 'path', required: true }] },
+            { group: 'Git', method: 'POST', path: '/api/projects/{projectId}/workspaces/{workspaceId}/git/checkout', description: 'Checkout branch/ref', params: [{ name: 'projectId', in: 'path', required: true }, { name: 'workspaceId', in: 'path', required: true }], body: { ref: 'main' } },
+            { group: 'Git', method: 'GET', path: '/api/projects/{projectId}/workspaces/{workspaceId}/git/branches', description: 'List branches', params: [{ name: 'projectId', in: 'path', required: true }, { name: 'workspaceId', in: 'path', required: true }] },
+            { group: 'Git', method: 'GET', path: '/api/projects/{projectId}/workspaces/{workspaceId}/git/diff', description: 'Get diff', params: [{ name: 'projectId', in: 'path', required: true }, { name: 'workspaceId', in: 'path', required: true }, { name: 'base', in: 'query', example: 'HEAD~1' }, { name: 'target', in: 'query', example: 'HEAD' }] },
+            { group: 'Git', method: 'GET', path: '/api/projects/{projectId}/workspaces/{workspaceId}/git/files', description: 'Get file tree', params: [{ name: 'projectId', in: 'path', required: true }, { name: 'workspaceId', in: 'path', required: true }, { name: 'ref', in: 'query', example: 'HEAD' }] },
+            { group: 'Git', method: 'GET', path: '/api/projects/{projectId}/workspaces/{workspaceId}/git/file', description: 'Get file content', params: [{ name: 'projectId', in: 'path', required: true }, { name: 'workspaceId', in: 'path', required: true }, { name: 'path', in: 'query', required: true, example: 'README.md' }, { name: 'ref', in: 'query', example: 'HEAD' }] },
+            { group: 'Git', method: 'POST', path: '/api/projects/{projectId}/workspaces/{workspaceId}/git/file', description: 'Write file', params: [{ name: 'projectId', in: 'path', required: true }, { name: 'workspaceId', in: 'path', required: true }], body: { path: 'README.md', content: '# Hello' } },
+            { group: 'Git', method: 'POST', path: '/api/projects/{projectId}/workspaces/{workspaceId}/git/stage', description: 'Stage files', params: [{ name: 'projectId', in: 'path', required: true }, { name: 'workspaceId', in: 'path', required: true }], body: { paths: ['README.md'] } },
+            { group: 'Git', method: 'POST', path: '/api/projects/{projectId}/workspaces/{workspaceId}/git/commit', description: 'Commit changes', params: [{ name: 'projectId', in: 'path', required: true }, { name: 'workspaceId', in: 'path', required: true }], body: { message: 'Initial commit' } },
+            { group: 'Git', method: 'GET', path: '/api/projects/{projectId}/workspaces/{workspaceId}/git/log', description: 'Get commit log', params: [{ name: 'projectId', in: 'path', required: true }, { name: 'workspaceId', in: 'path', required: true }, { name: 'limit', in: 'query', example: '10' }] },
+
+            // Terminal (session-scoped)
+            { group: 'Terminal', method: 'GET', path: '/api/projects/{projectId}/sessions/{sessionId}/terminal/ws', description: 'Terminal WebSocket', params: [{ name: 'projectId', in: 'path', required: true }, { name: 'sessionId', in: 'path', required: true }] },
+            { group: 'Terminal', method: 'GET', path: '/api/projects/{projectId}/sessions/{sessionId}/terminal/history', description: 'Terminal history', params: [{ name: 'projectId', in: 'path', required: true }, { name: 'sessionId', in: 'path', required: true }] },
+            { group: 'Terminal', method: 'GET', path: '/api/projects/{projectId}/sessions/{sessionId}/terminal/status', description: 'Terminal status', params: [{ name: 'projectId', in: 'path', required: true }, { name: 'sessionId', in: 'path', required: true }] },
+
+            // Chat
+            { group: 'Chat', method: 'POST', path: '/api/chat', description: 'AI Chat (streaming)', body: { messages: [{ role: 'user', content: 'Hello' }] } },
         ];
 
         // State

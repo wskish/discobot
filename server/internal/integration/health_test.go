@@ -3,7 +3,6 @@ package integration
 import (
 	"net/http"
 	"testing"
-
 )
 
 func TestHealthEndpoint(t *testing.T) {

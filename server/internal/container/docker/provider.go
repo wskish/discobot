@@ -171,7 +171,7 @@ func (p *Provider) Create(ctx context.Context, sessionID string, opts container.
 
 // Start starts a previously created container.
 func (p *Provider) Start(ctx context.Context, sessionID string) error {
-	containerID, err := p.getContainerID(sessionID)
+	containerID, err := p.getContainerID(ctx, sessionID)
 	if err != nil {
 		return err
 	}
@@ -185,7 +185,7 @@ func (p *Provider) Start(ctx context.Context, sessionID string) error {
 
 // Stop stops a running container gracefully.
 func (p *Provider) Stop(ctx context.Context, sessionID string, timeout time.Duration) error {
-	containerID, err := p.getContainerID(sessionID)
+	containerID, err := p.getContainerID(ctx, sessionID)
 	if err != nil {
 		return err
 	}
@@ -204,7 +204,7 @@ func (p *Provider) Stop(ctx context.Context, sessionID string, timeout time.Dura
 
 // Remove removes a container and its resources.
 func (p *Provider) Remove(ctx context.Context, sessionID string) error {
-	containerID, err := p.getContainerID(sessionID)
+	containerID, err := p.getContainerID(ctx, sessionID)
 	if err != nil {
 		if err == container.ErrNotFound {
 			return nil // Already removed
@@ -231,7 +231,7 @@ func (p *Provider) Remove(ctx context.Context, sessionID string) error {
 
 // Get returns the current state of a container.
 func (p *Provider) Get(ctx context.Context, sessionID string) (*container.Container, error) {
-	containerID, err := p.getContainerID(sessionID)
+	containerID, err := p.getContainerID(ctx, sessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -286,7 +286,7 @@ func (p *Provider) Get(ctx context.Context, sessionID string) (*container.Contai
 
 // Exec runs a non-interactive command in the container.
 func (p *Provider) Exec(ctx context.Context, sessionID string, cmd []string, opts container.ExecOptions) (*container.ExecResult, error) {
-	containerID, err := p.getContainerID(sessionID)
+	containerID, err := p.getContainerID(ctx, sessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -348,7 +348,7 @@ func (p *Provider) Exec(ctx context.Context, sessionID string, cmd []string, opt
 
 // Attach creates an interactive PTY session to the container.
 func (p *Provider) Attach(ctx context.Context, sessionID string, opts container.AttachOptions) (container.PTY, error) {
-	containerID, err := p.getContainerID(sessionID)
+	containerID, err := p.getContainerID(ctx, sessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -403,7 +403,7 @@ func (p *Provider) Attach(ctx context.Context, sessionID string, opts container.
 }
 
 // getContainerID retrieves the Docker container ID for a session.
-func (p *Provider) getContainerID(sessionID string) (string, error) {
+func (p *Provider) getContainerID(ctx context.Context, sessionID string) (string, error) {
 	p.containerIDsMu.RLock()
 	containerID, exists := p.containerIDs[sessionID]
 	p.containerIDsMu.RUnlock()
@@ -414,7 +414,7 @@ func (p *Provider) getContainerID(sessionID string) (string, error) {
 
 	// Try to find by name (for persistence across restarts)
 	name := containerName(sessionID)
-	info, err := p.client.ContainerInspect(context.Background(), name)
+	info, err := p.client.ContainerInspect(ctx, name)
 	if err != nil {
 		return "", container.ErrNotFound
 	}
@@ -448,8 +448,8 @@ func (p *dockerPTY) Write(b []byte) (int, error) {
 	return p.hijacked.Conn.Write(b)
 }
 
-func (p *dockerPTY) Resize(rows, cols int) error {
-	return p.client.ContainerExecResize(context.Background(), p.execID, containerTypes.ResizeOptions{
+func (p *dockerPTY) Resize(ctx context.Context, rows, cols int) error {
+	return p.client.ContainerExecResize(ctx, p.execID, containerTypes.ResizeOptions{
 		Height: uint(rows),
 		Width:  uint(cols),
 	})
@@ -462,16 +462,23 @@ func (p *dockerPTY) Close() error {
 	return nil
 }
 
-func (p *dockerPTY) Wait() (int, error) {
+func (p *dockerPTY) Wait(ctx context.Context) (int, error) {
 	// Wait for the exec to finish by polling
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+
 	for {
-		inspect, err := p.client.ContainerExecInspect(context.Background(), p.execID)
-		if err != nil {
-			return -1, err
+		select {
+		case <-ctx.Done():
+			return -1, ctx.Err()
+		case <-ticker.C:
+			inspect, err := p.client.ContainerExecInspect(ctx, p.execID)
+			if err != nil {
+				return -1, err
+			}
+			if !inspect.Running {
+				return inspect.ExitCode, nil
+			}
 		}
-		if !inspect.Running {
-			return inspect.ExitCode, nil
-		}
-		time.Sleep(100 * time.Millisecond)
 	}
 }

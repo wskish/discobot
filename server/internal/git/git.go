@@ -26,8 +26,9 @@ type Provider interface {
 	// EnsureWorkspace ensures a workspace has a working copy ready.
 	// For git URLs: clones to cache, then clones from cache to workspace dir.
 	// For local paths: validates the path exists and is a git repo.
-	// Returns the absolute path to the working directory.
-	EnsureWorkspace(ctx context.Context, workspaceID, source, ref string) (workDir string, err error)
+	// projectID scopes the clone to a specific project's directory.
+	// Returns the absolute path to the working directory and the current HEAD commit SHA.
+	EnsureWorkspace(ctx context.Context, projectID, workspaceID, source, ref string) (workDir string, commit string, err error)
 
 	// Fetch fetches updates from remote to the workspace.
 	// For cached repos, this updates both the cache and the working copy.
@@ -74,23 +75,23 @@ type Provider interface {
 
 // Status represents the git status of a repository.
 type Status struct {
-	Branch       string        `json:"branch"`
-	Commit       string        `json:"commit"`        // Current HEAD commit SHA
-	CommitShort  string        `json:"commitShort"`   // Short commit SHA
-	Ahead        int           `json:"ahead"`         // Commits ahead of upstream
-	Behind       int           `json:"behind"`        // Commits behind upstream
-	Staged       []FileStatus  `json:"staged"`        // Staged changes
-	Unstaged     []FileStatus  `json:"unstaged"`      // Unstaged changes
-	Untracked    []string      `json:"untracked"`     // Untracked files
-	IsClean      bool          `json:"isClean"`       // No uncommitted changes
-	HasConflicts bool          `json:"hasConflicts"`  // Merge conflicts present
+	Branch       string       `json:"branch"`
+	Commit       string       `json:"commit"`       // Current HEAD commit SHA
+	CommitShort  string       `json:"commitShort"`  // Short commit SHA
+	Ahead        int          `json:"ahead"`        // Commits ahead of upstream
+	Behind       int          `json:"behind"`       // Commits behind upstream
+	Staged       []FileStatus `json:"staged"`       // Staged changes
+	Unstaged     []FileStatus `json:"unstaged"`     // Unstaged changes
+	Untracked    []string     `json:"untracked"`    // Untracked files
+	IsClean      bool         `json:"isClean"`      // No uncommitted changes
+	HasConflicts bool         `json:"hasConflicts"` // Merge conflicts present
 }
 
 // FileStatus represents the status of a single file.
 type FileStatus struct {
-	Path      string `json:"path"`
-	Status    string `json:"status"`    // "added", "modified", "deleted", "renamed", "copied"
-	OldPath   string `json:"oldPath"`   // For renamed/copied files
+	Path    string `json:"path"`
+	Status  string `json:"status"`  // "added", "modified", "deleted", "renamed", "copied"
+	OldPath string `json:"oldPath"` // For renamed/copied files
 }
 
 // DiffOptions configures what diff to compute.
@@ -112,12 +113,12 @@ type DiffOptions struct {
 // FileDiff represents the diff of a single file.
 type FileDiff struct {
 	Path      string `json:"path"`
-	OldPath   string `json:"oldPath"`   // For renamed files
-	Status    string `json:"status"`    // "added", "modified", "deleted", "renamed"
+	OldPath   string `json:"oldPath"` // For renamed files
+	Status    string `json:"status"`  // "added", "modified", "deleted", "renamed"
 	Binary    bool   `json:"binary"`
 	Additions int    `json:"additions"`
 	Deletions int    `json:"deletions"`
-	Patch     string `json:"patch"`     // Unified diff content
+	Patch     string `json:"patch"` // Unified diff content
 }
 
 // Branch represents a git branch.
@@ -125,17 +126,17 @@ type Branch struct {
 	Name      string `json:"name"`
 	IsRemote  bool   `json:"isRemote"`
 	IsCurrent bool   `json:"isCurrent"`
-	Commit    string `json:"commit"`    // HEAD commit SHA
-	Upstream  string `json:"upstream"`  // Upstream branch name (if tracking)
+	Commit    string `json:"commit"`   // HEAD commit SHA
+	Upstream  string `json:"upstream"` // Upstream branch name (if tracking)
 }
 
 // FileEntry represents a file in the repository tree.
 type FileEntry struct {
-	Path    string `json:"path"`
-	Name    string `json:"name"`
-	IsDir   bool   `json:"isDir"`
-	Size    int64  `json:"size"`
-	Mode    string `json:"mode"`    // File mode (e.g., "100644")
+	Path  string `json:"path"`
+	Name  string `json:"name"`
+	IsDir bool   `json:"isDir"`
+	Size  int64  `json:"size"`
+	Mode  string `json:"mode"` // File mode (e.g., "100644")
 }
 
 // Commit represents a git commit.

@@ -64,6 +64,7 @@ const (
 // CreateOptions configures container creation.
 type CreateOptions struct {
 	Image   string            // Container image (e.g., "ubuntu:22.04")
+	Cmd     []string          // Command to run (empty = image default)
 	WorkDir string            // Working directory inside container
 	Env     map[string]string // Environment variables
 	Labels  map[string]string // Container labels/tags for identification
@@ -130,12 +131,13 @@ type PTY interface {
 	Write(p []byte) (n int, err error)
 
 	// Resize changes the terminal dimensions.
-	Resize(rows, cols int) error
+	Resize(ctx context.Context, rows, cols int) error
 
 	// Close terminates the PTY session.
 	// Implements io.Closer.
 	Close() error
 
 	// Wait blocks until the PTY command exits and returns the exit code.
-	Wait() (int, error)
+	// The context can be used to cancel the wait.
+	Wait(ctx context.Context) (int, error)
 }

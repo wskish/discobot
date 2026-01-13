@@ -3,7 +3,6 @@ package integration
 import (
 	"net/http"
 	"testing"
-
 )
 
 func TestListCredentials_Empty(t *testing.T) {

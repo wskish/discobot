@@ -171,7 +171,7 @@ func (h *Handler) TerminalWebSocket(w http.ResponseWriter, r *http.Request) {
 						log.Printf("failed to unmarshal resize: %v", err)
 						continue
 					}
-					if err := pty.Resize(resize.Rows, resize.Cols); err != nil {
+					if err := pty.Resize(ctx, resize.Rows, resize.Cols); err != nil {
 						log.Printf("PTY resize error: %v", err)
 					}
 				}

@@ -26,6 +26,8 @@ import {
 	STORAGE_KEYS,
 	usePersistedState,
 } from "@/lib/hooks/use-persisted-state";
+import { useProjectEvents } from "@/lib/hooks/use-project-events";
+import { useCreateSession } from "@/lib/hooks/use-sessions";
 import { useWorkspaces } from "@/lib/hooks/use-workspaces";
 
 export default function IDEChatPage() {
@@ -89,6 +91,16 @@ export default function IDEChatPage() {
 	const { authProviders } = useAuthProviders();
 	const { credentials } = useCredentials();
 	const { messages } = useMessages(selectedSession?.id || null);
+	const { createSession } = useCreateSession();
+
+	// Subscribe to SSE events for real-time session status updates
+	useProjectEvents({
+		onSessionUpdated: (data) => {
+			// If the updated session is the currently selected one, the SWR mutation
+			// will refresh it automatically. Just log for debugging.
+			console.log("Session updated:", data.sessionId, "->", data.status);
+		},
+	});
 
 	// Dialog state
 	const dialogs = useDialogState();
@@ -220,24 +232,24 @@ export default function IDEChatPage() {
 		const sessionName =
 			message.length > 50 ? `${message.substring(0, 50)}...` : message;
 
-		const newSession: Session = {
-			id: `session-${Date.now()}`,
-			name: sessionName,
-			description: message,
-			timestamp: "Just now",
-			status: "running",
-			files: [],
-			workspaceId,
-			agentId,
-		};
+		try {
+			// Create session via API - this starts the async initialization flow
+			// The session will be returned immediately with "initializing" status
+			const newSession = await createSession(workspaceId, {
+				name: sessionName,
+				agentId,
+			});
 
-		mutateWorkspaces();
-		setSelectedSession(newSession);
-		setPreselectedWorkspaceId(null);
+			setSelectedSession(newSession);
+			setPreselectedWorkspaceId(null);
 
-		const agent = agents.find((a) => a.id === agentId);
-		if (agent) {
-			setSelectedAgent(agent);
+			const agent = agents.find((a) => a.id === agentId);
+			if (agent) {
+				setSelectedAgent(agent);
+			}
+		} catch (error) {
+			console.error("Failed to create session:", error);
+			// TODO: Show error toast
 		}
 	};
 

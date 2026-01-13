@@ -3,7 +3,6 @@ package integration
 import (
 	"net/http"
 	"testing"
-
 )
 
 func TestListProjects_Unauthenticated(t *testing.T) {

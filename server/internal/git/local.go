@@ -31,6 +31,10 @@ type LocalProvider struct {
 	// workspacesDir stores working copies for each workspace
 	workspacesDir string
 
+	// Per-project mutexes for EnsureWorkspace operations
+	projectMu    sync.Mutex
+	projectLocks map[string]*sync.Mutex
+
 	// workspaceIndex maps workspace IDs to their repo info
 	mu             sync.RWMutex
 	workspaceIndex map[string]*workspaceInfo
@@ -38,6 +42,7 @@ type LocalProvider struct {
 
 // workspaceInfo tracks information about a workspace's git setup
 type workspaceInfo struct {
+	projectID string // Project this workspace belongs to
 	workDir   string // Path to the working copy
 	cacheDir  string // Path to the bare cache (empty for local repos)
 	source    string // Original source (URL or path)
@@ -62,91 +67,149 @@ func NewLocalProvider(baseDir string) (*LocalProvider, error) {
 		baseDir:        baseDir,
 		cacheDir:       cacheDir,
 		workspacesDir:  workspacesDir,
+		projectLocks:   make(map[string]*sync.Mutex),
 		workspaceIndex: make(map[string]*workspaceInfo),
 	}, nil
 }
 
-// EnsureWorkspace ensures a workspace has a working copy ready.
-func (p *LocalProvider) EnsureWorkspace(ctx context.Context, workspaceID, source, ref string) (string, error) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
+// getProjectLock returns a mutex for the given project, creating one if needed.
+func (p *LocalProvider) getProjectLock(projectID string) *sync.Mutex {
+	p.projectMu.Lock()
+	defer p.projectMu.Unlock()
 
-	// Check if workspace already exists
+	if lock, ok := p.projectLocks[projectID]; ok {
+		return lock
+	}
+	lock := &sync.Mutex{}
+	p.projectLocks[projectID] = lock
+	return lock
+}
+
+// EnsureWorkspace ensures a workspace has a working copy ready.
+// The projectID parameter scopes all directories to the project.
+// Returns the working directory path and the current HEAD commit SHA.
+// Locking is done at the project level to allow concurrent operations on different projects.
+func (p *LocalProvider) EnsureWorkspace(ctx context.Context, projectID, workspaceID, source, ref string) (string, string, error) {
+	// Fast path: check if workspace already exists in index
+	p.mu.RLock()
 	if info, ok := p.workspaceIndex[workspaceID]; ok {
-		return info.workDir, nil
+		p.mu.RUnlock()
+		commit, err := p.runGitOutput(ctx, info.workDir, "rev-parse", "HEAD")
+		if err != nil {
+			return info.workDir, "", nil // Return workDir even if we can't get commit
+		}
+		return info.workDir, strings.TrimSpace(commit), nil
+	}
+	p.mu.RUnlock()
+
+	// Acquire project-level lock for the slow path
+	projectLock := p.getProjectLock(projectID)
+	projectLock.Lock()
+	defer projectLock.Unlock()
+
+	// Double-check: workspace might have been created while waiting for lock
+	p.mu.RLock()
+	if info, ok := p.workspaceIndex[workspaceID]; ok {
+		p.mu.RUnlock()
+		commit, err := p.runGitOutput(ctx, info.workDir, "rev-parse", "HEAD")
+		if err != nil {
+			return info.workDir, "", nil
+		}
+		return info.workDir, strings.TrimSpace(commit), nil
+	}
+	p.mu.RUnlock()
+
+	// Create project-scoped directories
+	projectCacheDir := filepath.Join(p.baseDir, projectID, "cache")
+	projectWorkspacesDir := filepath.Join(p.baseDir, projectID, "workspaces")
+
+	if err := os.MkdirAll(projectCacheDir, 0755); err != nil {
+		return "", "", fmt.Errorf("failed to create project cache directory: %w", err)
+	}
+	if err := os.MkdirAll(projectWorkspacesDir, 0755); err != nil {
+		return "", "", fmt.Errorf("failed to create project workspaces directory: %w", err)
 	}
 
-	workDir := filepath.Join(p.workspacesDir, workspaceID)
+	workDir := filepath.Join(projectWorkspacesDir, workspaceID)
 
 	// Check if working directory already exists on disk
 	if _, err := os.Stat(filepath.Join(workDir, ".git")); err == nil {
 		info := &workspaceInfo{
-			workDir:  workDir,
-			source:   source,
-			isRemote: IsGitURL(source),
+			projectID: projectID,
+			workDir:   workDir,
+			source:    source,
+			isRemote:  IsGitURL(source),
 		}
 		if info.isRemote {
-			info.cacheDir = p.getCachePath(source)
+			info.cacheDir = p.getProjectCachePath(projectCacheDir, source)
 		}
+		p.mu.Lock()
 		p.workspaceIndex[workspaceID] = info
-		return workDir, nil
+		p.mu.Unlock()
+		commit, _ := p.runGitOutput(ctx, workDir, "rev-parse", "HEAD")
+		return workDir, strings.TrimSpace(commit), nil
 	}
 
 	var info *workspaceInfo
 
 	if IsGitURL(source) {
 		// Remote repository - use caching strategy
-		cachePath := p.getCachePath(source)
+		cachePath := p.getProjectCachePath(projectCacheDir, source)
 
 		// Ensure cache exists (clone bare if needed)
 		if err := p.ensureCache(ctx, source, cachePath); err != nil {
-			return "", fmt.Errorf("failed to ensure cache: %w", err)
+			return "", "", fmt.Errorf("failed to ensure cache: %w", err)
 		}
 
 		// Clone from cache to workspace
 		if err := p.cloneFromCache(ctx, cachePath, workDir, ref); err != nil {
-			return "", fmt.Errorf("failed to clone from cache: %w", err)
+			return "", "", fmt.Errorf("failed to clone from cache: %w", err)
 		}
 
 		info = &workspaceInfo{
-			workDir:  workDir,
-			cacheDir: cachePath,
-			source:   source,
-			isRemote: true,
+			projectID: projectID,
+			workDir:   workDir,
+			cacheDir:  cachePath,
+			source:    source,
+			isRemote:  true,
 		}
 	} else {
 		// Local path - validate and optionally copy or link
 		absSource, err := filepath.Abs(source)
 		if err != nil {
-			return "", fmt.Errorf("invalid path: %w", err)
+			return "", "", fmt.Errorf("invalid path: %w", err)
 		}
 
 		// Check if it's a git repo
 		if _, err := os.Stat(filepath.Join(absSource, ".git")); err != nil {
-			return "", fmt.Errorf("%w: %s", ErrNotARepository, absSource)
+			return "", "", fmt.Errorf("%w: %s", ErrNotARepository, absSource)
 		}
 
 		// For local repos, we clone to get an isolated working copy
 		if err := p.runGit(ctx, "", "clone", absSource, workDir); err != nil {
-			return "", fmt.Errorf("%w: %v", ErrCloneFailed, err)
+			return "", "", fmt.Errorf("%w: %v", ErrCloneFailed, err)
 		}
 
 		// Checkout specific ref if provided
 		if ref != "" {
 			if err := p.runGit(ctx, workDir, "checkout", ref); err != nil {
-				return "", fmt.Errorf("%w: %v", ErrCheckoutFailed, err)
+				return "", "", fmt.Errorf("%w: %v", ErrCheckoutFailed, err)
 			}
 		}
 
 		info = &workspaceInfo{
-			workDir:  workDir,
-			source:   absSource,
-			isRemote: false,
+			projectID: projectID,
+			workDir:   workDir,
+			source:    absSource,
+			isRemote:  false,
 		}
 	}
 
+	p.mu.Lock()
 	p.workspaceIndex[workspaceID] = info
-	return workDir, nil
+	p.mu.Unlock()
+	commit, _ := p.runGitOutput(ctx, workDir, "rev-parse", "HEAD")
+	return workDir, strings.TrimSpace(commit), nil
 }
 
 // Fetch fetches updates from remote.
@@ -577,8 +640,8 @@ func (p *LocalProvider) RemoveWorkspace(ctx context.Context, workspaceID string)
 
 // --- Internal helpers ---
 
-// getCachePath returns the cache directory path for a remote URL.
-func (p *LocalProvider) getCachePath(remoteURL string) string {
+// getProjectCachePath returns the cache directory path for a remote URL within a project's cache dir.
+func (p *LocalProvider) getProjectCachePath(projectCacheDir, remoteURL string) string {
 	// Normalize the URL to create a consistent cache path
 	normalized := p.normalizeURL(remoteURL)
 	hash := sha256.Sum256([]byte(normalized))
@@ -587,7 +650,7 @@ func (p *LocalProvider) getCachePath(remoteURL string) string {
 	// Extract repo name for readability
 	repoName := p.extractRepoName(remoteURL)
 
-	return filepath.Join(p.cacheDir, repoName+"-"+shortHash+".git")
+	return filepath.Join(projectCacheDir, repoName+"-"+shortHash+".git")
 }
 
 // normalizeURL normalizes a git URL for consistent caching.
@@ -633,11 +696,8 @@ func (p *LocalProvider) ensureCache(ctx context.Context, remoteURL, cachePath st
 			return fmt.Errorf("%w: %v", ErrCloneFailed, err)
 		}
 	} else {
-		// Update existing cache
-		if err := p.runGit(ctx, cachePath, "fetch", "--all", "--prune"); err != nil {
-			// Fetch failure is not fatal - cache might still be usable
-			// Just log and continue
-		}
+		// Update existing cache - fetch failure is not fatal, cache might still be usable
+		_ = p.runGit(ctx, cachePath, "fetch", "--all", "--prune")
 	}
 
 	return nil

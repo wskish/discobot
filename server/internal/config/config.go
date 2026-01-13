@@ -31,10 +31,8 @@ type Config struct {
 
 	// Workspaces and Git
 	WorkspaceDir string // Base directory for workspaces and git cache
-	GitDir       string // Directory for git operations (cache + working copies)
 
 	// Container runtime settings
-	ContainerRuntime     string        // "docker", "kubernetes", "cloudflare" (default: "docker")
 	ContainerImage       string        // Default container image
 	ContainerIdleTimeout time.Duration // Auto-stop containers after idle period
 
@@ -109,10 +107,8 @@ func Load() (*Config, error) {
 
 	// Workspaces and Git
 	cfg.WorkspaceDir = getEnv("WORKSPACE_DIR", "./workspaces")
-	cfg.GitDir = getEnv("GIT_DIR", "./git")
 
 	// Container runtime settings
-	cfg.ContainerRuntime = getEnv("CONTAINER_RUNTIME", "docker")
 	cfg.ContainerImage = getEnv("CONTAINER_IMAGE", DefaultContainerImage)
 	cfg.ContainerIdleTimeout = getEnvDuration("CONTAINER_IDLE_TIMEOUT", 30*time.Minute)
 

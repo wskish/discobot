@@ -4,9 +4,10 @@ import (
 	"context"
 	"net/http"
 
+	"github.com/go-chi/chi/v5"
+
 	"github.com/anthropics/octobot/server/internal/service"
 	"github.com/anthropics/octobot/server/internal/store"
-	"github.com/go-chi/chi/v5"
 )
 
 const (

@@ -187,6 +187,7 @@ export function MainContent({
 					onMinimize={panelLayout.handleBottomMinimize}
 					onMaximize={panelLayout.handleBottomMaximize}
 					messages={messages}
+					session={selectedSession}
 					sessionAgent={sessionAgent}
 					sessionWorkspace={sessionWorkspace}
 					agentTypes={agentTypes}
