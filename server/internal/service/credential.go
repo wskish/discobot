@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/anthropics/octobot/server/internal/config"
-	"github.com/anthropics/octobot/server/internal/crypto"
+	"github.com/anthropics/octobot/server/internal/encryption"
 	"github.com/anthropics/octobot/server/internal/model"
 	"github.com/anthropics/octobot/server/internal/store"
 )
@@ -61,12 +61,12 @@ type CredentialInfo struct {
 type CredentialService struct {
 	store     *store.Store
 	cfg       *config.Config
-	encryptor *crypto.Encryptor
+	encryptor *encryption.Encryptor
 }
 
 // NewCredentialService creates a new credential service
 func NewCredentialService(s *store.Store, cfg *config.Config) (*CredentialService, error) {
-	enc, err := crypto.NewEncryptor(cfg.EncryptionKey)
+	enc, err := encryption.NewEncryptor(cfg.EncryptionKey)
 	if err != nil {
 		return nil, err
 	}

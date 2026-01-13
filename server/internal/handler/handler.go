@@ -6,8 +6,9 @@ import (
 
 	"github.com/anthropics/octobot/server/internal/config"
 	"github.com/anthropics/octobot/server/internal/container"
-	"github.com/anthropics/octobot/server/internal/dispatcher"
+	"github.com/anthropics/octobot/server/internal/events"
 	"github.com/anthropics/octobot/server/internal/git"
+	"github.com/anthropics/octobot/server/internal/jobs"
 	"github.com/anthropics/octobot/server/internal/service"
 	"github.com/anthropics/octobot/server/internal/store"
 )
@@ -24,26 +25,15 @@ type Handler struct {
 	authService         *service.AuthService
 	credentialService   *service.CredentialService
 	gitService          *service.GitService
+	gitProvider         git.Provider
 	containerService    *service.ContainerService
-	jobQueue            *dispatcher.JobQueue
+	jobQueue            *jobs.Queue
+	eventBroker         *events.Broker
 	codexCallbackServer *CodexCallbackServer
 }
 
-// New creates a new Handler
-func New(s *store.Store, cfg *config.Config) *Handler {
-	return NewWithProviders(s, cfg, nil, nil)
-}
-
-// NewWithGitProvider creates a new Handler with an optional git provider.
-// If gitProvider is nil, git operations will not be available.
-func NewWithGitProvider(s *store.Store, cfg *config.Config, gitProvider git.Provider) *Handler {
-	return NewWithProviders(s, cfg, gitProvider, nil)
-}
-
-// NewWithProviders creates a new Handler with optional git and container providers.
-// If gitProvider is nil, git operations will not be available.
-// If containerRuntime is nil, container/terminal operations will not be available.
-func NewWithProviders(s *store.Store, cfg *config.Config, gitProvider git.Provider, containerRuntime container.Runtime) *Handler {
+// New creates a new Handler with the required git and container providers.
+func New(s *store.Store, cfg *config.Config, gitProvider git.Provider, containerRuntime container.Runtime, eventBroker *events.Broker) *Handler {
 	credSvc, err := service.NewCredentialService(s, cfg)
 	if err != nil {
 		// This should only fail if the encryption key is invalid
@@ -61,7 +51,7 @@ func NewWithProviders(s *store.Store, cfg *config.Config, gitProvider git.Provid
 	}
 
 	// Create job queue for background job processing
-	jobQueue := dispatcher.NewJobQueue(s)
+	jobQueue := jobs.NewQueue(s)
 
 	h := &Handler{
 		store:             s,
@@ -69,8 +59,10 @@ func NewWithProviders(s *store.Store, cfg *config.Config, gitProvider git.Provid
 		authService:       service.NewAuthService(s, cfg),
 		credentialService: credSvc,
 		gitService:        gitSvc,
+		gitProvider:       gitProvider,
 		containerService:  containerSvc,
 		jobQueue:          jobQueue,
+		eventBroker:       eventBroker,
 	}
 
 	// Create Codex callback server (will be started on first use)
@@ -100,8 +92,13 @@ func (h *Handler) DecodeJSON(r *http.Request, v any) error {
 
 // JobQueue returns the handler's job queue.
 // Used by main.go to wire up dispatcher notifications.
-func (h *Handler) JobQueue() *dispatcher.JobQueue {
+func (h *Handler) JobQueue() *jobs.Queue {
 	return h.jobQueue
+}
+
+// EventBroker returns the handler's event broker for SSE.
+func (h *Handler) EventBroker() *events.Broker {
+	return h.eventBroker
 }
 
 // Close cleans up handler resources

@@ -108,6 +108,7 @@ func (p *Provider) Create(ctx context.Context, sessionID string, opts container.
 	// Container configuration
 	containerConfig := &containerTypes.Config{
 		Image:        image,
+		Cmd:          opts.Cmd, // Use provided command or image default if empty
 		Env:          env,
 		Labels:       labels,
 		Tty:          true,
@@ -296,7 +297,7 @@ func (p *Provider) Exec(ctx context.Context, sessionID string, cmd []string, opt
 		env = append(env, fmt.Sprintf("%s=%s", k, v))
 	}
 
-	execConfig := types.ExecConfig{
+	execConfig := containerTypes.ExecOptions{
 		Cmd:          cmd,
 		AttachStdout: true,
 		AttachStderr: true,
@@ -311,7 +312,7 @@ func (p *Provider) Exec(ctx context.Context, sessionID string, cmd []string, opt
 		return nil, fmt.Errorf("%w: %v", container.ErrExecFailed, err)
 	}
 
-	resp, err := p.client.ContainerExecAttach(ctx, execCreate.ID, types.ExecStartCheck{})
+	resp, err := p.client.ContainerExecAttach(ctx, execCreate.ID, containerTypes.ExecStartOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", container.ErrExecFailed, err)
 	}
@@ -364,7 +365,7 @@ func (p *Provider) Attach(ctx context.Context, sessionID string, opts container.
 		env = append(env, fmt.Sprintf("%s=%s", k, v))
 	}
 
-	execConfig := types.ExecConfig{
+	execConfig := containerTypes.ExecOptions{
 		Cmd:          cmd,
 		AttachStdin:  true,
 		AttachStdout: true,
@@ -378,7 +379,7 @@ func (p *Provider) Attach(ctx context.Context, sessionID string, opts container.
 		return nil, fmt.Errorf("%w: %v", container.ErrAttachFailed, err)
 	}
 
-	resp, err := p.client.ContainerExecAttach(ctx, execCreate.ID, types.ExecStartCheck{
+	resp, err := p.client.ContainerExecAttach(ctx, execCreate.ID, containerTypes.ExecStartOptions{
 		Tty: true,
 	})
 	if err != nil {

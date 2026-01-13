@@ -1,5 +1,5 @@
-// Package crypto provides encryption utilities for secure credential storage.
-package crypto
+// Package encryption provides encryption utilities for secure credential storage.
+package encryption
 
 import (
 	"crypto/aes"

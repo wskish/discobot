@@ -12,12 +12,13 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/anthropics/octobot/server/internal/config"
-	"github.com/anthropics/octobot/server/internal/model"
-	"github.com/anthropics/octobot/server/internal/store"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/github"
 	"golang.org/x/oauth2/google"
+
+	"github.com/anthropics/octobot/server/internal/config"
+	"github.com/anthropics/octobot/server/internal/model"
+	"github.com/anthropics/octobot/server/internal/store"
 )
 
 // AuthService handles authentication operations
@@ -242,7 +243,7 @@ func (s *AuthService) getOAuthConfig(provider, redirectURL string) (*oauth2.Conf
 		}
 	case "google":
 		if s.googleConfig == nil {
-			return nil, fmt.Errorf("Google OAuth not configured")
+			return nil, fmt.Errorf("google OAuth not configured")
 		}
 		config = &oauth2.Config{
 			ClientID:     s.googleConfig.ClientID,
@@ -306,7 +307,7 @@ func (s *AuthService) getGitHubUser(ctx context.Context, token *oauth2.Token) (*
 	}, nil
 }
 
-func (s *AuthService) getGitHubEmail(ctx context.Context, client *http.Client) (string, error) {
+func (s *AuthService) getGitHubEmail(_ context.Context, client *http.Client) (string, error) {
 	resp, err := client.Get("https://api.github.com/user/emails")
 	if err != nil {
 		return "", fmt.Errorf("failed to get emails: %w", err)
@@ -350,7 +351,7 @@ func (s *AuthService) getGoogleUser(ctx context.Context, token *oauth2.Token) (*
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("Google API error: %s", string(body))
+		return nil, fmt.Errorf("google API error: %s", string(body))
 	}
 
 	var googleUser struct {

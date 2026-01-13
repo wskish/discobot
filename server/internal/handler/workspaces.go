@@ -1,22 +1,17 @@
 package handler
 
 import (
-	"log"
 	"net/http"
+
+	"github.com/go-chi/chi/v5"
 
 	"github.com/anthropics/octobot/server/internal/middleware"
 	"github.com/anthropics/octobot/server/internal/service"
-	"github.com/go-chi/chi/v5"
 )
 
 // workspaceService returns a workspace service (created on demand)
 func (h *Handler) workspaceService() *service.WorkspaceService {
-	return service.NewWorkspaceService(h.store)
-}
-
-// sessionService returns a session service (created on demand)
-func (h *Handler) sessionService() *service.SessionService {
-	return service.NewSessionService(h.store)
+	return service.NewWorkspaceService(h.store, h.gitProvider, h.eventBroker)
 }
 
 // ListWorkspaces returns all workspaces for a project
@@ -55,6 +50,12 @@ func (h *Handler) CreateWorkspace(w http.ResponseWriter, r *http.Request) {
 	workspace, err := h.workspaceService().CreateWorkspace(r.Context(), projectID, req.Path, req.SourceType)
 	if err != nil {
 		h.Error(w, http.StatusInternalServerError, "Failed to create workspace")
+		return
+	}
+
+	// Enqueue workspace initialization job
+	if err := h.jobQueue.EnqueueWorkspaceInit(r.Context(), projectID, workspace.ID); err != nil {
+		h.Error(w, http.StatusInternalServerError, "Failed to enqueue workspace initialization")
 		return
 	}
 
@@ -106,58 +107,4 @@ func (h *Handler) DeleteWorkspace(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.JSON(w, http.StatusOK, map[string]bool{"success": true})
-}
-
-// ListSessionsByWorkspace returns all sessions for a workspace
-func (h *Handler) ListSessionsByWorkspace(w http.ResponseWriter, r *http.Request) {
-	workspaceID := chi.URLParam(r, "workspaceId")
-
-	sessions, err := h.sessionService().ListSessionsByWorkspace(r.Context(), workspaceID)
-	if err != nil {
-		h.Error(w, http.StatusInternalServerError, "Failed to list sessions")
-		return
-	}
-
-	h.JSON(w, http.StatusOK, map[string]any{"sessions": sessions})
-}
-
-// CreateSession creates a new session in a workspace
-func (h *Handler) CreateSession(w http.ResponseWriter, r *http.Request) {
-	workspaceID := chi.URLParam(r, "workspaceId")
-
-	var req struct {
-		Name    string `json:"name"`
-		AgentID string `json:"agentId"`
-	}
-	if err := h.DecodeJSON(r, &req); err != nil {
-		h.Error(w, http.StatusBadRequest, "Invalid request body")
-		return
-	}
-	if req.Name == "" {
-		h.Error(w, http.StatusBadRequest, "Name is required")
-		return
-	}
-
-	// Get workspace to get the path for container mounting
-	workspace, err := h.workspaceService().GetWorkspace(r.Context(), workspaceID)
-	if err != nil {
-		h.Error(w, http.StatusNotFound, "Workspace not found")
-		return
-	}
-
-	session, err := h.sessionService().CreateSession(r.Context(), workspaceID, req.Name, req.AgentID)
-	if err != nil {
-		h.Error(w, http.StatusInternalServerError, "Failed to create session")
-		return
-	}
-
-	// Enqueue container creation job (processed by dispatcher)
-	if h.jobQueue != nil {
-		if err := h.jobQueue.EnqueueContainerCreate(r.Context(), session.ID, workspace.Path); err != nil {
-			// Log but don't fail the request - container can be created on-demand
-			log.Printf("Failed to enqueue container create job for session %s: %v", session.ID, err)
-		}
-	}
-
-	h.JSON(w, http.StatusCreated, session)
 }

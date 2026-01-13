@@ -15,19 +15,22 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-chi/chi/v5"
+	chimiddleware "github.com/go-chi/chi/v5/middleware"
+
 	"github.com/anthropics/octobot/server/internal/config"
 	"github.com/anthropics/octobot/server/internal/container"
 	"github.com/anthropics/octobot/server/internal/container/mock"
 	"github.com/anthropics/octobot/server/internal/database"
 	"github.com/anthropics/octobot/server/internal/dispatcher"
+	"github.com/anthropics/octobot/server/internal/events"
 	"github.com/anthropics/octobot/server/internal/git"
 	"github.com/anthropics/octobot/server/internal/handler"
+	"github.com/anthropics/octobot/server/internal/jobs"
 	"github.com/anthropics/octobot/server/internal/middleware"
 	"github.com/anthropics/octobot/server/internal/model"
 	"github.com/anthropics/octobot/server/internal/service"
 	"github.com/anthropics/octobot/server/internal/store"
-	"github.com/go-chi/chi/v5"
-	chimiddleware "github.com/go-chi/chi/v5/middleware"
 )
 
 // TestServer wraps a test HTTP server with helpers
@@ -41,6 +44,7 @@ type TestServer struct {
 	ContainerRuntime container.Runtime
 	MockContainer    *mock.Provider // Access to mock for test assertions
 	Dispatcher       *dispatcher.Service
+	EventPoller      *events.Poller
 	T                *testing.T
 }
 
@@ -72,7 +76,7 @@ func NewTestServer(t *testing.T) *TestServer {
 		driver = "sqlite"
 	}
 
-	gitDir := t.TempDir()
+	workspaceDir := t.TempDir()
 	cfg := &config.Config{
 		Port:           8080,
 		CORSOrigins:    []string{"*"},
@@ -81,8 +85,7 @@ func NewTestServer(t *testing.T) *TestServer {
 		AuthEnabled:    true, // Enable auth for testing the full auth flow
 		SessionSecret:  []byte("test-session-secret-32-bytes-long!!"),
 		EncryptionKey:  []byte("01234567890123456789012345678901"), // 32 bytes
-		WorkspaceDir:   t.TempDir(),
-		GitDir:         gitDir,
+		WorkspaceDir:   workspaceDir,
 	}
 
 	db, err := database.New(cfg)
@@ -102,7 +105,7 @@ func NewTestServer(t *testing.T) *TestServer {
 	s := store.New(db.DB)
 
 	// Create git provider
-	gitProvider, err := git.NewLocalProvider(gitDir)
+	gitProvider, err := git.NewLocalProvider(workspaceDir)
 	if err != nil {
 		t.Fatalf("Failed to create git provider: %v", err)
 	}
@@ -110,20 +113,33 @@ func NewTestServer(t *testing.T) *TestServer {
 	// Create mock container runtime
 	mockContainer := mock.NewProvider()
 
-	h := handler.NewWithProviders(s, cfg, gitProvider, mockContainer)
+	// Create event poller and broker for SSE
+	eventPollerCfg := events.DefaultPollerConfig()
+	eventPollerCfg.PollInterval = 10 * time.Millisecond // Fast polling for tests
+	eventPoller := events.NewPoller(s, eventPollerCfg)
+	if err := eventPoller.Start(context.Background()); err != nil {
+		t.Fatalf("Failed to start event poller: %v", err)
+	}
+	eventBroker := events.NewBroker(s, eventPoller)
+
+	h := handler.New(s, cfg, gitProvider, mockContainer, eventBroker)
 
 	// Create and start dispatcher for job processing
 	cfg.DispatcherEnabled = true
-	cfg.DispatcherPollInterval = 10 * time.Millisecond   // Fast polling for tests
+	cfg.DispatcherPollInterval = 10 * time.Millisecond // Fast polling for tests
 	cfg.DispatcherHeartbeatInterval = 50 * time.Millisecond
 	cfg.DispatcherHeartbeatTimeout = 500 * time.Millisecond
 	cfg.DispatcherJobTimeout = 30 * time.Second
 	cfg.DispatcherStaleJobTimeout = 1 * time.Minute
 
-	containerSvc := service.NewContainerService(s, mockContainer, cfg)
+	workspaceSvc := service.NewWorkspaceService(s, gitProvider, eventBroker)
+
+	sessionSvc := service.NewSessionService(s)
+	sessionSvc.SetRuntimeDependencies(gitProvider, mockContainer, eventBroker)
+
 	disp := dispatcher.NewService(s, cfg)
-	disp.RegisterExecutor(dispatcher.NewContainerCreateExecutor(containerSvc))
-	disp.RegisterExecutor(dispatcher.NewContainerDestroyExecutor(containerSvc))
+	disp.RegisterExecutor(jobs.NewWorkspaceInitExecutor(workspaceSvc))
+	disp.RegisterExecutor(jobs.NewSessionInitExecutor(sessionSvc))
 	disp.Start(context.Background())
 
 	// Wire up job queue notification for immediate execution
@@ -142,11 +158,13 @@ func NewTestServer(t *testing.T) *TestServer {
 		ContainerRuntime: mockContainer,
 		MockContainer:    mockContainer,
 		Dispatcher:       disp,
+		EventPoller:      eventPoller,
 		T:                t,
 	}
 
 	t.Cleanup(func() {
 		disp.Stop()
+		eventPoller.Stop()
 		server.Close()
 		db.Close()
 	})
@@ -241,6 +259,7 @@ func setupRouter(s *store.Store, cfg *config.Config, h *handler.Handler) *chi.Mu
 
 			r.Get("/files/{fileId}", h.GetFile)
 			r.Get("/suggestions", h.GetSuggestions)
+			r.Get("/events", h.Events)
 
 			r.Route("/credentials", func(r chi.Router) {
 				r.Get("/", h.ListCredentials)
@@ -274,7 +293,7 @@ func setupRouter(s *store.Store, cfg *config.Config, h *handler.Handler) *chi.Mu
 func NewTestServerNoAuth(t *testing.T) *TestServer {
 	t.Helper()
 
-	gitDir := t.TempDir()
+	workspaceDir := t.TempDir()
 	dbDir := t.TempDir()
 	cfg := &config.Config{
 		Port:           8080,
@@ -284,8 +303,7 @@ func NewTestServerNoAuth(t *testing.T) *TestServer {
 		AuthEnabled:    false, // Disable auth - use anonymous user
 		SessionSecret:  []byte("test-session-secret-32-bytes-long!!"),
 		EncryptionKey:  []byte("01234567890123456789012345678901"),
-		WorkspaceDir:   t.TempDir(),
-		GitDir:         gitDir,
+		WorkspaceDir:   workspaceDir,
 	}
 
 	db, err := database.New(cfg)
@@ -305,7 +323,7 @@ func NewTestServerNoAuth(t *testing.T) *TestServer {
 	s := store.New(db.DB)
 
 	// Create git provider
-	gitProvider, err := git.NewLocalProvider(gitDir)
+	gitProvider, err := git.NewLocalProvider(workspaceDir)
 	if err != nil {
 		t.Fatalf("Failed to create git provider: %v", err)
 	}
@@ -313,20 +331,33 @@ func NewTestServerNoAuth(t *testing.T) *TestServer {
 	// Create mock container runtime
 	mockContainer := mock.NewProvider()
 
-	h := handler.NewWithProviders(s, cfg, gitProvider, mockContainer)
+	// Create event poller and broker for SSE
+	eventPollerCfg := events.DefaultPollerConfig()
+	eventPollerCfg.PollInterval = 10 * time.Millisecond // Fast polling for tests
+	eventPoller := events.NewPoller(s, eventPollerCfg)
+	if err := eventPoller.Start(context.Background()); err != nil {
+		t.Fatalf("Failed to start event poller: %v", err)
+	}
+	eventBroker := events.NewBroker(s, eventPoller)
+
+	h := handler.New(s, cfg, gitProvider, mockContainer, eventBroker)
 
 	// Create and start dispatcher for job processing
 	cfg.DispatcherEnabled = true
-	cfg.DispatcherPollInterval = 10 * time.Millisecond   // Fast polling for tests
+	cfg.DispatcherPollInterval = 10 * time.Millisecond // Fast polling for tests
 	cfg.DispatcherHeartbeatInterval = 50 * time.Millisecond
 	cfg.DispatcherHeartbeatTimeout = 500 * time.Millisecond
 	cfg.DispatcherJobTimeout = 30 * time.Second
 	cfg.DispatcherStaleJobTimeout = 1 * time.Minute
 
-	containerSvc := service.NewContainerService(s, mockContainer, cfg)
+	workspaceSvc := service.NewWorkspaceService(s, gitProvider, eventBroker)
+
+	sessionSvc := service.NewSessionService(s)
+	sessionSvc.SetRuntimeDependencies(gitProvider, mockContainer, eventBroker)
+
 	disp := dispatcher.NewService(s, cfg)
-	disp.RegisterExecutor(dispatcher.NewContainerCreateExecutor(containerSvc))
-	disp.RegisterExecutor(dispatcher.NewContainerDestroyExecutor(containerSvc))
+	disp.RegisterExecutor(jobs.NewWorkspaceInitExecutor(workspaceSvc))
+	disp.RegisterExecutor(jobs.NewSessionInitExecutor(sessionSvc))
 	disp.Start(context.Background())
 
 	// Wire up job queue notification for immediate execution
@@ -345,11 +376,13 @@ func NewTestServerNoAuth(t *testing.T) *TestServer {
 		ContainerRuntime: mockContainer,
 		MockContainer:    mockContainer,
 		Dispatcher:       disp,
+		EventPoller:      eventPoller,
 		T:                t,
 	}
 
 	t.Cleanup(func() {
 		disp.Stop()
+		eventPoller.Stop()
 		server.Close()
 		db.Close()
 	})
@@ -450,6 +483,7 @@ func (ts *TestServer) CreateTestSession(workspace *model.Workspace, name string)
 	ts.T.Helper()
 
 	session := &model.Session{
+		ProjectID:   workspace.ProjectID,
 		WorkspaceID: workspace.ID,
 		Name:        name,
 		Status:      "open",
