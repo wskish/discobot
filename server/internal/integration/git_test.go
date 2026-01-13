@@ -377,8 +377,8 @@ func TestGitCheckout(t *testing.T) {
 	AssertStatus(t, resp, http.StatusOK)
 }
 
-func TestGitLocalProviderCaching(t *testing.T) {
-	// This test verifies the caching behavior of the local provider
+func TestGitWorkspaceIsolation(t *testing.T) {
+	// This test verifies that workspaces are isolated from each other
 	gitDir := t.TempDir()
 	provider, err := git.NewLocalProvider(gitDir)
 	if err != nil {

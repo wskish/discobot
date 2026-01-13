@@ -37,17 +37,6 @@ func (s *GitService) EnsureWorkspaceRepo(ctx context.Context, workspaceID string
 	return s.provider.EnsureWorkspace(ctx, ws.ProjectID, workspaceID, ws.Path, "")
 }
 
-// EnsureWorkspaceRepoAtRef ensures the workspace's repository at a specific ref.
-// Returns the working directory path and the current HEAD commit SHA.
-func (s *GitService) EnsureWorkspaceRepoAtRef(ctx context.Context, workspaceID, ref string) (string, string, error) {
-	ws, err := s.store.GetWorkspaceByID(ctx, workspaceID)
-	if err != nil {
-		return "", "", fmt.Errorf("workspace not found: %w", err)
-	}
-
-	return s.provider.EnsureWorkspace(ctx, ws.ProjectID, workspaceID, ws.Path, ref)
-}
-
 // Fetch fetches updates from remote for a workspace.
 func (s *GitService) Fetch(ctx context.Context, workspaceID string) error {
 	return s.provider.Fetch(ctx, workspaceID)

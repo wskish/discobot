@@ -24,14 +24,13 @@ var (
 // Implementations can be local (using git CLI) or remote (using a service).
 type Provider interface {
 	// EnsureWorkspace ensures a workspace has a working copy ready.
-	// For git URLs: clones to cache, then clones from cache to workspace dir.
-	// For local paths: validates the path exists and is a git repo.
+	// For git URLs: clones directly to the workspace directory.
+	// For local paths: clones to get an isolated working copy.
 	// projectID scopes the clone to a specific project's directory.
 	// Returns the absolute path to the working directory and the current HEAD commit SHA.
 	EnsureWorkspace(ctx context.Context, projectID, workspaceID, source, ref string) (workDir string, commit string, err error)
 
 	// Fetch fetches updates from remote to the workspace.
-	// For cached repos, this updates both the cache and the working copy.
 	Fetch(ctx context.Context, workspaceID string) error
 
 	// Checkout checks out a specific ref (branch, tag, or commit SHA).
@@ -69,7 +68,6 @@ type Provider interface {
 	GetWorkDir(ctx context.Context, workspaceID string) string
 
 	// RemoveWorkspace removes the workspace working directory.
-	// Does not remove the cached bare repo.
 	RemoveWorkspace(ctx context.Context, workspaceID string) error
 }
 
