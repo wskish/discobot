@@ -23,6 +23,7 @@ Thumbs.db
 
 # Workspaces (git clones)
 workspaces/
+git/
 
 # Air build errors
 build-errors.log

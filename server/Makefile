@@ -41,9 +41,9 @@ gen-secret:
 fmt:
 	go fmt ./...
 
-# Lint code (requires golangci-lint)
+# Lint code (uses go tool directive from go.mod)
 lint:
-	golangci-lint run
+	go tool golangci-lint run
 
 # Download dependencies
 deps:

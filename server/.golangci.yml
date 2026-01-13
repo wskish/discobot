@@ -1,0 +1,107 @@
+version: "2"
+run:
+  modules-download-mode: readonly
+linters:
+  enable:
+    - gosec
+    - misspell
+    - prealloc
+    - revive
+    - unconvert
+    - unparam
+  settings:
+    gosec:
+      excludes:
+        - G104
+        - G101
+    misspell:
+      locale: US
+    revive:
+      rules:
+        - name: blank-imports
+        - name: context-as-argument
+        - name: context-keys-type
+        - name: dot-imports
+        - name: error-return
+        - name: error-strings
+        - name: error-naming
+        - name: exported
+          disabled: true
+        - name: increment-decrement
+        - name: var-naming
+        - name: package-comments
+          disabled: true
+        - name: range
+        - name: receiver-naming
+        - name: time-naming
+        - name: unexported-return
+        - name: indent-error-flow
+        - name: errorf
+  exclusions:
+    generated: lax
+    rules:
+      - linters:
+          - errcheck
+          - gosec
+          - unparam
+        path: _test\.go
+      - linters:
+          - errcheck
+        path: testutil\.go
+      - path: _test\.go
+        text: dot-imports
+      - linters:
+          - errcheck
+        text: Error return value of .*(Close|Shutdown).*is not checked
+      - linters:
+          - errcheck
+        path: internal/handler/
+        text: Error return value of .*(Write|Fprint|Fprintf|Encode).*is not checked
+      - linters:
+          - errcheck
+        path: cmd/server/
+        text: Error return value of .*Write.*is not checked
+      - linters:
+          - errcheck
+        path: internal/container/
+        text: Error return value of .*(Copy|Resize).*is not checked
+      - linters:
+          - staticcheck
+        path: internal/container/
+        text: SA1019.*deprecated
+      - linters:
+          - gosec
+        path: internal/git/
+        text: G301|G306
+      - linters:
+          - gosec
+        path: internal/git/
+        text: G304
+      - linters:
+          - gosec
+        path: internal/container/
+        text: G115
+      - linters:
+          - prealloc
+        path: internal/
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/anthropics/octobot
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
