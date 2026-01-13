@@ -98,10 +98,13 @@ func (h *Handler) UpdateWorkspace(w http.ResponseWriter, r *http.Request) {
 }
 
 // DeleteWorkspace deletes a workspace
+// Query params:
+//   - deleteFiles: if "true", also delete the workspace files from disk
 func (h *Handler) DeleteWorkspace(w http.ResponseWriter, r *http.Request) {
 	workspaceID := chi.URLParam(r, "workspaceId")
+	deleteFiles := r.URL.Query().Get("deleteFiles") == "true"
 
-	if err := h.workspaceService().DeleteWorkspace(r.Context(), workspaceID); err != nil {
+	if err := h.workspaceService().DeleteWorkspace(r.Context(), workspaceID, deleteFiles); err != nil {
 		h.Error(w, http.StatusInternalServerError, "Failed to delete workspace")
 		return
 	}

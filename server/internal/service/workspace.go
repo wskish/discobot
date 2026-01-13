@@ -21,6 +21,7 @@ type Workspace struct {
 	Status       string     `json:"status"`
 	ErrorMessage string     `json:"errorMessage,omitempty"`
 	Commit       string     `json:"commit,omitempty"`
+	WorkDir      string     `json:"workDir,omitempty"`
 	Sessions     []*Session `json:"sessions"`
 }
 
@@ -118,11 +119,24 @@ func (s *WorkspaceService) mapWorkspace(ws *model.Workspace) *Workspace {
 	if ws.Commit != nil {
 		result.Commit = *ws.Commit
 	}
+	// Get working directory path from git provider if available
+	if s.gitProvider != nil {
+		result.WorkDir = s.gitProvider.GetWorkDir(context.Background(), ws.ID)
+	}
 	return result
 }
 
-// DeleteWorkspace deletes a workspace
-func (s *WorkspaceService) DeleteWorkspace(ctx context.Context, workspaceID string) error {
+// DeleteWorkspace deletes a workspace. If deleteFiles is true, also removes the
+// working directory from disk.
+func (s *WorkspaceService) DeleteWorkspace(ctx context.Context, workspaceID string, deleteFiles bool) error {
+	// Delete files first if requested (before removing DB record)
+	if deleteFiles && s.gitProvider != nil {
+		if err := s.gitProvider.RemoveWorkspace(ctx, workspaceID); err != nil {
+			log.Printf("Warning: failed to remove workspace files for %s: %v", workspaceID, err)
+			// Continue with DB deletion even if file deletion fails
+		}
+	}
+
 	return s.store.DeleteWorkspace(ctx, workspaceID)
 }
 

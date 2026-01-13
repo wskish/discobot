@@ -3,6 +3,7 @@
 import * as React from "react";
 import { AddAgentDialog } from "@/components/ide/add-agent-dialog";
 import { AddWorkspaceDialog } from "@/components/ide/add-workspace-dialog";
+import { DeleteWorkspaceDialog } from "@/components/ide/delete-workspace-dialog";
 import { Header, LeftSidebar, MainContent } from "@/components/ide/layout";
 import { SystemRequirementsDialog } from "@/components/ide/system-requirements-dialog";
 import { WelcomeModal } from "@/components/ide/welcome-modal";
@@ -110,6 +111,11 @@ export default function IDEChatPage() {
 	// Track pending agent type when user needs to configure credentials first
 	const [pendingAgentType, setPendingAgentType] =
 		React.useState<SupportedAgentType | null>(null);
+	// Delete workspace dialog state
+	const [deleteWorkspaceDialogOpen, setDeleteWorkspaceDialogOpen] =
+		React.useState(false);
+	const [workspaceToDelete, setWorkspaceToDelete] =
+		React.useState<Workspace | null>(null);
 
 	// Handle credentials dialog close - create pending agent if credentials were configured
 	const handleCredentialsOpenChange = React.useCallback(
@@ -199,8 +205,17 @@ export default function IDEChatPage() {
 		}
 	};
 
-	const handleDeleteWorkspace = async (workspaceId: string) => {
-		await deleteWorkspace(workspaceId);
+	const handleDeleteWorkspace = (workspace: Workspace) => {
+		setWorkspaceToDelete(workspace);
+		setDeleteWorkspaceDialogOpen(true);
+	};
+
+	const handleConfirmDeleteWorkspace = async (deleteFiles: boolean) => {
+		if (!workspaceToDelete) return;
+
+		const workspaceId = workspaceToDelete.id;
+		await deleteWorkspace(workspaceId, deleteFiles);
+
 		// Clear selection if the deleted workspace was preselected
 		if (preselectedWorkspaceId === workspaceId) {
 			setPreselectedWorkspaceId(null);
@@ -209,6 +224,9 @@ export default function IDEChatPage() {
 		if (selectedSession?.workspaceId === workspaceId) {
 			setSelectedSession(null);
 		}
+
+		setDeleteWorkspaceDialogOpen(false);
+		setWorkspaceToDelete(null);
 	};
 
 	const handleAddOrEditAgent = async (agentData: CreateAgentRequest) => {
@@ -350,6 +368,13 @@ export default function IDEChatPage() {
 				editingAgent={dialogs.editingAgent}
 				onOpenCredentials={openCredentialsForProvider}
 				preselectedAgentTypeId={dialogs.preselectedAgentTypeId}
+			/>
+
+			<DeleteWorkspaceDialog
+				open={deleteWorkspaceDialogOpen}
+				onOpenChange={setDeleteWorkspaceDialogOpen}
+				workspace={workspaceToDelete}
+				onConfirm={handleConfirmDeleteWorkspace}
 			/>
 
 			<SystemRequirementsDialog

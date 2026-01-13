@@ -54,7 +54,7 @@ interface SidebarTreeProps {
 	selectedSessionId: string | null;
 	onAddWorkspace: () => void;
 	onAddSession: (workspaceId: string) => void;
-	onDeleteWorkspace: (workspaceId: string) => void;
+	onDeleteWorkspace: (workspace: Workspace) => void;
 	className?: string;
 }
 
@@ -147,7 +147,7 @@ function WorkspaceNode({
 	selectedSessionId: string | null;
 	showClosed: boolean;
 	onAddSession: (workspaceId: string) => void;
-	onDeleteWorkspace: (workspaceId: string) => void;
+	onDeleteWorkspace: (workspace: Workspace) => void;
 }) {
 	const isExpanded = expandedIds.has(workspace.id);
 	const [menuOpen, setMenuOpen] = React.useState(false);
@@ -164,17 +164,28 @@ function WorkspaceNode({
 		<div>
 			{/* biome-ignore lint/a11y/useSemanticElements: Complex interactive pattern with nested action button */}
 			<div
-				className="group flex items-center px-2 py-1 hover:bg-sidebar-accent cursor-pointer transition-colors"
-				onClick={() => toggleExpand(workspace.id)}
-				onKeyDown={(e) => e.key === "Enter" && toggleExpand(workspace.id)}
+				className={cn(
+					"group flex items-center px-2 py-1 hover:bg-sidebar-accent transition-colors",
+					visibleSessions.length > 1 && "cursor-pointer",
+				)}
+				onClick={() => visibleSessions.length > 1 && toggleExpand(workspace.id)}
+				onKeyDown={(e) =>
+					e.key === "Enter" &&
+					visibleSessions.length > 1 &&
+					toggleExpand(workspace.id)
+				}
 				role="button"
 				tabIndex={0}
 			>
 				<div className="flex items-center gap-1.5 min-w-0 flex-1">
-					{isExpanded ? (
-						<ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+					{visibleSessions.length > 1 ? (
+						isExpanded ? (
+							<ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+						) : (
+							<ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+						)
 					) : (
-						<ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+						<span className="w-3.5 shrink-0" />
 					)}
 					{getWorkspaceStatusIndicator(workspace.status) ??
 						(workspace.sourceType === "git" ? (
@@ -218,7 +229,7 @@ function WorkspaceNode({
 						</DropdownMenuTrigger>
 						<DropdownMenuContent align="end" className="w-32">
 							<DropdownMenuItem
-								onClick={() => onDeleteWorkspace(workspace.id)}
+								onClick={() => onDeleteWorkspace(workspace)}
 								className="text-destructive"
 							>
 								Delete
@@ -227,7 +238,7 @@ function WorkspaceNode({
 					</DropdownMenu>
 				</div>
 			</div>
-			{isExpanded && (
+			{(visibleSessions.length <= 1 || isExpanded) && (
 				<div className="ml-3">
 					{visibleSessions.map((session) => (
 						<SessionNode

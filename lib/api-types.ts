@@ -50,6 +50,8 @@ export interface Workspace {
 	errorMessage?: string;
 	/** Current commit SHA (if git workspace) */
 	commit?: string;
+	/** Working directory path on disk (if initialized) */
+	workDir?: string;
 	sessions: Session[];
 }
 

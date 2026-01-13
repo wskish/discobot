@@ -103,8 +103,9 @@ class ApiClient {
 		});
 	}
 
-	async deleteWorkspace(id: string): Promise<void> {
-		await this.fetch(`/workspaces/${id}`, { method: "DELETE" });
+	async deleteWorkspace(id: string, deleteFiles = false): Promise<void> {
+		const params = deleteFiles ? "?deleteFiles=true" : "";
+		await this.fetch(`/workspaces/${id}${params}`, { method: "DELETE" });
 	}
 
 	// Sessions

@@ -15,8 +15,8 @@ export function useWorkspaces() {
 		return workspace;
 	};
 
-	const deleteWorkspace = async (id: string) => {
-		await api.deleteWorkspace(id);
+	const deleteWorkspace = async (id: string, deleteFiles = false) => {
+		await api.deleteWorkspace(id, deleteFiles);
 		mutate();
 	};
 
