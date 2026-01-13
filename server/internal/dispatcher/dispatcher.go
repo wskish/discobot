@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/anthropics/octobot/server/internal/config"
+	"github.com/anthropics/octobot/server/internal/jobs"
 	"github.com/anthropics/octobot/server/internal/model"
 	"github.com/anthropics/octobot/server/internal/store"
 )
@@ -20,10 +21,10 @@ type Service struct {
 	serverID string
 
 	// Registered executors by job type
-	executors map[model.JobType]JobExecutor
+	executors map[jobs.JobType]JobExecutor
 
 	// Concurrency tracking per job type
-	runningJobs   map[model.JobType]int
+	runningJobs   map[jobs.JobType]int
 	runningJobsMu sync.Mutex
 
 	// Leadership state
@@ -46,8 +47,8 @@ func NewService(s *store.Store, cfg *config.Config) *Service {
 		store:       s,
 		cfg:         cfg,
 		serverID:    uuid.New().String(),
-		executors:   make(map[model.JobType]JobExecutor),
-		runningJobs: make(map[model.JobType]int),
+		executors:   make(map[jobs.JobType]JobExecutor),
+		runningJobs: make(map[jobs.JobType]int),
 		notifyCh:    make(chan struct{}, 100), // Buffered to avoid blocking enqueuers
 	}
 }
@@ -163,6 +164,14 @@ func (d *Service) tryAcquireLeadership() {
 	)
 	if err != nil {
 		log.Printf("Leader election error: %v", err)
+		// On error, we can't confirm we own the lock, so stop acting as leader
+		d.isLeaderMu.Lock()
+		wasLeader := d.isLeader
+		d.isLeader = false
+		d.isLeaderMu.Unlock()
+		if wasLeader {
+			log.Printf("Relinquished leadership due to error (server: %s)", d.serverID)
+		}
 		return
 	}
 
@@ -224,7 +233,7 @@ func (d *Service) processAvailableJobs() {
 			return // No jobs available
 		}
 
-		jobType := model.JobType(job.Type)
+		jobType := jobs.JobType(job.Type)
 
 		// Increment running count for this job type
 		d.runningJobsMu.Lock()
@@ -233,7 +242,7 @@ func (d *Service) processAvailableJobs() {
 
 		// Process job in goroutine
 		d.wg.Add(1)
-		go func(j *model.Job, jt model.JobType) {
+		go func(j *model.Job, jt jobs.JobType) {
 			defer d.wg.Done()
 			defer d.decrementRunning(jt)
 			d.executeJob(j)
@@ -261,7 +270,7 @@ func (d *Service) getAvailableJobTypes() []string {
 func (d *Service) executeJob(job *model.Job) {
 	log.Printf("Processing job %s (type: %s)", job.ID, job.Type)
 
-	executor, ok := d.executors[model.JobType(job.Type)]
+	executor, ok := d.executors[jobs.JobType(job.Type)]
 	if !ok {
 		errMsg := "no executor registered for job type"
 		log.Printf("Job %s failed: %s", job.ID, errMsg)
@@ -291,7 +300,7 @@ func (d *Service) executeJob(job *model.Job) {
 }
 
 // decrementRunning decrements the running job count for a type.
-func (d *Service) decrementRunning(jobType model.JobType) {
+func (d *Service) decrementRunning(jobType jobs.JobType) {
 	d.runningJobsMu.Lock()
 	d.runningJobs[jobType]--
 	d.runningJobsMu.Unlock()

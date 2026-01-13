@@ -18,14 +18,6 @@ const (
 	JobStatusFailed    JobStatus = "failed"
 )
 
-// JobType represents the type of job.
-type JobType string
-
-const (
-	JobTypeContainerCreate  JobType = "container_create"
-	JobTypeContainerDestroy JobType = "container_destroy"
-)
-
 // Job represents a background job in the queue.
 type Job struct {
 	ID          string          `gorm:"primaryKey;type:text" json:"id"`
@@ -59,15 +51,4 @@ func (j *Job) BeforeCreate(tx *gorm.DB) error {
 		j.Status = string(JobStatusPending)
 	}
 	return nil
-}
-
-// ContainerCreatePayload is the payload for container_create jobs.
-type ContainerCreatePayload struct {
-	SessionID     string `json:"session_id"`
-	WorkspacePath string `json:"workspace_path"`
-}
-
-// ContainerDestroyPayload is the payload for container_destroy jobs.
-type ContainerDestroyPayload struct {
-	SessionID string `json:"session_id"`
 }
