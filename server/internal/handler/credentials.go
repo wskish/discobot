@@ -6,10 +6,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-chi/chi/v5"
+
 	"github.com/anthropics/octobot/server/internal/middleware"
 	"github.com/anthropics/octobot/server/internal/oauth"
 	"github.com/anthropics/octobot/server/internal/service"
-	"github.com/go-chi/chi/v5"
 )
 
 // CreateCredentialRequest is the request body for creating/updating a credential

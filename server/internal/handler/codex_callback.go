@@ -29,15 +29,14 @@ type pendingCodexAuth struct {
 
 // CodexCallbackServer handles the OAuth callback on localhost:1455
 type CodexCallbackServer struct {
-	handler           *Handler
-	server            *http.Server
-	listener          net.Listener
-	mu                sync.Mutex
-	pending           map[string]*pendingCodexAuth // state -> auth info
-	running           bool
-	startOnce         sync.Once
-	cleanupTicker     *time.Ticker
-	cleanupDone       chan struct{}
+	handler       *Handler
+	server        *http.Server
+	listener      net.Listener
+	mu            sync.Mutex
+	pending       map[string]*pendingCodexAuth // state -> auth info
+	running       bool
+	cleanupTicker *time.Ticker
+	cleanupDone   chan struct{}
 }
 
 // NewCodexCallbackServer creates a new callback server

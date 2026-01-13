@@ -41,39 +41,6 @@ func TestGeneratePKCE_Unique(t *testing.T) {
 	}
 }
 
-func TestVerifyPKCE(t *testing.T) {
-	pkce, err := GeneratePKCE()
-	if err != nil {
-		t.Fatalf("GeneratePKCE() error = %v", err)
-	}
-
-	// Valid verification
-	if !VerifyPKCE(pkce.CodeVerifier, pkce.CodeChallenge) {
-		t.Error("VerifyPKCE() should return true for valid verifier/challenge pair")
-	}
-
-	// Invalid verification - wrong verifier
-	if VerifyPKCE("wrong-verifier", pkce.CodeChallenge) {
-		t.Error("VerifyPKCE() should return false for wrong verifier")
-	}
-
-	// Invalid verification - wrong challenge
-	if VerifyPKCE(pkce.CodeVerifier, "wrong-challenge") {
-		t.Error("VerifyPKCE() should return false for wrong challenge")
-	}
-}
-
-func TestVerifyPKCE_KnownValues(t *testing.T) {
-	// Test with known values from RFC 7636 Appendix B
-	// Note: This is a simplified test since the RFC example uses a different encoding
-	verifier := "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"
-	expectedChallenge := "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM"
-
-	if !VerifyPKCE(verifier, expectedChallenge) {
-		t.Error("VerifyPKCE() should return true for RFC example values")
-	}
-}
-
 func TestGenerateState(t *testing.T) {
 	state, err := GenerateState()
 	if err != nil {

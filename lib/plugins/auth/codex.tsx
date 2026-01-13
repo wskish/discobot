@@ -1,6 +1,7 @@
 "use client";
 
 import { ExternalLink, Key, Loader2, LogIn } from "lucide-react";
+import Image from "next/image";
 import * as React from "react";
 import { mutate } from "swr";
 import { Button } from "@/components/ui/button";
@@ -80,12 +81,15 @@ function ProviderLogo({ className }: { className?: string }) {
 	}
 
 	return (
-		<img
+		<Image
 			src="/data/models-dev/logos/openai.svg"
 			alt=""
+			width={24}
+			height={24}
 			className={`${className} dark:invert`}
 			style={{ objectFit: "contain" }}
 			onError={() => setHasError(true)}
+			unoptimized
 		/>
 	);
 }

@@ -13,8 +13,8 @@ import (
 
 const (
 	// Anthropic OAuth endpoints (Claude Max flow via claude.ai)
-	anthropicAuthURL    = "https://claude.ai/oauth/authorize"
-	anthropicTokenURL   = "https://console.anthropic.com/v1/oauth/token"
+	anthropicAuthURL     = "https://claude.ai/oauth/authorize"
+	anthropicTokenURL    = "https://console.anthropic.com/v1/oauth/token"
 	anthropicRedirectURI = "https://console.anthropic.com/oauth/code/callback"
 )
 

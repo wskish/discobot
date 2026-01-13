@@ -4,9 +4,10 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/go-chi/chi/v5"
+
 	"github.com/anthropics/octobot/server/internal/model"
 	"github.com/anthropics/octobot/server/internal/service"
-	"github.com/go-chi/chi/v5"
 )
 
 // AuthLogin handles OAuth login redirect

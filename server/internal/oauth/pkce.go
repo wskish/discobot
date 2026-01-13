@@ -43,14 +43,6 @@ func GeneratePKCE() (*PKCEChallenge, error) {
 	}, nil
 }
 
-// VerifyPKCE verifies that a code verifier matches a code challenge.
-// This is used by the server to verify the token exchange request.
-func VerifyPKCE(verifier, challenge string) bool {
-	hash := sha256.Sum256([]byte(verifier))
-	expectedChallenge := base64.RawURLEncoding.EncodeToString(hash[:])
-	return challenge == expectedChallenge
-}
-
 // GenerateState generates a random state string for OAuth flows.
 // The state is used to prevent CSRF attacks.
 func GenerateState() (string, error) {
