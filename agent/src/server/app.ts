@@ -99,7 +99,9 @@ export function createApp(options: AppOptions) {
 				?.map((p) => (p.type === "text" ? p.text : `[${p.type}]`))
 				.join("")
 				.slice(0, 100) || "[no text]";
-		console.log(`[POST /chat] User message: "${msgPreview}${msgPreview.length >= 100 ? "..." : ""}"`);
+		console.log(
+			`[POST /chat] User message: "${msgPreview}${msgPreview.length >= 100 ? "..." : ""}"`,
+		);
 
 		// Check for credential changes from header
 		const credentialsHeader = c.req.header(CREDENTIALS_HEADER) || null;

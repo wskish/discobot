@@ -1,58 +1,87 @@
 # Stage 1: Build agentfs from source
-FROM rust:1.83-slim AS agentfs-builder
+# Using Debian-based Rust for simpler glibc build - multi-arch compatible
+FROM rust:slim AS agentfs-builder
 
+# Install build dependencies
 RUN apt-get update && apt-get install -y \
     git \
     pkg-config \
     libssl-dev \
-    libunwind-dev \
+    liblzma-dev \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /build
 
-# Clone and build agentfs (uses nightly toolchain per rust-toolchain.toml)
+# Clone agentfs
 RUN git clone https://github.com/tursodatabase/agentfs.git
+
 WORKDIR /build/agentfs/cli
-RUN cargo build --release
 
-# Stage 2: Node.js runtime
-FROM node:25-slim
+# Build for native architecture (buildx handles multi-arch)
+# agentfs uses nightly via rust-toolchain.toml which will be auto-detected
+RUN cargo build --release --no-default-features \
+    && cp target/release/agentfs /build/agentfs-bin \
+    && strip /build/agentfs-bin
 
-# Create octobot user with UID 1000
-RUN groupadd -g 1000 octobot && \
-    useradd -u 1000 -g octobot -m -s /bin/bash octobot
-
-# Install dependencies for agentfs runtime
-RUN apt-get update && apt-get install -y \
-    libssl3 \
-    ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
-
-# Copy agentfs binary from builder
-COPY --from=agentfs-builder /build/agentfs/cli/target/release/agentfs /usr/local/bin/agentfs
-
-# Install claude-code-acp globally
-RUN npm install -g @zed-industries/claude-code-acp
+# Stage 2: Build the Bun standalone binary
+FROM oven/bun:1 AS bun-builder
 
 WORKDIR /app
 
-# Copy package files and install dependencies
-COPY package.json package-lock.json* ./
-RUN npm install
+# Copy package files
+COPY package.json bun.lock* ./
 
-# Copy source files and build
+# Install dependencies with Bun
+RUN bun install
+
+# Copy source files
 COPY tsconfig.json ./
 COPY src ./src
-RUN npm run build
 
-# Change ownership to octobot user
+# Build standalone binary for native architecture (buildx handles multi-arch)
+RUN bun build ./src/index.ts \
+    --compile \
+    --minify \
+    --outfile=octobot-agent
+
+# Stage 3: Minimal Ubuntu runtime
+FROM ubuntu:24.04
+
+# Install only essential runtime dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create non-root user (handle case where UID 1000 already exists)
+RUN useradd -m -s /bin/bash -u 1000 octobot 2>/dev/null \
+    || (userdel -r $(getent passwd 1000 | cut -d: -f1) 2>/dev/null; useradd -m -s /bin/bash -u 1000 octobot) \
+    || useradd -m -s /bin/bash octobot
+
+WORKDIR /app
+
+# Copy the standalone Bun binary
+COPY --from=bun-builder /app/octobot-agent ./octobot-agent
+RUN chmod +x ./octobot-agent
+
+# Copy agentfs binary
+COPY --from=agentfs-builder /build/agentfs-bin /usr/local/bin/agentfs
+RUN chmod +x /usr/local/bin/agentfs
+
+# Install claude-code-acp
+# We need Node.js for this npm package - install minimal Node runtime
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    nodejs \
+    npm \
+    && npm install -g @zed-industries/claude-code-acp \
+    && apt-get purge -y npm \
+    && apt-get autoremove -y \
+    && rm -rf /var/lib/apt/lists/* /root/.npm
+
+# Set ownership
 RUN chown -R octobot:octobot /app
 
-# Switch to octobot user
 USER octobot
 
-# Expose the default port
 EXPOSE 3001
 
-# Start the application
-CMD ["npm", "start"]
+CMD ["./octobot-agent"]
