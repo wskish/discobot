@@ -6,9 +6,9 @@ import (
 
 	"github.com/anthropics/octobot/server/internal/config"
 	"github.com/anthropics/octobot/server/internal/events"
-	"github.com/anthropics/octobot/server/internal/sandbox"
 	"github.com/anthropics/octobot/server/internal/git"
 	"github.com/anthropics/octobot/server/internal/jobs"
+	"github.com/anthropics/octobot/server/internal/sandbox"
 	"github.com/anthropics/octobot/server/internal/service"
 	"github.com/anthropics/octobot/server/internal/store"
 )

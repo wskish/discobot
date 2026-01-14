@@ -6,8 +6,8 @@ import (
 	"fmt"
 
 	"github.com/anthropics/octobot/server/internal/events"
-	"github.com/anthropics/octobot/server/internal/sandbox"
 	"github.com/anthropics/octobot/server/internal/model"
+	"github.com/anthropics/octobot/server/internal/sandbox"
 	"github.com/anthropics/octobot/server/internal/store"
 )
 

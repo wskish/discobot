@@ -200,13 +200,13 @@ func (w *Workspace) BeforeCreate(tx *gorm.DB) error {
 
 // Session status constants representing the lifecycle of a session
 const (
-	SessionStatusInitializing    = "initializing"      // Session just created, starting setup
-	SessionStatusCloning         = "cloning"           // Cloning git repository
-	SessionStatusCreatingSandbox = "creating_sandbox"  // Creating sandbox environment
-	SessionStatusStartingAgent   = "starting_agent"    // Running agent start command
-	SessionStatusRunning         = "running"           // Session is ready for use
-	SessionStatusError           = "error"             // Something failed during setup
-	SessionStatusClosed          = "closed"            // Session has been archived
+	SessionStatusInitializing    = "initializing"     // Session just created, starting setup
+	SessionStatusCloning         = "cloning"          // Cloning git repository
+	SessionStatusCreatingSandbox = "creating_sandbox" // Creating sandbox environment
+	SessionStatusStartingAgent   = "starting_agent"   // Running agent start command
+	SessionStatusRunning         = "running"          // Session is ready for use
+	SessionStatusError           = "error"            // Something failed during setup
+	SessionStatusClosed          = "closed"           // Session has been archived
 )
 
 // Session represents a chat thread within a workspace.

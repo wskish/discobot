@@ -12,9 +12,9 @@ import (
 	"time"
 
 	"github.com/anthropics/octobot/server/internal/events"
-	"github.com/anthropics/octobot/server/internal/sandbox"
 	"github.com/anthropics/octobot/server/internal/git"
 	"github.com/anthropics/octobot/server/internal/model"
+	"github.com/anthropics/octobot/server/internal/sandbox"
 	"github.com/anthropics/octobot/server/internal/store"
 )
 
@@ -233,10 +233,6 @@ func (s *SessionService) Initialize(
 	ctx context.Context,
 	sessionID string,
 ) error {
-	if s.gitProvider == nil || s.sandboxProvider == nil {
-		return fmt.Errorf("runtime dependencies not set")
-	}
-
 	// Get session
 	session, err := s.GetSession(ctx, sessionID)
 	if err != nil {
