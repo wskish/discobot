@@ -42,6 +42,8 @@ export default function IDEChatPage() {
 		string | null
 	>(null);
 	const [workspaceSelectTrigger, setWorkspaceSelectTrigger] = React.useState(0);
+	// Trigger to reset ChatPanel state (forces remount)
+	const [chatResetTrigger, setChatResetTrigger] = React.useState(0);
 
 	// System status check
 	const [systemStatusChecked, setSystemStatusChecked] = React.useState(false);
@@ -142,6 +144,7 @@ export default function IDEChatPage() {
 	const handleNewSession = React.useCallback(() => {
 		setSelectedSession(null);
 		setPreselectedWorkspaceId(null);
+		setChatResetTrigger((prev) => prev + 1);
 	}, []);
 
 	const handleAddSession = React.useCallback((workspaceId: string) => {
@@ -276,6 +279,7 @@ export default function IDEChatPage() {
 					agentTypes={agentTypes}
 					preselectedWorkspaceId={preselectedWorkspaceId}
 					workspaceSelectTrigger={workspaceSelectTrigger}
+					chatResetTrigger={chatResetTrigger}
 					selectedAgentId={selectedAgent?.id || null}
 					onAddWorkspace={dialogs.openWorkspaceDialog}
 					onAddAgent={() => dialogs.openAgentDialog()}

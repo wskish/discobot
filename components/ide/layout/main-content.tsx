@@ -27,6 +27,7 @@ interface MainContentProps {
 	agentTypes: SupportedAgentType[];
 	preselectedWorkspaceId: string | null;
 	workspaceSelectTrigger: number;
+	chatResetTrigger: number;
 	selectedAgentId: string | null;
 	onAddWorkspace: () => void;
 	onAddAgent: () => void;
@@ -44,6 +45,7 @@ export function MainContent({
 	agentTypes,
 	preselectedWorkspaceId,
 	workspaceSelectTrigger,
+	chatResetTrigger,
 	selectedAgentId,
 	onAddWorkspace,
 	onAddAgent,
@@ -127,6 +129,7 @@ export function MainContent({
 		return (
 			<main className="flex-1 flex items-center justify-center overflow-hidden">
 				<ChatPanel
+					key={chatResetTrigger}
 					onSessionCreated={onSessionCreated}
 					workspaces={workspaces}
 					selectedWorkspaceId={preselectedWorkspaceId}
