@@ -316,8 +316,18 @@ func TestEvents_SessionCreationEmitsEvents(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	// Create a session via the chat endpoint (which should emit status update events)
+	// Format matches AI SDK's DefaultChatTransport with UIMessage format
 	createResp := client.Post("/api/projects/"+project.ID+"/chat", map[string]interface{}{
-		"messages":    []map[string]string{{"role": "user", "content": "Hello"}},
+		"id": "test-events-session-1",
+		"messages": []map[string]interface{}{
+			{
+				"id":   "msg-1",
+				"role": "user",
+				"parts": []map[string]interface{}{
+					{"type": "text", "text": "Hello"},
+				},
+			},
+		},
 		"workspaceId": workspace.ID,
 		"agentId":     agent.ID,
 	})

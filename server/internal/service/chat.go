@@ -2,80 +2,13 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"github.com/anthropics/octobot/server/internal/container"
 	"github.com/anthropics/octobot/server/internal/events"
 	"github.com/anthropics/octobot/server/internal/model"
 	"github.com/anthropics/octobot/server/internal/store"
-)
-
-// ChatEvent represents an event in the chat stream.
-// Follows the AI SDK UI Message Stream Protocol.
-type ChatEvent struct {
-	Type string // Event type (see constants below)
-
-	// Common fields
-	ID        string // Part ID for text/reasoning parts
-	MessageID string // Message ID for start event
-	Delta     string // Incremental content for delta events
-
-	// Tool-related fields
-	ToolCallID string // Tool call identifier
-	ToolName   string // Name of the tool being called
-	Input      any    // Tool input (for tool-input-available)
-	Output     any    // Tool output (for tool-output-available)
-
-	// Source/file fields
-	SourceID  string // Source identifier
-	URL       string // URL for source-url or file events
-	MediaType string // MIME type for files/documents
-	Title     string // Title for source-document
-	Filename  string // Filename for file events
-
-	// Error fields
-	ErrorText string // Error message
-	Reason    string // Abort reason
-
-	// Custom data
-	DataType string // For data-* events, the specific type
-	Data     any    // Custom data payload
-}
-
-// ChatEvent type constants following AI SDK UI Message Stream Protocol
-const (
-	// Message flow events
-	ChatEventStart  = "start"
-	ChatEventFinish = "finish"
-	ChatEventAbort  = "abort"
-
-	// Text content events
-	ChatEventTextStart = "text-start"
-	ChatEventTextDelta = "text-delta"
-	ChatEventTextEnd   = "text-end"
-
-	// Reasoning events
-	ChatEventReasoningStart = "reasoning-start"
-	ChatEventReasoningDelta = "reasoning-delta"
-	ChatEventReasoningEnd   = "reasoning-end"
-
-	// Tool execution events
-	ChatEventToolInputStart      = "tool-input-start"
-	ChatEventToolInputDelta      = "tool-input-delta"
-	ChatEventToolInputAvailable  = "tool-input-available"
-	ChatEventToolOutputAvailable = "tool-output-available"
-
-	// Reference events
-	ChatEventSourceURL      = "source-url"
-	ChatEventSourceDocument = "source-document"
-	ChatEventFile           = "file"
-
-	// Step events
-	ChatEventStartStep  = "start-step"
-	ChatEventFinishStep = "finish-step"
-
-	// Error event
-	ChatEventError = "error"
 )
 
 // SessionInitEnqueuer is an interface for enqueuing session initialization jobs.
@@ -110,15 +43,22 @@ func NewChatService(s *store.Store, sessionService *SessionService, jobEnqueuer 
 
 // NewSessionRequest contains the parameters for creating a new chat session.
 type NewSessionRequest struct {
+	// SessionID is the client-provided session ID (required)
+	SessionID   string
 	ProjectID   string
 	WorkspaceID string
 	AgentID     string
-	Prompt      string
+	// Messages is the raw UIMessage array - passed through without parsing
+	Messages json.RawMessage
 }
 
 // NewSession creates a new chat session and enqueues initialization.
-// Returns the session ID immediately without waiting for initialization.
+// Uses the client-provided session ID.
 func (c *ChatService) NewSession(ctx context.Context, req NewSessionRequest) (string, error) {
+	if req.SessionID == "" {
+		return "", fmt.Errorf("session ID is required")
+	}
+
 	// Validate workspace belongs to project
 	workspace, err := c.store.GetWorkspaceByID(ctx, req.WorkspaceID)
 	if err != nil {
@@ -137,17 +77,11 @@ func (c *ChatService) NewSession(ctx context.Context, req NewSessionRequest) (st
 		return "", fmt.Errorf("agent does not belong to this project")
 	}
 
-	// Derive session name from prompt (first 50 chars)
-	name := req.Prompt
-	if len(name) > 50 {
-		name = name[:50] + "..."
-	}
-	if name == "" {
-		name = "New Session"
-	}
+	// Try to derive session name from first user message text
+	name := deriveSessionName(req.Messages)
 
-	// Use SessionService to create the session and initial message
-	sess, err := c.sessionService.CreateSession(ctx, req.ProjectID, req.WorkspaceID, name, req.AgentID, req.Prompt)
+	// Use SessionService to create the session with client-provided ID
+	sess, err := c.sessionService.CreateSessionWithID(ctx, req.SessionID, req.ProjectID, req.WorkspaceID, name, req.AgentID)
 	if err != nil {
 		return "", fmt.Errorf("failed to create session: %w", err)
 	}
@@ -161,7 +95,7 @@ func (c *ChatService) NewSession(ctx context.Context, req NewSessionRequest) (st
 	return sess.ID, nil
 }
 
-// GetSession retrieves an existing session and validates project ownership.
+// GetSession retrieves a session and validates it belongs to the project.
 func (c *ChatService) GetSession(ctx context.Context, projectID, sessionID string) (*model.Session, error) {
 	sess, err := c.store.GetSessionByID(ctx, sessionID)
 	if err != nil {
@@ -173,9 +107,41 @@ func (c *ChatService) GetSession(ctx context.Context, projectID, sessionID strin
 	return sess, nil
 }
 
-// SendToContainer sends a message to the container and returns a channel of events.
-// The container handles message storage - we just proxy the stream.
-func (c *ChatService) SendToContainer(ctx context.Context, projectID, sessionID, userMessage string) (<-chan ChatEvent, error) {
+// GetSessionByID retrieves a session by ID without project validation.
+// Use this when you need to check existence before validating project ownership.
+func (c *ChatService) GetSessionByID(ctx context.Context, sessionID string) (*model.Session, error) {
+	return c.store.GetSessionByID(ctx, sessionID)
+}
+
+// ValidateSessionResources validates that a session's workspace and agent belong to the project.
+func (c *ChatService) ValidateSessionResources(ctx context.Context, projectID string, session *model.Session) error {
+	// Validate workspace belongs to project
+	workspace, err := c.store.GetWorkspaceByID(ctx, session.WorkspaceID)
+	if err != nil {
+		return fmt.Errorf("workspace not found: %w", err)
+	}
+	if workspace.ProjectID != projectID {
+		return fmt.Errorf("session's workspace does not belong to this project")
+	}
+
+	// Validate agent belongs to project (if set)
+	if session.AgentID != nil {
+		agent, err := c.store.GetAgentByID(ctx, *session.AgentID)
+		if err != nil {
+			return fmt.Errorf("agent not found: %w", err)
+		}
+		if agent.ProjectID != projectID {
+			return fmt.Errorf("session's agent does not belong to this project")
+		}
+	}
+
+	return nil
+}
+
+// SendToContainer sends messages to the container and returns a channel of raw SSE lines.
+// The container handles message storage - we just proxy the stream without parsing.
+// Both messages and responses are passed through as raw data.
+func (c *ChatService) SendToContainer(ctx context.Context, projectID, sessionID string, messages json.RawMessage) (<-chan SSELine, error) {
 	// Validate session belongs to project
 	_, err := c.GetSession(ctx, projectID, sessionID)
 	if err != nil {
@@ -186,44 +152,8 @@ func (c *ChatService) SendToContainer(ctx context.Context, projectID, sessionID,
 		return nil, fmt.Errorf("container runtime not available")
 	}
 
-	// Send to container
-	containerEvents, err := c.containerClient.SendMessage(ctx, sessionID, userMessage)
-	if err != nil {
-		return nil, fmt.Errorf("failed to send to container: %w", err)
-	}
-
-	// Create output channel
-	eventCh := make(chan ChatEvent, 100)
-
-	// Forward container events to output
-	go func() {
-		defer close(eventCh)
-
-		for containerEvent := range containerEvents {
-			// Convert UIMessageEvent to ChatEvent
-			chatEvent := ChatEvent{
-				Type:       containerEvent.Type,
-				ID:         containerEvent.ID,
-				MessageID:  containerEvent.MessageID,
-				Delta:      containerEvent.Delta,
-				ToolCallID: containerEvent.ToolCallID,
-				ToolName:   containerEvent.ToolName,
-				Input:      containerEvent.Input,
-				Output:     containerEvent.Output,
-				ErrorText:  containerEvent.ErrorText,
-				Reason:     containerEvent.Reason,
-			}
-
-			// Forward event to output
-			select {
-			case eventCh <- chatEvent:
-			case <-ctx.Done():
-				return
-			}
-		}
-	}()
-
-	return eventCh, nil
+	// Send to container and return raw SSE channel directly
+	return c.containerClient.SendMessages(ctx, sessionID, messages)
 }
 
 // GetMessages returns all messages for a session by querying the container.
@@ -247,4 +177,45 @@ func (c *ChatService) GetMessages(ctx context.Context, projectID, sessionID stri
 	}
 
 	return messages, nil
+}
+
+// deriveSessionName attempts to extract a session name from the messages.
+// It looks for the first user message with text content.
+// Returns "New Session" if no suitable text is found.
+func deriveSessionName(messages json.RawMessage) string {
+	if len(messages) == 0 {
+		return "New Session"
+	}
+
+	// Minimal struct to extract just what we need
+	type minimalPart struct {
+		Type string `json:"type"`
+		Text string `json:"text"`
+	}
+	type minimalMessage struct {
+		Role  string        `json:"role"`
+		Parts []minimalPart `json:"parts"`
+	}
+
+	var msgs []minimalMessage
+	if err := json.Unmarshal(messages, &msgs); err != nil {
+		return "New Session"
+	}
+
+	// Find first user message with text
+	for _, msg := range msgs {
+		if msg.Role == "user" {
+			for _, part := range msg.Parts {
+				if part.Type == "text" && part.Text != "" {
+					name := part.Text
+					if len(name) > 50 {
+						name = name[:50] + "..."
+					}
+					return name
+				}
+			}
+		}
+	}
+
+	return "New Session"
 }

@@ -136,8 +136,19 @@ func TestCreateSession_CreatesContainer(t *testing.T) {
 	client := ts.AuthenticatedClient(user)
 
 	// Sessions are created implicitly via the chat endpoint
+	// Format matches AI SDK's DefaultChatTransport with UIMessage format
+	sessionID := "test-container-session-1"
 	resp := client.Post("/api/projects/"+project.ID+"/chat", map[string]interface{}{
-		"messages":    []map[string]string{{"role": "user", "content": "Hello container"}},
+		"id": sessionID,
+		"messages": []map[string]interface{}{
+			{
+				"id":   "msg-1",
+				"role": "user",
+				"parts": []map[string]interface{}{
+					{"type": "text", "text": "Hello container"},
+				},
+			},
+		},
 		"workspaceId": workspace.ID,
 		"agentId":     agent.ID,
 	})
@@ -158,8 +169,6 @@ func TestCreateSession_CreatesContainer(t *testing.T) {
 		t.Errorf("Expected 1 session, got %d", len(result.Sessions))
 		return
 	}
-
-	sessionID := result.Sessions[0]["id"].(string)
 
 	// Wait for async container creation via job queue
 	// The dispatcher polls every 10ms in tests, so wait a bit for the job to be processed

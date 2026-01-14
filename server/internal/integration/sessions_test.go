@@ -36,8 +36,19 @@ func TestCreateSession_ViaChat(t *testing.T) {
 	client := ts.AuthenticatedClient(user)
 
 	// Sessions are created implicitly via the chat endpoint
+	// Format matches AI SDK's DefaultChatTransport with UIMessage format
+	sessionID := "test-session-id-1"
 	resp := client.Post("/api/projects/"+project.ID+"/chat", map[string]interface{}{
-		"messages":    []map[string]string{{"role": "user", "content": "Create a new session"}},
+		"id": sessionID,
+		"messages": []map[string]interface{}{
+			{
+				"id":   "msg-1",
+				"role": "user",
+				"parts": []map[string]interface{}{
+					{"type": "text", "text": "Create a new session"},
+				},
+			},
+		},
 		"workspaceId": workspace.ID,
 		"agentId":     agent.ID,
 	})
@@ -75,8 +86,19 @@ func TestCreateSession_ViaChatWithAgent(t *testing.T) {
 	client := ts.AuthenticatedClient(user)
 
 	// Sessions are created implicitly via the chat endpoint with agent
+	// Format matches AI SDK's DefaultChatTransport with UIMessage format
+	sessionID := "test-session-id-2"
 	resp := client.Post("/api/projects/"+project.ID+"/chat", map[string]interface{}{
-		"messages":    []map[string]string{{"role": "user", "content": "Hello agent"}},
+		"id": sessionID,
+		"messages": []map[string]interface{}{
+			{
+				"id":   "msg-1",
+				"role": "user",
+				"parts": []map[string]interface{}{
+					{"type": "text", "text": "Hello agent"},
+				},
+			},
+		},
 		"workspaceId": workspace.ID,
 		"agentId":     agent.ID,
 	})
@@ -113,8 +135,18 @@ func TestCreateSession_NameFromLongPrompt(t *testing.T) {
 
 	// Session name is derived from prompt, truncated to 50 chars
 	longPrompt := "This is a very long prompt that should be truncated to fit within the 50 character limit for session names"
+	sessionID := "test-session-id-3"
 	resp := client.Post("/api/projects/"+project.ID+"/chat", map[string]interface{}{
-		"messages":    []map[string]string{{"role": "user", "content": longPrompt}},
+		"id": sessionID,
+		"messages": []map[string]interface{}{
+			{
+				"id":   "msg-1",
+				"role": "user",
+				"parts": []map[string]interface{}{
+					{"type": "text", "text": longPrompt},
+				},
+			},
+		},
 		"workspaceId": workspace.ID,
 		"agentId":     agent.ID,
 	})

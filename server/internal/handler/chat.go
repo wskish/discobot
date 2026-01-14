@@ -13,23 +13,27 @@ import (
 )
 
 // ChatRequest represents the request body for the chat endpoint.
-// This matches the AI SDK's useChat format.
+// This matches the AI SDK's DefaultChatTransport format.
+// The Messages field is kept as raw JSON to pass through to the container
+// without requiring the Go server to understand the UIMessage structure.
 type ChatRequest struct {
-	ID          string        `json:"id"`          // Session/thread ID (optional for new sessions)
-	Messages    []ChatMessage `json:"messages"`    // Message history
-	WorkspaceID string        `json:"workspaceId"` // Required for new sessions
-	AgentID     string        `json:"agentId"`     // Required for new sessions
-}
-
-// ChatMessage represents a message in the chat.
-type ChatMessage struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
+	// ID is the chat/session ID (AI SDK sends this as "id")
+	ID string `json:"id"`
+	// Messages is the raw UIMessage array - passed through to container as-is
+	Messages json.RawMessage `json:"messages"`
+	// Trigger indicates the type of request: "submit-message" or "regenerate-message"
+	Trigger string `json:"trigger,omitempty"`
+	// MessageID is the ID of the message to regenerate (for regenerate-message trigger)
+	MessageID string `json:"messageId,omitempty"`
+	// WorkspaceID is required for new sessions
+	WorkspaceID string `json:"workspaceId,omitempty"`
+	// AgentID is required for new sessions
+	AgentID string `json:"agentId,omitempty"`
 }
 
 // Chat handles AI chat streaming.
 // POST /api/chat
-// Request body: { id?, messages, workspaceId, agentId }
+// Request body: { id, messages, workspaceId?, agentId?, trigger?, messageId? }
 // Response: SSE stream with AI SDK UI message protocol
 func (h *Handler) Chat(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
@@ -42,72 +46,64 @@ func (h *Handler) Chat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get the latest user message
-	var latestUserMessage string
-	for i := len(req.Messages) - 1; i >= 0; i-- {
-		if req.Messages[i].Role == "user" {
-			latestUserMessage = req.Messages[i].Content
-			break
-		}
-	}
-
-	if latestUserMessage == "" {
-		h.Error(w, http.StatusBadRequest, "No user message provided")
+	// Validate messages is provided and not empty
+	if len(req.Messages) == 0 || string(req.Messages) == "null" {
+		h.Error(w, http.StatusBadRequest, "messages array required")
 		return
 	}
 
-	var sessionID string
-
-	// If no session ID provided, create a new session
+	// id (chat ID) is required - client generates IDs
 	if req.ID == "" {
+		h.Error(w, http.StatusBadRequest, "id is required")
+		return
+	}
+	sessionID := req.ID
+
+	// Check if session exists
+	existingSession, err := h.chatService.GetSessionByID(ctx, sessionID)
+	if err == nil {
+		// Session exists - validate it belongs to this project
+		if existingSession.ProjectID != projectID {
+			h.Error(w, http.StatusForbidden, "session does not belong to this project")
+			return
+		}
+		// For existing sessions, validate workspace and agent still belong to project
+		if err := h.chatService.ValidateSessionResources(ctx, projectID, existingSession); err != nil {
+			h.Error(w, http.StatusForbidden, err.Error())
+			return
+		}
+	} else {
+		// Session doesn't exist - create it
 		if req.WorkspaceID == "" || req.AgentID == "" {
 			h.Error(w, http.StatusBadRequest, "workspaceId and agentId are required for new sessions")
 			return
 		}
 
-		newSessionID, err := h.chatService.NewSession(ctx, service.NewSessionRequest{
+		// NewSession validates that workspace and agent belong to project
+		_, err := h.chatService.NewSession(ctx, service.NewSessionRequest{
+			SessionID:   sessionID,
 			ProjectID:   projectID,
 			WorkspaceID: req.WorkspaceID,
 			AgentID:     req.AgentID,
-			Prompt:      latestUserMessage,
+			Messages:    req.Messages,
 		})
 		if err != nil {
 			h.Error(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		sessionID = newSessionID
-	} else {
-		// Validate existing session belongs to project
-		_, err := h.chatService.GetSession(ctx, projectID, req.ID)
-		if err != nil {
-			h.Error(w, http.StatusNotFound, err.Error())
-			return
-		}
-		sessionID = req.ID
 	}
 
-	// Set up SSE headers (set early so we can send status updates)
+	// Set up SSE headers
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("X-Accel-Buffering", "no") // Disable nginx buffering
 	w.Header().Set("x-vercel-ai-ui-message-stream", "v1")
 
-	// Send the session ID as metadata (for new sessions)
-	if req.ID == "" {
-		sendSSEEvent(w, "metadata", map[string]string{"sessionId": sessionID})
-		if f, ok := w.(http.Flusher); ok {
-			f.Flush()
-		}
-	}
-
 	// Wait for session to be ready (container running)
 	sess, err := h.waitForSessionReady(ctx, sessionID, 60*time.Second)
 	if err != nil {
-		sendSSEEvent(w, "data", map[string]any{"type": "error", "errorText": err.Error()})
-		if f, ok := w.(http.Flusher); ok {
-			f.Flush()
-		}
+		writeSSEErrorAndDone(w, err.Error())
 		return
 	}
 
@@ -117,20 +113,14 @@ func (h *Handler) Chat(w http.ResponseWriter, r *http.Request) {
 		if sess.ErrorMessage != nil {
 			errMsg = *sess.ErrorMessage
 		}
-		sendSSEEvent(w, "data", map[string]any{"type": "error", "errorText": errMsg})
-		if f, ok := w.(http.Flusher); ok {
-			f.Flush()
-		}
+		writeSSEErrorAndDone(w, errMsg)
 		return
 	}
 
-	// Send message to container and get event stream
-	eventCh, err := h.chatService.SendToContainer(ctx, projectID, sessionID, latestUserMessage)
+	// Send messages to container and get raw SSE stream
+	sseCh, err := h.chatService.SendToContainer(ctx, projectID, sessionID, req.Messages)
 	if err != nil {
-		sendSSEEvent(w, "data", map[string]any{"type": "error", "errorText": err.Error()})
-		if f, ok := w.(http.Flusher); ok {
-			f.Flush()
-		}
+		writeSSEErrorAndDone(w, err.Error())
 		return
 	}
 
@@ -140,87 +130,43 @@ func (h *Handler) Chat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Stream events following AI SDK UI Message Stream Protocol
-	for event := range eventCh {
-		var data map[string]any
-
-		switch event.Type {
-		// Message flow events
-		case service.ChatEventStart:
-			data = map[string]any{"type": "start", "messageId": event.MessageID}
-		case service.ChatEventFinish:
-			data = map[string]any{"type": "finish"}
-		case service.ChatEventAbort:
-			data = map[string]any{"type": "abort", "reason": event.Reason}
-
-		// Text content events
-		case service.ChatEventTextStart:
-			data = map[string]any{"type": "text-start", "id": event.ID}
-		case service.ChatEventTextDelta:
-			data = map[string]any{"type": "text-delta", "id": event.ID, "delta": event.Delta}
-		case service.ChatEventTextEnd:
-			data = map[string]any{"type": "text-end", "id": event.ID}
-
-		// Reasoning events
-		case service.ChatEventReasoningStart:
-			data = map[string]any{"type": "reasoning-start", "id": event.ID}
-		case service.ChatEventReasoningDelta:
-			data = map[string]any{"type": "reasoning-delta", "id": event.ID, "delta": event.Delta}
-		case service.ChatEventReasoningEnd:
-			data = map[string]any{"type": "reasoning-end", "id": event.ID}
-
-		// Tool execution events
-		case service.ChatEventToolInputStart:
-			data = map[string]any{"type": "tool-input-start", "toolCallId": event.ToolCallID, "toolName": event.ToolName}
-		case service.ChatEventToolInputDelta:
-			data = map[string]any{"type": "tool-input-delta", "toolCallId": event.ToolCallID, "inputTextDelta": event.Delta}
-		case service.ChatEventToolInputAvailable:
-			data = map[string]any{"type": "tool-input-available", "toolCallId": event.ToolCallID, "toolName": event.ToolName, "input": event.Input}
-		case service.ChatEventToolOutputAvailable:
-			data = map[string]any{"type": "tool-output-available", "toolCallId": event.ToolCallID, "output": event.Output}
-
-		// Reference events
-		case service.ChatEventSourceURL:
-			data = map[string]any{"type": "source-url", "sourceId": event.SourceID, "url": event.URL}
-		case service.ChatEventSourceDocument:
-			data = map[string]any{"type": "source-document", "sourceId": event.SourceID, "mediaType": event.MediaType, "title": event.Title}
-		case service.ChatEventFile:
-			data = map[string]any{"type": "file", "url": event.URL, "mediaType": event.MediaType}
-			if event.Filename != "" {
-				data["filename"] = event.Filename
-			}
-
-		// Step events
-		case service.ChatEventStartStep:
-			data = map[string]any{"type": "start-step"}
-		case service.ChatEventFinishStep:
-			data = map[string]any{"type": "finish-step"}
-
-		// Error event
-		case service.ChatEventError:
-			data = map[string]any{"type": "error", "errorText": event.ErrorText}
-
-		default:
-			// Unknown event type, skip
-			continue
+	// Pass through raw SSE lines from container
+	for line := range sseCh {
+		if line.Done {
+			// Container sent [DONE] signal
+			fmt.Fprintf(w, "data: [DONE]\n\n")
+			flusher.Flush()
+			return
 		}
-
-		sendSSEEvent(w, "data", data)
+		// Pass through raw data line without parsing
+		fmt.Fprintf(w, "data: %s\n\n", line.Data)
 		flusher.Flush()
 	}
 
-	// Send done signal
+	// Send done signal if channel closed without explicit DONE
 	fmt.Fprintf(w, "data: [DONE]\n\n")
 	flusher.Flush()
 }
 
-// sendSSEEvent sends an SSE event with JSON data.
-func sendSSEEvent(w http.ResponseWriter, eventType string, data any) {
+// writeSSEError sends an error SSE event in UIMessage Stream format.
+// This is used for Go server-originated errors (not pass-through from container).
+func writeSSEError(w http.ResponseWriter, errorText string) {
+	data := map[string]string{"type": "error", "errorText": errorText}
 	jsonData, err := json.Marshal(data)
 	if err != nil {
 		return
 	}
-	fmt.Fprintf(w, "event: %s\ndata: %s\n\n", eventType, jsonData)
+	fmt.Fprintf(w, "data: %s\n\n", jsonData)
+}
+
+// writeSSEErrorAndDone sends an error SSE event followed by the [DONE] signal.
+// This ensures the AI SDK properly closes the stream after receiving the error.
+func writeSSEErrorAndDone(w http.ResponseWriter, errorText string) {
+	writeSSEError(w, errorText)
+	fmt.Fprintf(w, "data: [DONE]\n\n")
+	if f, ok := w.(http.Flusher); ok {
+		f.Flush()
+	}
 }
 
 // waitForSessionReady polls the session status until it's running or errored.

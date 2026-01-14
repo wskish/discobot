@@ -2,7 +2,7 @@
 
 import { useChat } from "@ai-sdk/react";
 import { SiGithub } from "@icons-pack/react-simple-icons";
-import { DefaultChatTransport, type UIMessage } from "ai";
+import { DefaultChatTransport, generateId, type UIMessage } from "ai";
 import {
 	AlertCircle,
 	Bot,
@@ -192,7 +192,7 @@ function getStatusDisplay(status: SessionStatus): {
 
 export function ChatPanel({
 	className,
-	onSessionCreated: _onSessionCreated,
+	onSessionCreated,
 	workspaces = [],
 	selectedWorkspaceId,
 	onAddWorkspace,
@@ -205,7 +205,26 @@ export function ChatPanel({
 	sessionAgent,
 	sessionWorkspace,
 }: ChatPanelProps) {
-	void _onSessionCreated; // TODO: Use when session creation is implemented
+	// For new chats, generate a client-side session ID
+	// This is generated once at mount and reset when a session is selected
+	const [pendingSessionId, setPendingSessionId] = React.useState<string | null>(
+		() => (session?.id ? null : generateId()),
+	);
+
+	// Reset pending ID when session changes
+	React.useEffect(() => {
+		if (session?.id) {
+			// Existing session selected, clear pending ID
+			setPendingSessionId(null);
+		} else if (!pendingSessionId) {
+			// No session and no pending ID, generate one
+			setPendingSessionId(generateId());
+		}
+	}, [session?.id, pendingSessionId]);
+
+	// The effective chat ID: prefer existing session, fall back to pending
+	const chatId = session?.id || pendingSessionId;
+
 	const [localSelectedWorkspaceId, setLocalSelectedWorkspaceId] =
 		React.useState<string | null>(
 			selectedWorkspaceId || (workspaces.length > 0 ? workspaces[0].id : null),
@@ -232,7 +251,7 @@ export function ChatPanel({
 		() =>
 			new DefaultChatTransport({
 				api: `${getApiBase()}/chat`,
-				// For new sessions, include workspace and agent in body
+				// For new sessions (no existing session), include workspace and agent in body
 				body: session?.id
 					? undefined
 					: {
@@ -248,20 +267,22 @@ export function ChatPanel({
 		messages,
 		sendMessage,
 		status: chatStatus,
+		error: chatError,
 	} = useChat({
 		transport,
-		// For existing sessions, use the session ID
-		id: session?.id,
+		// Use the effective chat ID (existing session or pending)
+		id: chatId ?? undefined,
 		// Load existing messages when session is selected (UIMessage format from container)
 		messages: existingMessages.length > 0 ? existingMessages : undefined,
-		// Handle when streaming completes
-		onFinish: (_message) => {
-			// TODO: Handle session creation from metadata when server implements it
+		// Handle stream errors
+		onError: (error) => {
+			console.error("Chat stream error:", error);
 		},
 	});
 
 	// Derive loading state from chat status
 	const isLoading = chatStatus === "streaming" || chatStatus === "submitted";
+	const hasError = chatStatus === "error";
 
 	// Determine mode based on whether we have messages or a session
 	// Use truthiness check since props may be undefined when not passed
@@ -373,6 +394,11 @@ export function ChatPanel({
 		// Validate selections for new sessions
 		if (!session?.id && (!localSelectedWorkspaceId || !localSelectedAgentId)) {
 			return;
+		}
+
+		// For new chats (no existing session), notify parent about the pending session ID
+		if (!session?.id && pendingSessionId) {
+			onSessionCreated?.(pendingSessionId);
 		}
 
 		// Clear input and send message
@@ -549,6 +575,15 @@ export function ChatPanel({
 						)}
 					</div>
 				)}
+
+			{/* Chat stream error indicator */}
+			{hasError && chatError && (
+				<div className="flex items-center gap-2 py-3 px-4 border-b bg-destructive/10 border-destructive/20 text-destructive">
+					<AlertCircle className="h-4 w-4 shrink-0" />
+					<span className="text-sm font-medium">Error</span>
+					<span className="text-sm">: {chatError.message}</span>
+				</div>
+			)}
 
 			{/* Agent/Workspace selectors - fade out in conversation mode */}
 			<div

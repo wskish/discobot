@@ -112,7 +112,7 @@ func main() {
 
 		// Register session init executor if container runtime is available
 		if containerRuntime != nil {
-			sessionSvc := service.NewSessionService(s, gitProvider, containerRuntime, eventBroker)
+			sessionSvc := service.NewSessionService(s, gitProvider, containerRuntime, eventBroker, cfg.ContainerImage)
 			disp.RegisterExecutor(jobs.NewSessionInitExecutor(sessionSvc))
 		}
 

@@ -60,7 +60,7 @@ func New(s *store.Store, cfg *config.Config, gitProvider git.Provider, container
 	jobQueue := jobs.NewQueue(s)
 
 	// Create session service (shared between chat and session handlers)
-	sessionSvc := service.NewSessionService(s, gitProvider, containerRuntime, eventBroker)
+	sessionSvc := service.NewSessionService(s, gitProvider, containerRuntime, eventBroker, cfg.ContainerImage)
 
 	// Create chat service (uses session service for session creation)
 	chatSvc := service.NewChatService(s, sessionSvc, jobQueue, eventBroker, containerRuntime)

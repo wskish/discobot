@@ -27,32 +27,20 @@ func NewContainerChatClient(runtime container.Runtime) *ContainerChatClient {
 	}
 }
 
-// ChatRequest is the request sent to the container's chat endpoint.
-type ChatRequest struct {
-	Message string `json:"message"`
+// ContainerChatRequest is the request sent to the container's chat endpoint.
+// Messages is passed through as raw JSON without parsing.
+type ContainerChatRequest struct {
+	Messages json.RawMessage `json:"messages"`
 }
 
-// UIMessageEvent represents a streaming event from the container.
-// This matches the AI SDK UI Message Stream Protocol.
-type UIMessageEvent struct {
-	Type string `json:"type"`
-
-	// For message events
-	ID        string `json:"id,omitempty"`
-	MessageID string `json:"messageId,omitempty"`
-
-	// For delta events
-	Delta string `json:"delta,omitempty"`
-
-	// For tool events
-	ToolCallID string `json:"toolCallId,omitempty"`
-	ToolName   string `json:"toolName,omitempty"`
-	Input      any    `json:"input,omitempty"`
-	Output     any    `json:"output,omitempty"`
-
-	// For error events
-	ErrorText string `json:"errorText,omitempty"`
-	Reason    string `json:"reason,omitempty"`
+// SSELine represents a raw SSE data line from the container.
+// The content is passed through without parsing - the container
+// is expected to send data in AI SDK UIMessage Stream format.
+type SSELine struct {
+	// Data is the raw JSON payload (without "data: " prefix)
+	Data string
+	// Done indicates this is the [DONE] signal
+	Done bool
 }
 
 // UIMessage represents a message in UIMessage format from the container.
@@ -94,16 +82,17 @@ func (c *ContainerChatClient) getContainerURL(ctx context.Context, sessionID str
 	return fmt.Sprintf("http://%s:%d", hostIP, chatPort.HostPort), nil
 }
 
-// SendMessage sends a user message to the container and returns a channel of events.
-// The container is expected to respond with SSE events in UIMessage format.
-func (c *ContainerChatClient) SendMessage(ctx context.Context, sessionID string, message string) (<-chan UIMessageEvent, error) {
+// SendMessages sends messages to the container and returns a channel of raw SSE lines.
+// The container is expected to respond with SSE events in AI SDK UIMessage Stream format.
+// Messages and responses are passed through without parsing.
+func (c *ContainerChatClient) SendMessages(ctx context.Context, sessionID string, messages json.RawMessage) (<-chan SSELine, error) {
 	baseURL, err := c.getContainerURL(ctx, sessionID)
 	if err != nil {
 		return nil, err
 	}
 
-	// Build the request
-	reqBody := ChatRequest{Message: message}
+	// Build the request - pass messages through as-is
+	reqBody := ContainerChatRequest{Messages: messages}
 	bodyBytes, err := json.Marshal(reqBody)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
@@ -129,12 +118,12 @@ func (c *ContainerChatClient) SendMessage(ctx context.Context, sessionID string,
 		return nil, fmt.Errorf("container returned status %d: %s", resp.StatusCode, string(body))
 	}
 
-	// Create channel for events
-	eventCh := make(chan UIMessageEvent, 100)
+	// Create channel for raw SSE lines
+	lineCh := make(chan SSELine, 100)
 
-	// Start goroutine to read SSE events
+	// Start goroutine to read SSE lines and pass through
 	go func() {
-		defer close(eventCh)
+		defer close(lineCh)
 		defer resp.Body.Close()
 
 		scanner := bufio.NewScanner(resp.Body)
@@ -146,23 +135,22 @@ func (c *ContainerChatClient) SendMessage(ctx context.Context, sessionID string,
 				continue
 			}
 
-			// Parse SSE data lines
+			// Pass through SSE data lines
 			if strings.HasPrefix(line, "data: ") {
 				data := line[6:]
 
 				// Check for [DONE] signal
 				if data == "[DONE]" {
+					select {
+					case lineCh <- SSELine{Done: true}:
+					case <-ctx.Done():
+					}
 					return
 				}
 
-				var event UIMessageEvent
-				if err := json.Unmarshal([]byte(data), &event); err != nil {
-					// Log but continue
-					continue
-				}
-
+				// Pass through raw data without parsing
 				select {
-				case eventCh <- event:
+				case lineCh <- SSELine{Data: data}:
 				case <-ctx.Done():
 					return
 				}
@@ -170,7 +158,7 @@ func (c *ContainerChatClient) SendMessage(ctx context.Context, sessionID string,
 		}
 	}()
 
-	return eventCh, nil
+	return lineCh, nil
 }
 
 // GetMessages retrieves message history from the container.

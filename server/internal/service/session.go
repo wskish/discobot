@@ -49,15 +49,17 @@ type SessionService struct {
 	gitProvider      git.Provider
 	containerRuntime container.Runtime
 	eventBroker      *events.Broker
+	containerImage   string
 }
 
 // NewSessionService creates a new session service
-func NewSessionService(s *store.Store, gitProv git.Provider, containerRT container.Runtime, eventBroker *events.Broker) *SessionService {
+func NewSessionService(s *store.Store, gitProv git.Provider, containerRT container.Runtime, eventBroker *events.Broker, containerImage string) *SessionService {
 	return &SessionService{
 		store:            s,
 		gitProvider:      gitProv,
 		containerRuntime: containerRT,
 		eventBroker:      eventBroker,
+		containerImage:   containerImage,
 	}
 }
 
@@ -85,7 +87,7 @@ func (s *SessionService) GetSession(ctx context.Context, sessionID string) (*Ses
 	return s.mapSession(sess), nil
 }
 
-// CreateSession creates a new session with initializing status.
+// CreateSession creates a new session with initializing status and auto-generated ID.
 // If initialMessage is provided, it creates the first user message in the session.
 func (s *SessionService) CreateSession(ctx context.Context, projectID, workspaceID, name, agentID, initialMessage string) (*Session, error) {
 	var aidPtr *string
@@ -116,6 +118,29 @@ func (s *SessionService) CreateSession(ctx context.Context, projectID, workspace
 			// Log the error but don't fail session creation
 			log.Printf("Warning: failed to create initial message for session %s: %v", sess.ID, err)
 		}
+	}
+
+	return s.mapSession(sess), nil
+}
+
+// CreateSessionWithID creates a new session with the provided client ID.
+func (s *SessionService) CreateSessionWithID(ctx context.Context, sessionID, projectID, workspaceID, name, agentID string) (*Session, error) {
+	var aidPtr *string
+	if agentID != "" {
+		aidPtr = &agentID
+	}
+
+	sess := &model.Session{
+		ID:          sessionID, // Use client-provided ID
+		ProjectID:   projectID,
+		WorkspaceID: workspaceID,
+		AgentID:     aidPtr,
+		Name:        name,
+		Description: nil,
+		Status:      model.SessionStatusInitializing,
+	}
+	if err := s.store.CreateSession(ctx, sess); err != nil {
+		return nil, fmt.Errorf("failed to create session: %w", err)
 	}
 
 	return s.mapSession(sess), nil
@@ -289,7 +314,7 @@ func (s *SessionService) initializeSync(
 
 		// Create container with "echo hi; sleep infinity" command for now
 		opts := container.CreateOptions{
-			Image:   "ubuntu:24.04",
+			Image:   s.containerImage,
 			Cmd:     []string{"/bin/sh", "-c", "echo hi; sleep infinity"},
 			WorkDir: "/workspace",
 			Labels: map[string]string{
