@@ -4,9 +4,9 @@
  * Core logic for watching the agent directory and triggering Docker builds.
  */
 
-import { watch, type FSWatcher } from "node:fs";
-import { readFile, writeFile, access, constants } from "node:fs/promises";
 import { spawn } from "node:child_process";
+import { type FSWatcher, watch } from "node:fs";
+import { access, constants, readFile, writeFile } from "node:fs/promises";
 
 export interface WatcherConfig {
 	agentDir: string;
@@ -306,7 +306,7 @@ export class AgentWatcher {
 				}
 
 				this.logger.log(`Change detected: ${filename} (${eventType})`);
-				this.onFileChange?.(filename!, eventType);
+				this.onFileChange?.(filename ?? "", eventType);
 				this.scheduleBuild();
 			},
 		);

@@ -8,7 +8,7 @@
  * Usage: npx tsx scripts/agent-watcher/index.ts
  */
 
-import { join, dirname } from "node:path";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { AgentWatcher } from "./watcher.js";
 

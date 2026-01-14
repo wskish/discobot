@@ -1,17 +1,16 @@
 import assert from "node:assert/strict";
-import { after, before, beforeEach, describe, it } from "node:test";
-import { mkdir, writeFile, readFile, rm, access, constants } from "node:fs/promises";
-import { join } from "node:path";
-import { tmpdir } from "node:os";
-import { randomUUID } from "node:crypto";
 import { execSync } from "node:child_process";
+import { randomUUID } from "node:crypto";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { after, before, beforeEach, describe, it } from "node:test";
 import {
 	AgentWatcher,
-	updateEnvFile,
-	shouldIgnorePath,
 	type CommandRunner,
-	type CommandResult,
 	type Logger,
+	shouldIgnorePath,
+	updateEnvFile,
 } from "./watcher.js";
 
 // Helper to create a temp directory
@@ -228,7 +227,7 @@ describe("AgentWatcher", () => {
 			let buildCalls = 0;
 			let inspectCalls = 0;
 
-			const mockRunner: CommandRunner = async (command, args) => {
+			const mockRunner: CommandRunner = async (_command, args) => {
 				if (args.includes("build")) {
 					buildCalls++;
 					return { stdout: "", stderr: "", exitCode: 0 };
@@ -272,12 +271,12 @@ describe("AgentWatcher", () => {
 
 		it("queues build if one is in progress", async () => {
 			let buildCount = 0;
-			let resolveFirstBuild: () => void;
+			let resolveFirstBuild: (() => void) | undefined;
 			const firstBuildPromise = new Promise<void>((resolve) => {
 				resolveFirstBuild = resolve;
 			});
 
-			const mockRunner: CommandRunner = async (command, args) => {
+			const mockRunner: CommandRunner = async (_command, args) => {
 				if (args.includes("build")) {
 					buildCount++;
 					if (buildCount === 1) {
@@ -310,7 +309,7 @@ describe("AgentWatcher", () => {
 			watcher.doBuild();
 
 			// Release first build
-			resolveFirstBuild!();
+			resolveFirstBuild?.();
 			await firstBuild;
 
 			// Wait for pending build to complete
@@ -324,11 +323,9 @@ describe("AgentWatcher", () => {
 	describe("file watching", () => {
 		it("detects file changes and triggers build", async () => {
 			const changes: Array<{ filename: string; eventType: string }> = [];
-			let buildTriggered = false;
 
-			const mockRunner: CommandRunner = async (command, args) => {
+			const mockRunner: CommandRunner = async (_command, args) => {
 				if (args.includes("build")) {
-					buildTriggered = true;
 					return { stdout: "", stderr: "", exitCode: 0 };
 				}
 				if (args.includes("inspect")) {
@@ -356,7 +353,6 @@ describe("AgentWatcher", () => {
 
 			// Start watcher (skip initial build by mocking)
 			await watcher.doBuild(); // Initial build
-			buildTriggered = false; // Reset
 
 			// Start watching
 			const watchPromise = (async () => {
@@ -458,7 +454,11 @@ CMD ["echo", "hello"]
 		await watcher.doBuild();
 
 		assert.equal(buildSuccess, true, "Build should succeed");
-		assert.equal(imageRef, "agent-watcher-test:e2e", "Should return correct image ref");
+		assert.equal(
+			imageRef,
+			"agent-watcher-test:e2e",
+			"Should return correct image ref",
+		);
 
 		// Verify env file was updated
 		const envContent = await readFile(envPath, "utf-8");
@@ -472,6 +472,9 @@ CMD ["echo", "hello"]
 			"docker inspect agent-watcher-test:e2e --format '{{.Id}}'",
 			{ encoding: "utf-8" },
 		);
-		assert.ok(inspectResult.startsWith("sha256:"), "Image should exist in Docker");
+		assert.ok(
+			inspectResult.startsWith("sha256:"),
+			"Image should exist in Docker",
+		);
 	});
 });
