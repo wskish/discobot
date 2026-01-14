@@ -10,6 +10,7 @@ import {
 	sessionUpdateToUIPart,
 	uiMessageToContentBlocks,
 } from "../acp/translate.js";
+import { authMiddleware } from "../auth/middleware.js";
 import { checkCredentialsChanged } from "../credentials/credentials.js";
 import {
 	addMessage,
@@ -27,6 +28,8 @@ export interface AppOptions {
 	agentArgs: string[];
 	agentCwd: string;
 	enableLogging?: boolean;
+	/** Salted hash of shared secret (from OCTOBOT_SECRET env var) for auth enforcement */
+	sharedSecretHash?: string;
 }
 
 export function createApp(options: AppOptions) {
@@ -41,6 +44,11 @@ export function createApp(options: AppOptions) {
 
 	if (options.enableLogging) {
 		app.use("*", logger());
+	}
+
+	// Apply auth middleware if shared secret is configured
+	if (options.sharedSecretHash) {
+		app.use("*", authMiddleware(options.sharedSecretHash));
 	}
 
 	app.get("/", (c) => {
@@ -65,10 +73,14 @@ export function createApp(options: AppOptions) {
 
 	// POST /chat - Send messages and stream response
 	app.post("/chat", async (c) => {
+		const startTime = Date.now();
+		console.log("[POST /chat] Request received");
+
 		const body = await c.req.json<{ messages: UIMessage[] }>();
 		const { messages: inputMessages } = body;
 
 		if (!inputMessages || !Array.isArray(inputMessages)) {
+			console.log("[POST /chat] Error: messages array required");
 			return c.json({ error: "messages array required" }, 400);
 		}
 
@@ -77,8 +89,17 @@ export function createApp(options: AppOptions) {
 			.filter((m) => m.role === "user")
 			.pop();
 		if (!lastUserMessage) {
+			console.log("[POST /chat] Error: No user message found");
 			return c.json({ error: "No user message found" }, 400);
 		}
+
+		// Log the user message (truncate if too long)
+		const msgPreview =
+			lastUserMessage.parts
+				?.map((p) => (p.type === "text" ? p.text : `[${p.type}]`))
+				.join("")
+				.slice(0, 100) || "[no text]";
+		console.log(`[POST /chat] User message: "${msgPreview}${msgPreview.length >= 100 ? "..." : ""}"`);
 
 		// Check for credential changes from header
 		const credentialsHeader = c.req.header(CREDENTIALS_HEADER) || null;
@@ -194,6 +215,9 @@ export function createApp(options: AppOptions) {
 				// Send prompt to ACP
 				await acpClient.prompt(contentBlocks);
 
+				const duration = Date.now() - startTime;
+				console.log(`[POST /chat] Completed successfully in ${duration}ms`);
+
 				// Send completion event in UIMessage Stream format
 				await stream.writeSSE({
 					data: JSON.stringify({
@@ -202,7 +226,8 @@ export function createApp(options: AppOptions) {
 					}),
 				});
 			} catch (error) {
-				console.error("Prompt error:", error);
+				const duration = Date.now() - startTime;
+				console.error(`[POST /chat] Error after ${duration}ms:`, error);
 				// Send error in UIMessage Stream format
 				await stream.writeSSE({
 					data: JSON.stringify({
