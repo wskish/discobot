@@ -6,19 +6,13 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/anthropics/octobot/server/internal/middleware"
-	"github.com/anthropics/octobot/server/internal/service"
 )
-
-// workspaceService returns a workspace service (created on demand)
-func (h *Handler) workspaceService() *service.WorkspaceService {
-	return service.NewWorkspaceService(h.store, h.gitProvider, h.eventBroker)
-}
 
 // ListWorkspaces returns all workspaces for a project
 func (h *Handler) ListWorkspaces(w http.ResponseWriter, r *http.Request) {
 	projectID := middleware.GetProjectID(r.Context())
 
-	workspaces, err := h.workspaceService().ListWorkspaces(r.Context(), projectID)
+	workspaces, err := h.workspaceService.ListWorkspaces(r.Context(), projectID)
 	if err != nil {
 		h.Error(w, http.StatusInternalServerError, "Failed to list workspaces")
 		return
@@ -47,7 +41,7 @@ func (h *Handler) CreateWorkspace(w http.ResponseWriter, r *http.Request) {
 		req.SourceType = "local"
 	}
 
-	workspace, err := h.workspaceService().CreateWorkspace(r.Context(), projectID, req.Path, req.SourceType)
+	workspace, err := h.workspaceService.CreateWorkspace(r.Context(), projectID, req.Path, req.SourceType)
 	if err != nil {
 		h.Error(w, http.StatusInternalServerError, "Failed to create workspace")
 		return
@@ -66,7 +60,7 @@ func (h *Handler) CreateWorkspace(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) GetWorkspace(w http.ResponseWriter, r *http.Request) {
 	workspaceID := chi.URLParam(r, "workspaceId")
 
-	workspace, err := h.workspaceService().GetWorkspaceWithSessions(r.Context(), workspaceID)
+	workspace, err := h.workspaceService.GetWorkspaceWithSessions(r.Context(), workspaceID)
 	if err != nil {
 		h.Error(w, http.StatusNotFound, "Workspace not found")
 		return
@@ -87,7 +81,7 @@ func (h *Handler) UpdateWorkspace(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	workspace, err := h.workspaceService().UpdateWorkspace(r.Context(), workspaceID, req.Path)
+	workspace, err := h.workspaceService.UpdateWorkspace(r.Context(), workspaceID, req.Path)
 	if err != nil {
 		h.Error(w, http.StatusInternalServerError, "Failed to update workspace")
 		return
@@ -103,7 +97,7 @@ func (h *Handler) DeleteWorkspace(w http.ResponseWriter, r *http.Request) {
 	workspaceID := chi.URLParam(r, "workspaceId")
 	deleteFiles := r.URL.Query().Get("deleteFiles") == "true"
 
-	if err := h.workspaceService().DeleteWorkspace(r.Context(), workspaceID, deleteFiles); err != nil {
+	if err := h.workspaceService.DeleteWorkspace(r.Context(), workspaceID, deleteFiles); err != nil {
 		h.Error(w, http.StatusInternalServerError, "Failed to delete workspace")
 		return
 	}

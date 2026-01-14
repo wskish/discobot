@@ -48,7 +48,7 @@ func (s *WorkspaceService) ListWorkspaces(ctx context.Context, projectID string)
 
 	workspaces := make([]*Workspace, len(dbWorkspaces))
 	for i, ws := range dbWorkspaces {
-		workspaces[i] = s.mapWorkspace(ws)
+		workspaces[i] = s.mapWorkspace(ctx, ws)
 	}
 	return workspaces, nil
 }
@@ -60,7 +60,7 @@ func (s *WorkspaceService) GetWorkspace(ctx context.Context, workspaceID string)
 		return nil, fmt.Errorf("failed to get workspace: %w", err)
 	}
 
-	return s.mapWorkspace(ws), nil
+	return s.mapWorkspace(ctx, ws), nil
 }
 
 // CreateWorkspace creates a new workspace with initializing status
@@ -75,7 +75,7 @@ func (s *WorkspaceService) CreateWorkspace(ctx context.Context, projectID, path,
 		return nil, fmt.Errorf("failed to create workspace: %w", err)
 	}
 
-	return s.mapWorkspace(ws), nil
+	return s.mapWorkspace(ctx, ws), nil
 }
 
 // UpdateWorkspace updates a workspace
@@ -90,11 +90,11 @@ func (s *WorkspaceService) UpdateWorkspace(ctx context.Context, workspaceID, pat
 		return nil, fmt.Errorf("failed to update workspace: %w", err)
 	}
 
-	return s.mapWorkspace(ws), nil
+	return s.mapWorkspace(ctx, ws), nil
 }
 
 // mapWorkspace converts a model.Workspace to a service.Workspace
-func (s *WorkspaceService) mapWorkspace(ws *model.Workspace) *Workspace {
+func (s *WorkspaceService) mapWorkspace(ctx context.Context, ws *model.Workspace) *Workspace {
 	result := &Workspace{
 		ID:         ws.ID,
 		Path:       ws.Path,
@@ -110,7 +110,7 @@ func (s *WorkspaceService) mapWorkspace(ws *model.Workspace) *Workspace {
 	}
 	// Get working directory path from git provider if available
 	if s.gitProvider != nil {
-		result.WorkDir = s.gitProvider.GetWorkDir(context.Background(), ws.ID)
+		result.WorkDir = s.gitProvider.GetWorkDir(ctx, ws.ID)
 	}
 	return result
 }
@@ -137,7 +137,8 @@ func (s *WorkspaceService) GetWorkspaceWithSessions(ctx context.Context, workspa
 	}
 
 	// Create session service to fetch sessions
-	sessionSvc := NewSessionService(s.store)
+	// Note: container runtime is nil since ListSessionsByWorkspace doesn't need it
+	sessionSvc := NewSessionService(s.store, s.gitProvider, nil, s.eventBroker)
 	sessions, err := sessionSvc.ListSessionsByWorkspace(ctx, workspaceID)
 	if err != nil {
 		return nil, err

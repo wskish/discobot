@@ -157,7 +157,6 @@ func TestUpdateWorkspace(t *testing.T) {
 	client := ts.AuthenticatedClient(user)
 
 	resp := client.Put("/api/projects/"+project.ID+"/workspaces/"+workspace.ID, map[string]string{
-		"name": "Updated Workspace",
 		"path": "/home/user/new-path",
 	})
 	defer resp.Body.Close()
@@ -167,8 +166,8 @@ func TestUpdateWorkspace(t *testing.T) {
 	var result map[string]interface{}
 	ParseJSON(t, resp, &result)
 
-	if result["name"] != "Updated Workspace" {
-		t.Errorf("Expected name 'Updated Workspace', got '%v'", result["name"])
+	if result["path"] != "/home/user/new-path" {
+		t.Errorf("Expected path '/home/user/new-path', got '%v'", result["path"])
 	}
 }
 

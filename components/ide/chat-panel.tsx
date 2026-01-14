@@ -1,6 +1,8 @@
 "use client";
 
+import { useChat } from "@ai-sdk/react";
 import { SiGithub } from "@icons-pack/react-simple-icons";
+import { DefaultChatTransport, type UIMessage } from "ai";
 import {
 	AlertCircle,
 	Bot,
@@ -48,6 +50,7 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { getApiBase } from "@/lib/api-config";
 import type {
 	Agent,
 	Session,
@@ -55,6 +58,7 @@ import type {
 	SupportedAgentType,
 	Workspace,
 } from "@/lib/api-types";
+import { useMessages } from "@/lib/hooks/use-messages";
 import { cn } from "@/lib/utils";
 
 function getWorkspaceType(path: string): "github" | "git" | "local" {
@@ -100,32 +104,21 @@ function WorkspaceIcon({
 	return <HardDrive className={cn("text-blue-500", className)} />;
 }
 
-interface InternalMessage {
-	id: string;
-	role: "user" | "assistant";
-	parts: { type: "text"; text: string }[];
-	createdAt: Date;
-}
-
-interface ChatMessage {
-	id: string;
-	role: "user" | "assistant";
-	content: string;
-	turn: number;
-}
-
 type ChatMode = "welcome" | "conversation";
 
+// Helper to extract text content from AI SDK message parts
+function getMessageText(message: UIMessage): string {
+	return message.parts
+		.filter(
+			(part): part is { type: "text"; text: string } => part.type === "text",
+		)
+		.map((part) => part.text)
+		.join("");
+}
+
 interface ChatPanelProps {
-	initialMessages?: ChatMessage[];
 	className?: string;
-	onFirstMessage?: (
-		message: string,
-		workspaceId: string,
-		agentId: string,
-		modeId?: string,
-		modelId?: string,
-	) => void;
+	onSessionCreated?: (sessionId: string) => void;
 	workspaces?: Workspace[];
 	selectedWorkspaceId?: string | null;
 	onAddWorkspace?: () => void;
@@ -198,9 +191,8 @@ function getStatusDisplay(status: SessionStatus): {
 }
 
 export function ChatPanel({
-	initialMessages = [],
 	className,
-	onFirstMessage,
+	onSessionCreated: _onSessionCreated,
 	workspaces = [],
 	selectedWorkspaceId,
 	onAddWorkspace,
@@ -213,8 +205,7 @@ export function ChatPanel({
 	sessionAgent,
 	sessionWorkspace,
 }: ChatPanelProps) {
-	const [input, setInput] = React.useState("");
-	const [isLoading, setIsLoading] = React.useState(false);
+	void _onSessionCreated; // TODO: Use when session creation is implemented
 	const [localSelectedWorkspaceId, setLocalSelectedWorkspaceId] =
 		React.useState<string | null>(
 			selectedWorkspaceId || (workspaces.length > 0 ? workspaces[0].id : null),
@@ -230,17 +221,51 @@ export function ChatPanel({
 	);
 	const [isShimmering, setIsShimmering] = React.useState(false);
 
+	// Manage input state locally
+	const [input, setInput] = React.useState("");
+
+	// Fetch existing messages when a session is selected
+	const { messages: existingMessages } = useMessages(session?.id || null);
+
+	// Create transport for the chat API
+	const transport = React.useMemo(
+		() =>
+			new DefaultChatTransport({
+				api: `${getApiBase()}/chat`,
+				// For new sessions, include workspace and agent in body
+				body: session?.id
+					? undefined
+					: {
+							workspaceId: localSelectedWorkspaceId,
+							agentId: localSelectedAgentId,
+						},
+			}),
+		[session?.id, localSelectedWorkspaceId, localSelectedAgentId],
+	);
+
+	// Use AI SDK's useChat hook
+	const {
+		messages,
+		sendMessage,
+		status: chatStatus,
+	} = useChat({
+		transport,
+		// For existing sessions, use the session ID
+		id: session?.id,
+		// Load existing messages when session is selected (UIMessage format from container)
+		messages: existingMessages.length > 0 ? existingMessages : undefined,
+		// Handle when streaming completes
+		onFinish: (_message) => {
+			// TODO: Handle session creation from metadata when server implements it
+		},
+	});
+
+	// Derive loading state from chat status
+	const isLoading = chatStatus === "streaming" || chatStatus === "submitted";
+
 	// Determine mode based on whether we have messages or a session
 	// Use truthiness check since props may be undefined when not passed
 	const hasSession = !!sessionAgent || !!sessionWorkspace;
-	const [messages, setMessages] = React.useState<InternalMessage[]>(() =>
-		initialMessages.map((m) => ({
-			id: m.id,
-			role: m.role,
-			parts: [{ type: "text" as const, text: m.content }],
-			createdAt: new Date(),
-		})),
-	);
 
 	// Mode is "conversation" if we have a session or messages
 	const mode: ChatMode =
@@ -309,21 +334,11 @@ export function ChatPanel({
 		(m) => m.id === selectedModelId,
 	);
 
-	React.useEffect(() => {
-		setMessages(
-			initialMessages.map((m) => ({
-				id: m.id,
-				role: m.role,
-				parts: [{ type: "text", text: m.content }],
-				createdAt: new Date(),
-			})),
-		);
-	}, [initialMessages]);
-
+	// Group messages by turn (user + assistant pair)
 	const groupedByTurn = React.useMemo(() => {
-		const groups: { turn: number; messages: InternalMessage[] }[] = [];
+		const groups: { turn: number; messages: typeof messages }[] = [];
 		let currentTurn = 1;
-		let currentGroup: InternalMessage[] = [];
+		let currentGroup: typeof messages = [];
 
 		messages.forEach((msg) => {
 			currentGroup.push(msg);
@@ -341,53 +356,35 @@ export function ChatPanel({
 		return groups;
 	}, [messages]);
 
-	const handleSubmit = async () => {
-		if (!input.trim() || isLoading) return;
+	// Handle form submission
+	const handleSubmit = async (
+		message: {
+			text?: string;
+			files?:
+				| FileList
+				| { type: "file"; filename: string; mediaType: string; url: string }[];
+		},
+		e: React.FormEvent,
+	) => {
+		e.preventDefault();
+		const messageText = message.text || input;
+		if (!messageText.trim() || isLoading) return;
 
-		const messageText = input;
-
-		if (
-			messages.length === 0 &&
-			onFirstMessage &&
-			localSelectedWorkspaceId &&
-			localSelectedAgentId
-		) {
-			onFirstMessage(
-				messageText,
-				localSelectedWorkspaceId,
-				localSelectedAgentId,
-				selectedModeId || undefined,
-				selectedModelId || undefined,
-			);
+		// Validate selections for new sessions
+		if (!session?.id && (!localSelectedWorkspaceId || !localSelectedAgentId)) {
+			return;
 		}
 
-		const userMessage: InternalMessage = {
-			id: `msg-${Date.now()}`,
-			role: "user",
-			parts: [{ type: "text", text: messageText }],
-			createdAt: new Date(),
-		};
-
-		setMessages((prev) => [...prev, userMessage]);
+		// Clear input and send message
 		setInput("");
-		setIsLoading(true);
 
-		await new Promise((resolve) => setTimeout(resolve, 1000));
-
-		const assistantMessage: InternalMessage = {
-			id: `msg-${Date.now() + 1}`,
-			role: "assistant",
-			parts: [
-				{
-					type: "text",
-					text: `I understand you're asking about: "${messageText}"\n\nThis is a simulated response. In production, this would connect to your AI backend via the API route.`,
-				},
-			],
-			createdAt: new Date(),
-		};
-
-		setMessages((prev) => [...prev, assistantMessage]);
-		setIsLoading(false);
+		try {
+			await sendMessage({ text: messageText });
+		} catch (err) {
+			console.error("Failed to send message:", err);
+			// Restore input on error
+			setInput(messageText);
+		}
 	};
 
 	const handleCopy = (text: string) => {
@@ -711,53 +708,43 @@ export function ChatPanel({
 									</div>
 
 									<div className="space-y-3 pl-3 border-l-2 border-border">
-										{group.messages.map((message, messageIdx) => (
-											<MessageRoleProvider key={message.id} role={message.role}>
-												<Message from={message.role}>
-													<MessageContent>
-														<div className="text-xs font-medium text-muted-foreground mb-1">
-															{message.role === "user" ? "You" : "Assistant"}
-														</div>
-														{message.parts.map((part, i) => {
-															if (part.type === "text") {
-																return (
-																	<MessageResponse key={`${message.id}-${i}`}>
-																		{part.text}
-																	</MessageResponse>
-																);
-															}
-															return null;
-														})}
-														{message.role === "assistant" &&
-															messageIdx === group.messages.length - 1 && (
-																<MessageActions>
-																	<MessageAction
-																		label="Retry"
-																		tooltip="Regenerate response"
-																		onClick={handleRegenerate}
-																	>
-																		<RefreshCcw className="size-3" />
-																	</MessageAction>
-																	<MessageAction
-																		label="Copy"
-																		tooltip="Copy to clipboard"
-																		onClick={() => {
-																			const textPart = message.parts.find(
-																				(p) => p.type === "text",
-																			);
-																			if (textPart && "text" in textPart) {
-																				handleCopy(textPart.text);
-																			}
-																		}}
-																	>
-																		<Copy className="size-3" />
-																	</MessageAction>
-																</MessageActions>
-															)}
-													</MessageContent>
-												</Message>
-											</MessageRoleProvider>
-										))}
+										{group.messages.map((message, messageIdx) => {
+											const textContent = getMessageText(message);
+											return (
+												<MessageRoleProvider
+													key={message.id}
+													role={message.role}
+												>
+													<Message from={message.role}>
+														<MessageContent>
+															<div className="text-xs font-medium text-muted-foreground mb-1">
+																{message.role === "user" ? "You" : "Assistant"}
+															</div>
+															<MessageResponse>{textContent}</MessageResponse>
+															{message.role === "assistant" &&
+																messageIdx === group.messages.length - 1 && (
+																	<MessageActions>
+																		<MessageAction
+																			label="Retry"
+																			tooltip="Regenerate response"
+																			onClick={handleRegenerate}
+																		>
+																			<RefreshCcw className="size-3" />
+																		</MessageAction>
+																		<MessageAction
+																			label="Copy"
+																			tooltip="Copy to clipboard"
+																			onClick={() => handleCopy(textContent)}
+																		>
+																			<Copy className="size-3" />
+																		</MessageAction>
+																	</MessageActions>
+																)}
+														</MessageContent>
+													</Message>
+												</MessageRoleProvider>
+											);
+										})}
 									</div>
 								</div>
 							))}

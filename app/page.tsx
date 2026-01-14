@@ -22,13 +22,11 @@ import { useAgents } from "@/lib/hooks/use-agents";
 import { useAuthProviders } from "@/lib/hooks/use-auth-providers";
 import { useCredentials } from "@/lib/hooks/use-credentials";
 import { useDialogState } from "@/lib/hooks/use-dialog-state";
-import { useMessages } from "@/lib/hooks/use-messages";
 import {
 	STORAGE_KEYS,
 	usePersistedState,
 } from "@/lib/hooks/use-persisted-state";
 import { useProjectEvents } from "@/lib/hooks/use-project-events";
-import { useCreateSession } from "@/lib/hooks/use-sessions";
 import { useWorkspaces } from "@/lib/hooks/use-workspaces";
 
 export default function IDEChatPage() {
@@ -91,8 +89,6 @@ export default function IDEChatPage() {
 	const { agentTypes } = useAgentTypes();
 	const { authProviders } = useAuthProviders();
 	const { credentials } = useCredentials();
-	const { messages } = useMessages(selectedSession?.id || null);
-	const { createSession } = useCreateSession();
 
 	// Subscribe to SSE events for real-time session status updates
 	useProjectEvents({
@@ -105,9 +101,6 @@ export default function IDEChatPage() {
 
 	// Dialog state
 	const dialogs = useDialogState();
-	const [credentialsOpen, setCredentialsOpen] = React.useState(false);
-	const [credentialsInitialProviderId, setCredentialsInitialProviderId] =
-		React.useState<string | null>(null);
 	// Track pending agent type when user needs to configure credentials first
 	const [pendingAgentType, setPendingAgentType] =
 		React.useState<SupportedAgentType | null>(null);
@@ -117,40 +110,18 @@ export default function IDEChatPage() {
 	const [workspaceToDelete, setWorkspaceToDelete] =
 		React.useState<Workspace | null>(null);
 
-	// Handle credentials dialog close - create pending agent if credentials were configured
-	const handleCredentialsOpenChange = React.useCallback(
-		async (open: boolean) => {
-			setCredentialsOpen(open);
-			if (!open) {
-				setCredentialsInitialProviderId(null);
-				// If we have a pending agent type from welcome modal, create it now
-				if (pendingAgentType) {
-					const agentType = pendingAgentType;
-					setPendingAgentType(null);
-					try {
-						const agent = await createAgent({
-							name: agentType.name,
-							description: agentType.description,
-							agentType: agentType.id,
-						});
-						await api.setDefaultAgent(agent.id);
-						mutateAgents();
-					} catch (error) {
-						console.error("Failed to create agent:", error);
-					}
-				}
-			}
-		},
-		[pendingAgentType, createAgent, mutateAgents],
-	);
-
-	const openCredentialsForProvider = React.useCallback(
-		(providerId?: string) => {
-			setCredentialsInitialProviderId(providerId || null);
-			setCredentialsOpen(true);
+	// TODO: Wire up credentials dialog when needed
+	const _openCredentialsForProvider = React.useCallback(
+		(_providerId?: string) => {
+			// Placeholder for future credentials dialog
+			console.log("Credentials dialog not yet implemented");
 		},
 		[],
 	);
+	// Suppress unused variable warning - will be used when credentials dialog is wired up
+	void _openCredentialsForProvider;
+	void pendingAgentType;
+	void setPendingAgentType;
 
 	// Computed values
 	const sessionAgent = React.useMemo(() => {
@@ -183,7 +154,8 @@ export default function IDEChatPage() {
 	}, []);
 
 	// Handle workspace selection from breadcrumb dropdown
-	const handleWorkspaceSelect = React.useCallback((workspace: Workspace) => {
+	// TODO: Wire this up to workspace dropdown when implemented
+	const _handleWorkspaceSelect = React.useCallback((workspace: Workspace) => {
 		// Find first non-closed session in this workspace
 		const firstSession = workspace.sessions.find((s) => s.status !== "closed");
 		if (firstSession) {
@@ -194,6 +166,7 @@ export default function IDEChatPage() {
 			setPreselectedWorkspaceId(workspace.id);
 		}
 	}, []);
+	void _handleWorkspaceSelect;
 
 	const handleAddWorkspace = async (newWorkspace: CreateWorkspaceRequest) => {
 		const workspace = await createWorkspace(newWorkspace);
@@ -242,32 +215,26 @@ export default function IDEChatPage() {
 		dialogs.closeAgentDialog();
 	};
 
-	const handleFirstMessage = async (
-		message: string,
-		workspaceId: string,
-		agentId: string,
-	) => {
-		const sessionName =
-			message.length > 50 ? `${message.substring(0, 50)}...` : message;
-
+	// Called when chat endpoint creates a new session
+	const handleSessionCreated = async (sessionId: string) => {
 		try {
-			// Create session via API - this starts the async initialization flow
-			// The session will be returned immediately with "initializing" status
-			const newSession = await createSession(workspaceId, {
-				name: sessionName,
-				agentId,
-			});
-
-			setSelectedSession(newSession);
+			// Fetch the newly created session
+			const session = await api.getSession(sessionId);
+			setSelectedSession(session);
 			setPreselectedWorkspaceId(null);
 
-			const agent = agents.find((a) => a.id === agentId);
-			if (agent) {
-				setSelectedAgent(agent);
+			// Select the agent if available
+			if (session.agentId) {
+				const agent = agents.find((a) => a.id === session.agentId);
+				if (agent) {
+					setSelectedAgent(agent);
+				}
 			}
+
+			// Refresh the workspaces list (sessions are nested within workspaces)
+			mutateWorkspaces();
 		} catch (error) {
-			console.error("Failed to create session:", error);
-			// TODO: Show error toast
+			console.error("Failed to fetch created session:", error);
 		}
 	};
 
@@ -315,8 +282,7 @@ export default function IDEChatPage() {
 					selectedAgentId={selectedAgent?.id || null}
 					onAddWorkspace={dialogs.openWorkspaceDialog}
 					onAddAgent={() => dialogs.openAgentDialog()}
-					onFirstMessage={handleFirstMessage}
-					messages={messages}
+					onSessionCreated={handleSessionCreated}
 					sessionAgent={sessionAgent}
 					sessionWorkspace={sessionWorkspace}
 				/>

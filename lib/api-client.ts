@@ -9,7 +9,6 @@ import type {
 	CodexExchangeResponse,
 	CreateAgentRequest,
 	CreateCredentialRequest,
-	CreateSessionRequest,
 	CreateWorkspaceRequest,
 	CredentialInfo,
 	FileNode,
@@ -119,15 +118,7 @@ class ApiClient {
 		return this.fetch<Session>(`/sessions/${id}`);
 	}
 
-	async createSession(
-		workspaceId: string,
-		data: CreateSessionRequest,
-	): Promise<Session> {
-		return this.fetch<Session>(`/workspaces/${workspaceId}/sessions`, {
-			method: "POST",
-			body: JSON.stringify(data),
-		});
-	}
+	// NOTE: createSession removed - sessions are created implicitly via /chat endpoint
 
 	async updateSession(
 		id: string,

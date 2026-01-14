@@ -49,6 +49,16 @@ type Container struct {
 	StoppedAt *time.Time        // When the container was stopped (nil if still running)
 	Error     string            // Error message if status == failed
 	Metadata  map[string]string // Runtime-specific metadata
+	Ports     []AssignedPort    // Assigned port mappings after container creation
+	Env       map[string]string // Environment variables set on the container
+}
+
+// AssignedPort represents a port mapping that was assigned after container creation.
+type AssignedPort struct {
+	ContainerPort int    // Port inside the container
+	HostPort      int    // Actual port assigned on the host
+	HostIP        string // Host IP address (typically "0.0.0.0" or "127.0.0.1")
+	Protocol      string // Protocol: "tcp" or "udp"
 }
 
 // ContainerStatus represents the current state of a container.
@@ -75,6 +85,17 @@ type CreateOptions struct {
 
 	// Resources defines resource limits for the container.
 	Resources ResourceConfig
+
+	// Ports configures port mappings for the container.
+	// Maps container ports to host ports.
+	Ports []PortMapping
+}
+
+// PortMapping defines a port mapping from container to host.
+type PortMapping struct {
+	ContainerPort int    // Port inside the container
+	HostPort      int    // Port on the host (0 = random available port)
+	Protocol      string // Protocol: "tcp" or "udp" (default: "tcp")
 }
 
 // StorageConfig defines how workspace files are made available to the container.

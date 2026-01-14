@@ -104,8 +104,7 @@ func main() {
 
 		// Register session init executor if container runtime is available
 		if containerRuntime != nil {
-			sessionSvc := service.NewSessionService(s)
-			sessionSvc.SetRuntimeDependencies(gitProvider, containerRuntime, eventBroker)
+			sessionSvc := service.NewSessionService(s, gitProvider, containerRuntime, eventBroker)
 			disp.RegisterExecutor(jobs.NewSessionInitExecutor(sessionSvc))
 		}
 
@@ -208,9 +207,8 @@ func main() {
 				r.Put("/{workspaceId}", h.UpdateWorkspace)
 				r.Delete("/{workspaceId}", h.DeleteWorkspace)
 
-				// Sessions within workspace
+				// Sessions within workspace (list only - creation via /chat endpoint)
 				r.Get("/{workspaceId}/sessions", h.ListSessionsByWorkspace)
-				r.Post("/{workspaceId}/sessions", h.CreateSession)
 
 				// Git operations
 				r.Get("/{workspaceId}/git/status", h.GetWorkspaceGitStatus)
@@ -277,11 +275,11 @@ func main() {
 			r.Get("/sessions/{sessionId}/terminal/ws", h.TerminalWebSocket)
 			r.Get("/sessions/{sessionId}/terminal/history", h.GetTerminalHistory)
 			r.Get("/sessions/{sessionId}/terminal/status", h.GetTerminalStatus)
+
+			// AI Chat endpoint (streaming)
+			r.Post("/chat", h.Chat)
 		})
 	})
-
-	// AI Chat endpoint
-	r.Post("/api/chat", h.Chat)
 
 	// Create server
 	srv := &http.Server{

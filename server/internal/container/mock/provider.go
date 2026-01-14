@@ -45,6 +45,26 @@ func (p *Provider) Create(ctx context.Context, sessionID string, opts container.
 		return nil, container.ErrAlreadyExists
 	}
 
+	// Simulate port assignments for requested port mappings
+	var ports []container.AssignedPort
+	for _, pm := range opts.Ports {
+		protocol := pm.Protocol
+		if protocol == "" {
+			protocol = "tcp"
+		}
+		// Simulate random port assignment (using a deterministic value for testing)
+		hostPort := pm.HostPort
+		if hostPort == 0 {
+			hostPort = 32768 + pm.ContainerPort // Predictable for testing
+		}
+		ports = append(ports, container.AssignedPort{
+			ContainerPort: pm.ContainerPort,
+			HostPort:      hostPort,
+			HostIP:        "0.0.0.0",
+			Protocol:      protocol,
+		})
+	}
+
 	c := &container.Container{
 		ID:        "mock-" + sessionID,
 		SessionID: sessionID,
@@ -52,6 +72,8 @@ func (p *Provider) Create(ctx context.Context, sessionID string, opts container.
 		Image:     opts.Image,
 		CreatedAt: time.Now(),
 		Metadata:  map[string]string{"mock": "true"},
+		Ports:     ports,
+		Env:       opts.Env,
 	}
 	p.containers[sessionID] = c
 	return c, nil

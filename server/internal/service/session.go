@@ -3,6 +3,8 @@ package service
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -50,16 +52,13 @@ type SessionService struct {
 }
 
 // NewSessionService creates a new session service
-func NewSessionService(s *store.Store) *SessionService {
-	return &SessionService{store: s}
-}
-
-// SetRuntimeDependencies sets the optional runtime dependencies needed for session initialization.
-// These are optional because not all uses of SessionService need initialization capability.
-func (s *SessionService) SetRuntimeDependencies(gitProv git.Provider, containerRT container.Runtime, eventBroker *events.Broker) {
-	s.gitProvider = gitProv
-	s.containerRuntime = containerRT
-	s.eventBroker = eventBroker
+func NewSessionService(s *store.Store, gitProv git.Provider, containerRT container.Runtime, eventBroker *events.Broker) *SessionService {
+	return &SessionService{
+		store:            s,
+		gitProvider:      gitProv,
+		containerRuntime: containerRT,
+		eventBroker:      eventBroker,
+	}
 }
 
 // ListSessionsByWorkspace returns all sessions for a workspace
@@ -86,8 +85,9 @@ func (s *SessionService) GetSession(ctx context.Context, sessionID string) (*Ses
 	return s.mapSession(sess), nil
 }
 
-// CreateSession creates a new session with initializing status
-func (s *SessionService) CreateSession(ctx context.Context, projectID, workspaceID, name, agentID string) (*Session, error) {
+// CreateSession creates a new session with initializing status.
+// If initialMessage is provided, it creates the first user message in the session.
+func (s *SessionService) CreateSession(ctx context.Context, projectID, workspaceID, name, agentID, initialMessage string) (*Session, error) {
 	var aidPtr *string
 	if agentID != "" {
 		aidPtr = &agentID
@@ -103,6 +103,19 @@ func (s *SessionService) CreateSession(ctx context.Context, projectID, workspace
 	}
 	if err := s.store.CreateSession(ctx, sess); err != nil {
 		return nil, fmt.Errorf("failed to create session: %w", err)
+	}
+
+	// Create the initial user message if provided
+	if initialMessage != "" {
+		msg := &model.Message{
+			SessionID: sess.ID,
+			Role:      "user",
+			Parts:     model.NewTextParts(initialMessage),
+		}
+		if err := s.store.CreateMessage(ctx, msg); err != nil {
+			// Log the error but don't fail session creation
+			log.Printf("Warning: failed to create initial message for session %s: %v", sess.ID, err)
+		}
 	}
 
 	return s.mapSession(sess), nil
@@ -264,6 +277,9 @@ func (s *SessionService) initializeSync(
 		}
 	}()
 
+	// Generate a shared secret for container communication
+	containerSecret := generateSecret(32)
+
 	// Container creation goroutine
 	go func() {
 		defer wg.Done()
@@ -280,6 +296,17 @@ func (s *SessionService) initializeSync(
 				"octobot.session.id":   sessionID,
 				"octobot.workspace.id": workspace.ID,
 				"octobot.project.id":   projectID,
+			},
+			Env: map[string]string{
+				"OCTOBOT_SECRET": containerSecret,
+			},
+			// Expose port 8080 on a random host port
+			Ports: []container.PortMapping{
+				{
+					ContainerPort: 8080,
+					HostPort:      0, // Random port
+					Protocol:      "tcp",
+				},
 			},
 		}
 
@@ -318,7 +345,6 @@ func (s *SessionService) initializeSync(
 		Session: session,
 		Workspace: &Workspace{
 			ID:         workspace.ID,
-			Name:       workspace.Name,
 			Path:       workDir, // Use the cloned path
 			SourceType: workspace.SourceType,
 		},
@@ -376,6 +402,16 @@ func (s *SessionService) updateStatusWithEvent(ctx context.Context, projectID, s
 			log.Printf("Failed to publish session update event: %v", err)
 		}
 	}
+}
+
+// generateSecret generates a cryptographically secure random hex string.
+func generateSecret(length int) string {
+	bytes := make([]byte, length)
+	if _, err := rand.Read(bytes); err != nil {
+		// Fallback to a less random but still unique value
+		return fmt.Sprintf("%d", time.Now().UnixNano())
+	}
+	return hex.EncodeToString(bytes)
 }
 
 // ptrString returns a pointer to a string.

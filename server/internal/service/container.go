@@ -130,6 +130,46 @@ func (s *ContainerService) Runtime() container.Runtime {
 	return s.runtime
 }
 
+// ContainerEndpoint contains the information needed to communicate with a container.
+type ContainerEndpoint struct {
+	Port   int    // Host port mapped to container port 8080
+	Secret string // Shared secret from OCTOBOT_SECRET env var
+}
+
+// GetEndpoint returns the port and secret for communicating with the session's container.
+// The port is the host port mapped to container port 8080.
+// The secret is the OCTOBOT_SECRET environment variable.
+func (s *ContainerService) GetEndpoint(ctx context.Context, sessionID string) (*ContainerEndpoint, error) {
+	c, err := s.runtime.Get(ctx, sessionID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get container: %w", err)
+	}
+
+	// Find the host port for container port 8080
+	var port int
+	for _, p := range c.Ports {
+		if p.ContainerPort == 8080 {
+			port = p.HostPort
+			break
+		}
+	}
+
+	if port == 0 {
+		return nil, fmt.Errorf("container port 8080 not mapped")
+	}
+
+	// Get the secret from env vars
+	secret := c.Env["OCTOBOT_SECRET"]
+	if secret == "" {
+		return nil, fmt.Errorf("OCTOBOT_SECRET not set in container")
+	}
+
+	return &ContainerEndpoint{
+		Port:   port,
+		Secret: secret,
+	}, nil
+}
+
 // StartContainerForSessionAsync creates and starts a container asynchronously.
 // Errors are logged but not returned (for use in session creation hooks).
 func (s *ContainerService) StartContainerForSessionAsync(sessionID, workspacePath string) {

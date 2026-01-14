@@ -760,7 +760,8 @@
         let defaultProjectId = localStorage.getItem('octobot_default_project_id') || 'local';
 
         // Resource cache for comboboxes
-        const resourceCache = {
+        // eslint-disable-next-line no-unused-vars
+        const _resourceCache = {
             workspaces: { data: null, loading: false, error: null },
             sessions: { data: null, loading: false, error: null },
             agents: { data: null, loading: false, error: null },
@@ -1153,7 +1154,7 @@
                     toggleDropdown();
                 });
 
-                input.addEventListener('blur', (e) => {
+                input.addEventListener('blur', () => {
                     // Delay to allow click on option
                     setTimeout(() => {
                         if (!container.contains(document.activeElement)) {

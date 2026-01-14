@@ -238,13 +238,13 @@ func (s *Session) BeforeCreate(tx *gorm.DB) error {
 }
 
 // Message represents a chat message in a session.
+// Stored in UIMessage format compatible with AI SDK.
 type Message struct {
-	ID        string    `gorm:"primaryKey;type:text" json:"id"`
-	SessionID string    `gorm:"column:session_id;not null;type:text;index" json:"session_id"`
-	Role      string    `gorm:"not null;type:text" json:"role"`
-	Content   string    `gorm:"not null;type:text" json:"content"`
-	Turn      int       `gorm:"not null" json:"turn"`
-	CreatedAt time.Time `gorm:"autoCreateTime" json:"created_at"`
+	ID        string          `gorm:"primaryKey;type:text" json:"id"`
+	SessionID string          `gorm:"column:session_id;not null;type:text;index" json:"sessionId"`
+	Role      string          `gorm:"not null;type:text" json:"role"`
+	Parts     json.RawMessage `gorm:"type:text;not null" json:"parts"`
+	CreatedAt time.Time       `gorm:"autoCreateTime" json:"createdAt"`
 
 	Session *Session `gorm:"foreignKey:SessionID" json:"-"`
 }
@@ -256,6 +256,19 @@ func (m *Message) BeforeCreate(tx *gorm.DB) error {
 		m.ID = uuid.New().String()
 	}
 	return nil
+}
+
+// TextPart represents a text part in a UIMessage.
+type TextPart struct {
+	Type string `json:"type"`
+	Text string `json:"text"`
+}
+
+// NewTextParts creates a JSON parts array with a single text part.
+func NewTextParts(text string) json.RawMessage {
+	parts := []TextPart{{Type: "text", Text: text}}
+	data, _ := json.Marshal(parts)
+	return data
 }
 
 // Credential represents stored credentials for AI providers.

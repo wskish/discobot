@@ -2,7 +2,7 @@
 
 import useSWR from "swr";
 import { api } from "../api-client";
-import type { CreateSessionRequest, UpdateSessionRequest } from "../api-types";
+import type { UpdateSessionRequest } from "../api-types";
 import { useWorkspaces } from "./use-workspaces";
 
 export function useSession(sessionId: string | null) {
@@ -27,20 +27,7 @@ export function useSession(sessionId: string | null) {
 	};
 }
 
-export function useCreateSession() {
-	const { mutate: mutateWorkspaces } = useWorkspaces();
-
-	const createSession = async (
-		workspaceId: string,
-		data: CreateSessionRequest,
-	) => {
-		const session = await api.createSession(workspaceId, data);
-		mutateWorkspaces();
-		return session;
-	};
-
-	return { createSession };
-}
+// NOTE: useCreateSession removed - sessions are created implicitly via /chat endpoint
 
 export function useDeleteSession() {
 	const { mutate: mutateWorkspaces } = useWorkspaces();

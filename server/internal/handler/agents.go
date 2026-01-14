@@ -227,16 +227,11 @@ var agentTypes = []AgentType{
 	},
 }
 
-// agentService returns an agent service (created on demand)
-func (h *Handler) agentService() *service.AgentService {
-	return service.NewAgentService(h.store)
-}
-
 // ListAgents returns all agents for a project
 func (h *Handler) ListAgents(w http.ResponseWriter, r *http.Request) {
 	projectID := middleware.GetProjectID(r.Context())
 
-	agents, err := h.agentService().ListAgents(r.Context(), projectID)
+	agents, err := h.agentService.ListAgents(r.Context(), projectID)
 	if err != nil {
 		h.Error(w, http.StatusInternalServerError, "Failed to list agents")
 		return
@@ -269,7 +264,7 @@ func (h *Handler) CreateAgent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	agent, err := h.agentService().CreateAgent(r.Context(), projectID, req.Name, req.Description, req.AgentType, req.SystemPrompt, req.MCPServers)
+	agent, err := h.agentService.CreateAgent(r.Context(), projectID, req.Name, req.Description, req.AgentType, req.SystemPrompt, req.MCPServers)
 	if err != nil {
 		h.Error(w, http.StatusInternalServerError, "Failed to create agent")
 		return
@@ -304,7 +299,7 @@ func (h *Handler) SetDefaultAgent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.agentService().SetDefaultAgent(r.Context(), projectID, req.AgentID); err != nil {
+	if err := h.agentService.SetDefaultAgent(r.Context(), projectID, req.AgentID); err != nil {
 		h.Error(w, http.StatusInternalServerError, "Failed to set default agent")
 		return
 	}
@@ -316,7 +311,7 @@ func (h *Handler) SetDefaultAgent(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) GetAgent(w http.ResponseWriter, r *http.Request) {
 	agentID := chi.URLParam(r, "agentId")
 
-	agent, err := h.agentService().GetAgent(r.Context(), agentID)
+	agent, err := h.agentService.GetAgent(r.Context(), agentID)
 	if err != nil {
 		h.Error(w, http.StatusNotFound, "Agent not found")
 		return
@@ -340,7 +335,7 @@ func (h *Handler) UpdateAgent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	agent, err := h.agentService().UpdateAgent(r.Context(), agentID, req.Name, req.Description, req.SystemPrompt, req.MCPServers)
+	agent, err := h.agentService.UpdateAgent(r.Context(), agentID, req.Name, req.Description, req.SystemPrompt, req.MCPServers)
 	if err != nil {
 		h.Error(w, http.StatusInternalServerError, "Failed to update agent")
 		return
@@ -353,7 +348,7 @@ func (h *Handler) UpdateAgent(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) DeleteAgent(w http.ResponseWriter, r *http.Request) {
 	agentID := chi.URLParam(r, "agentId")
 
-	if err := h.agentService().DeleteAgent(r.Context(), agentID); err != nil {
+	if err := h.agentService.DeleteAgent(r.Context(), agentID); err != nil {
 		h.Error(w, http.StatusInternalServerError, "Failed to delete agent")
 		return
 	}

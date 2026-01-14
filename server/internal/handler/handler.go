@@ -26,7 +26,13 @@ type Handler struct {
 	credentialService   *service.CredentialService
 	gitService          *service.GitService
 	gitProvider         git.Provider
+	containerRuntime    container.Runtime
 	containerService    *service.ContainerService
+	sessionService      *service.SessionService
+	chatService         *service.ChatService
+	agentService        *service.AgentService
+	workspaceService    *service.WorkspaceService
+	projectService      *service.ProjectService
 	jobQueue            *jobs.Queue
 	eventBroker         *events.Broker
 	codexCallbackServer *CodexCallbackServer
@@ -53,6 +59,17 @@ func New(s *store.Store, cfg *config.Config, gitProvider git.Provider, container
 	// Create job queue for background job processing
 	jobQueue := jobs.NewQueue(s)
 
+	// Create session service (shared between chat and session handlers)
+	sessionSvc := service.NewSessionService(s, gitProvider, containerRuntime, eventBroker)
+
+	// Create chat service (uses session service for session creation)
+	chatSvc := service.NewChatService(s, sessionSvc, jobQueue, eventBroker, containerRuntime)
+
+	// Create remaining services
+	agentSvc := service.NewAgentService(s)
+	workspaceSvc := service.NewWorkspaceService(s, gitProvider, eventBroker)
+	projectSvc := service.NewProjectService(s)
+
 	h := &Handler{
 		store:             s,
 		cfg:               cfg,
@@ -60,7 +77,13 @@ func New(s *store.Store, cfg *config.Config, gitProvider git.Provider, container
 		credentialService: credSvc,
 		gitService:        gitSvc,
 		gitProvider:       gitProvider,
+		containerRuntime:  containerRuntime,
 		containerService:  containerSvc,
+		sessionService:    sessionSvc,
+		chatService:       chatSvc,
+		agentService:      agentSvc,
+		workspaceService:  workspaceSvc,
+		projectService:    projectSvc,
 		jobQueue:          jobQueue,
 		eventBroker:       eventBroker,
 	}

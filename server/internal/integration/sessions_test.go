@@ -27,32 +27,46 @@ func TestListSessionsByWorkspace_Empty(t *testing.T) {
 	}
 }
 
-func TestCreateSession(t *testing.T) {
+func TestCreateSession_ViaChat(t *testing.T) {
 	ts := NewTestServer(t)
 	user := ts.CreateTestUser("test@example.com")
 	project := ts.CreateTestProject(user, "Test Project")
 	workspace := ts.CreateTestWorkspace(project, "/home/user/code")
+	agent := ts.CreateTestAgent(project, "Test Agent", "claude-code")
 	client := ts.AuthenticatedClient(user)
 
-	resp := client.Post("/api/projects/"+project.ID+"/workspaces/"+workspace.ID+"/sessions", map[string]string{
-		"name": "New Session",
+	// Sessions are created implicitly via the chat endpoint
+	resp := client.Post("/api/projects/"+project.ID+"/chat", map[string]interface{}{
+		"messages":    []map[string]string{{"role": "user", "content": "Create a new session"}},
+		"workspaceId": workspace.ID,
+		"agentId":     agent.ID,
 	})
 	defer resp.Body.Close()
 
-	AssertStatus(t, resp, http.StatusCreated)
+	// Chat endpoint returns 200 with SSE stream
+	AssertStatus(t, resp, http.StatusOK)
 
-	var session map[string]interface{}
-	ParseJSON(t, resp, &session)
+	// Verify session was created by listing sessions
+	listResp := client.Get("/api/projects/" + project.ID + "/workspaces/" + workspace.ID + "/sessions")
+	defer listResp.Body.Close()
 
-	if session["name"] != "New Session" {
-		t.Errorf("Expected name 'New Session', got '%v'", session["name"])
+	var result struct {
+		Sessions []map[string]interface{} `json:"sessions"`
 	}
-	if session["status"] != "initializing" {
-		t.Errorf("Expected status 'initializing', got '%v'", session["status"])
+	ParseJSON(t, listResp, &result)
+
+	if len(result.Sessions) != 1 {
+		t.Errorf("Expected 1 session, got %d", len(result.Sessions))
+		return
+	}
+
+	// Session name is derived from the prompt
+	if result.Sessions[0]["name"] != "Create a new session" {
+		t.Errorf("Expected name derived from prompt, got '%v'", result.Sessions[0]["name"])
 	}
 }
 
-func TestCreateSession_WithAgent(t *testing.T) {
+func TestCreateSession_ViaChatWithAgent(t *testing.T) {
 	ts := NewTestServer(t)
 	user := ts.CreateTestUser("test@example.com")
 	project := ts.CreateTestProject(user, "Test Project")
@@ -60,40 +74,71 @@ func TestCreateSession_WithAgent(t *testing.T) {
 	agent := ts.CreateTestAgent(project, "Claude", "claude-code")
 	client := ts.AuthenticatedClient(user)
 
-	resp := client.Post("/api/projects/"+project.ID+"/workspaces/"+workspace.ID+"/sessions", map[string]string{
-		"name":    "Agent Session",
-		"agentId": agent.ID,
+	// Sessions are created implicitly via the chat endpoint with agent
+	resp := client.Post("/api/projects/"+project.ID+"/chat", map[string]interface{}{
+		"messages":    []map[string]string{{"role": "user", "content": "Hello agent"}},
+		"workspaceId": workspace.ID,
+		"agentId":     agent.ID,
 	})
 	defer resp.Body.Close()
 
-	AssertStatus(t, resp, http.StatusCreated)
+	AssertStatus(t, resp, http.StatusOK)
 
-	var session map[string]interface{}
-	ParseJSON(t, resp, &session)
+	// Verify session was created with agent by listing sessions
+	listResp := client.Get("/api/projects/" + project.ID + "/workspaces/" + workspace.ID + "/sessions")
+	defer listResp.Body.Close()
 
-	if session["agentId"] != agent.ID {
-		t.Errorf("Expected agentId '%s', got '%v'", agent.ID, session["agentId"])
+	var result struct {
+		Sessions []map[string]interface{} `json:"sessions"`
+	}
+	ParseJSON(t, listResp, &result)
+
+	if len(result.Sessions) != 1 {
+		t.Errorf("Expected 1 session, got %d", len(result.Sessions))
+		return
+	}
+
+	if result.Sessions[0]["agentId"] != agent.ID {
+		t.Errorf("Expected agentId '%s', got '%v'", agent.ID, result.Sessions[0]["agentId"])
 	}
 }
 
-func TestCreateSession_DefaultName(t *testing.T) {
+func TestCreateSession_NameFromLongPrompt(t *testing.T) {
 	ts := NewTestServer(t)
 	user := ts.CreateTestUser("test@example.com")
 	project := ts.CreateTestProject(user, "Test Project")
 	workspace := ts.CreateTestWorkspace(project, "/home/user/code")
+	agent := ts.CreateTestAgent(project, "Test Agent", "claude-code")
 	client := ts.AuthenticatedClient(user)
 
-	// When name is not provided, it defaults to "New Session"
-	resp := client.Post("/api/projects/"+project.ID+"/workspaces/"+workspace.ID+"/sessions", map[string]string{})
+	// Session name is derived from prompt, truncated to 50 chars
+	longPrompt := "This is a very long prompt that should be truncated to fit within the 50 character limit for session names"
+	resp := client.Post("/api/projects/"+project.ID+"/chat", map[string]interface{}{
+		"messages":    []map[string]string{{"role": "user", "content": longPrompt}},
+		"workspaceId": workspace.ID,
+		"agentId":     agent.ID,
+	})
 	defer resp.Body.Close()
 
-	AssertStatus(t, resp, http.StatusCreated)
+	AssertStatus(t, resp, http.StatusOK)
 
-	var session map[string]interface{}
-	ParseJSON(t, resp, &session)
+	// Verify session name was truncated
+	listResp := client.Get("/api/projects/" + project.ID + "/workspaces/" + workspace.ID + "/sessions")
+	defer listResp.Body.Close()
 
-	if session["name"] != "New Session" {
-		t.Errorf("Expected default name 'New Session', got '%v'", session["name"])
+	var result struct {
+		Sessions []map[string]interface{} `json:"sessions"`
+	}
+	ParseJSON(t, listResp, &result)
+
+	if len(result.Sessions) != 1 {
+		t.Errorf("Expected 1 session, got %d", len(result.Sessions))
+		return
+	}
+
+	name := result.Sessions[0]["name"].(string)
+	if len(name) > 53 { // 50 chars + "..."
+		t.Errorf("Expected name to be truncated, got length %d", len(name))
 	}
 }
 

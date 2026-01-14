@@ -1,3 +1,6 @@
+packages:
+  - 'agent'
+
 onlyBuiltDependencies:
   - '@tailwindcss/oxide'
   - sharp

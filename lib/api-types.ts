@@ -130,12 +130,9 @@ export interface AgentModel {
 	description?: string;
 }
 
-export interface ChatMessage {
-	id: string;
-	role: "user" | "assistant";
-	content: string;
-	turn: number;
-}
+// ChatMessage is re-exported from AI SDK for convenience
+// The actual type is UIMessage from 'ai' package
+export type { UIMessage as ChatMessage } from "ai";
 
 export interface Suggestion {
 	value: string;
@@ -151,6 +148,8 @@ export interface CreateWorkspaceRequest {
 export interface CreateSessionRequest {
 	name: string;
 	agentId: string;
+	/** Initial message to start the chat session with */
+	initialMessage?: string;
 }
 
 export interface UpdateSessionRequest {

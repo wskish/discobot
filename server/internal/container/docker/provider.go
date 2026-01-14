@@ -6,6 +6,8 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -14,6 +16,7 @@ import (
 	"github.com/docker/docker/api/types/mount"
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/stdcopy"
+	"github.com/docker/go-connections/nat"
 
 	"github.com/anthropics/octobot/server/internal/config"
 	"github.com/anthropics/octobot/server/internal/container"
@@ -143,6 +146,38 @@ func (p *Provider) Create(ctx context.Context, sessionID string, opts container.
 	// Configure network
 	if p.cfg.DockerNetwork != "" {
 		hostConfig.NetworkMode = containerTypes.NetworkMode(p.cfg.DockerNetwork)
+	}
+
+	// Configure port mappings
+	if len(opts.Ports) > 0 {
+		exposedPorts := nat.PortSet{}
+		portBindings := nat.PortMap{}
+
+		for _, pm := range opts.Ports {
+			protocol := pm.Protocol
+			if protocol == "" {
+				protocol = "tcp"
+			}
+
+			containerPort := nat.Port(fmt.Sprintf("%d/%s", pm.ContainerPort, protocol))
+			exposedPorts[containerPort] = struct{}{}
+
+			// HostPort of 0 means Docker will assign a random available port
+			hostPort := ""
+			if pm.HostPort > 0 {
+				hostPort = strconv.Itoa(pm.HostPort)
+			}
+
+			portBindings[containerPort] = []nat.PortBinding{
+				{
+					HostIP:   "0.0.0.0",
+					HostPort: hostPort,
+				},
+			}
+		}
+
+		containerConfig.ExposedPorts = exposedPorts
+		hostConfig.PortBindings = portBindings
 	}
 
 	// Create container
@@ -281,7 +316,46 @@ func (p *Provider) Get(ctx context.Context, sessionID string) (*container.Contai
 		}
 	}
 
+	// Extract assigned port mappings
+	c.Ports = p.extractPorts(info.NetworkSettings)
+
+	// Extract environment variables
+	c.Env = p.extractEnv(info.Config.Env)
+
 	return c, nil
+}
+
+// extractEnv parses Docker's env slice (KEY=VALUE format) into a map.
+func (p *Provider) extractEnv(envSlice []string) map[string]string {
+	env := make(map[string]string)
+	for _, e := range envSlice {
+		parts := strings.SplitN(e, "=", 2)
+		if len(parts) == 2 {
+			env[parts[0]] = parts[1]
+		}
+	}
+	return env
+}
+
+// extractPorts extracts assigned port mappings from container network settings.
+func (p *Provider) extractPorts(settings *types.NetworkSettings) []container.AssignedPort {
+	if settings == nil {
+		return nil
+	}
+
+	var ports []container.AssignedPort
+	for containerPort, bindings := range settings.Ports {
+		for _, binding := range bindings {
+			hostPort, _ := strconv.Atoi(binding.HostPort)
+			ports = append(ports, container.AssignedPort{
+				ContainerPort: containerPort.Int(),
+				HostPort:      hostPort,
+				HostIP:        binding.HostIP,
+				Protocol:      containerPort.Proto(),
+			})
+		}
+	}
+	return ports
 }
 
 // Exec runs a non-interactive command in the container.

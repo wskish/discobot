@@ -135,18 +135,31 @@ func TestCreateSession_CreatesContainer(t *testing.T) {
 	agent := ts.CreateTestAgent(project, "Claude", "claude-code")
 	client := ts.AuthenticatedClient(user)
 
-	resp := client.Post("/api/projects/"+project.ID+"/workspaces/"+workspace.ID+"/sessions", map[string]string{
-		"name":    "Container Session",
-		"agentId": agent.ID,
+	// Sessions are created implicitly via the chat endpoint
+	resp := client.Post("/api/projects/"+project.ID+"/chat", map[string]interface{}{
+		"messages":    []map[string]string{{"role": "user", "content": "Hello container"}},
+		"workspaceId": workspace.ID,
+		"agentId":     agent.ID,
 	})
 	defer resp.Body.Close()
 
-	AssertStatus(t, resp, http.StatusCreated)
+	AssertStatus(t, resp, http.StatusOK)
 
-	var session map[string]interface{}
-	ParseJSON(t, resp, &session)
+	// Get the session that was created
+	listResp := client.Get("/api/projects/" + project.ID + "/workspaces/" + workspace.ID + "/sessions")
+	defer listResp.Body.Close()
 
-	sessionID := session["id"].(string)
+	var result struct {
+		Sessions []map[string]interface{} `json:"sessions"`
+	}
+	ParseJSON(t, listResp, &result)
+
+	if len(result.Sessions) != 1 {
+		t.Errorf("Expected 1 session, got %d", len(result.Sessions))
+		return
+	}
+
+	sessionID := result.Sessions[0]["id"].(string)
 
 	// Wait for async container creation via job queue
 	// The dispatcher polls every 10ms in tests, so wait a bit for the job to be processed

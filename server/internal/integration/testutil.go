@@ -134,8 +134,7 @@ func NewTestServer(t *testing.T) *TestServer {
 
 	workspaceSvc := service.NewWorkspaceService(s, gitProvider, eventBroker)
 
-	sessionSvc := service.NewSessionService(s)
-	sessionSvc.SetRuntimeDependencies(gitProvider, mockContainer, eventBroker)
+	sessionSvc := service.NewSessionService(s, gitProvider, mockContainer, eventBroker)
 
 	disp := dispatcher.NewService(s, cfg)
 	disp.RegisterExecutor(jobs.NewWorkspaceInitExecutor(workspaceSvc))
@@ -222,8 +221,8 @@ func setupRouter(s *store.Store, cfg *config.Config, h *handler.Handler) *chi.Mu
 				r.Put("/{workspaceId}", h.UpdateWorkspace)
 				r.Delete("/{workspaceId}", h.DeleteWorkspace)
 
+				// Sessions within workspace (list only - creation via /chat endpoint)
 				r.Get("/{workspaceId}/sessions", h.ListSessionsByWorkspace)
-				r.Post("/{workspaceId}/sessions", h.CreateSession)
 
 				// Git operations
 				r.Get("/{workspaceId}/git/status", h.GetWorkspaceGitStatus)
@@ -281,10 +280,11 @@ func setupRouter(s *store.Store, cfg *config.Config, h *handler.Handler) *chi.Mu
 			r.Get("/sessions/{sessionId}/terminal/ws", h.TerminalWebSocket)
 			r.Get("/sessions/{sessionId}/terminal/history", h.GetTerminalHistory)
 			r.Get("/sessions/{sessionId}/terminal/status", h.GetTerminalStatus)
+
+			// AI Chat endpoint (streaming)
+			r.Post("/chat", h.Chat)
 		})
 	})
-
-	r.Post("/api/chat", h.Chat)
 
 	return r
 }
@@ -352,8 +352,7 @@ func NewTestServerNoAuth(t *testing.T) *TestServer {
 
 	workspaceSvc := service.NewWorkspaceService(s, gitProvider, eventBroker)
 
-	sessionSvc := service.NewSessionService(s)
-	sessionSvc.SetRuntimeDependencies(gitProvider, mockContainer, eventBroker)
+	sessionSvc := service.NewSessionService(s, gitProvider, mockContainer, eventBroker)
 
 	disp := dispatcher.NewService(s, cfg)
 	disp.RegisterExecutor(jobs.NewWorkspaceInitExecutor(workspaceSvc))

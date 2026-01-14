@@ -9,7 +9,7 @@ import { TerminalView } from "@/components/ide/terminal-view";
 import { Button } from "@/components/ui/button";
 import type {
 	Agent,
-	ChatMessage,
+	Session,
 	SupportedAgentType,
 	Workspace,
 } from "@/lib/api-types";
@@ -25,7 +25,7 @@ interface BottomPanelProps {
 	onMinimize: () => void;
 	onMaximize: () => void;
 	// Chat props
-	messages: ChatMessage[];
+	session: Session | null;
 	sessionAgent: Agent | null;
 	sessionWorkspace: Workspace | null;
 	agentTypes: SupportedAgentType[];
@@ -40,7 +40,7 @@ export function BottomPanel({
 	onViewChange,
 	onMinimize,
 	onMaximize,
-	messages,
+	session,
 	sessionAgent,
 	sessionWorkspace,
 	agentTypes,
@@ -86,8 +86,8 @@ export function BottomPanel({
 						/>
 					) : (
 						<ChatPanel
-							initialMessages={messages}
 							className="h-full"
+							session={session}
 							sessionAgent={sessionAgent}
 							sessionWorkspace={sessionWorkspace}
 							agentTypes={agentTypes}

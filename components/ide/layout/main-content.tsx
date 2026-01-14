@@ -6,7 +6,6 @@ import { FilePanel } from "@/components/ide/file-panel";
 import { ResizeHandle } from "@/components/ide/resize-handle";
 import type {
 	Agent,
-	ChatMessage,
 	FileNode,
 	Session,
 	SupportedAgentType,
@@ -31,14 +30,9 @@ interface MainContentProps {
 	selectedAgentId: string | null;
 	onAddWorkspace: () => void;
 	onAddAgent: () => void;
-	onFirstMessage: (
-		message: string,
-		workspaceId: string,
-		agentId: string,
-	) => void;
+	onSessionCreated: (sessionId: string) => void;
 
 	// Session chat props
-	messages: ChatMessage[];
 	sessionAgent: Agent | null;
 	sessionWorkspace: Workspace | null;
 }
@@ -53,8 +47,7 @@ export function MainContent({
 	selectedAgentId,
 	onAddWorkspace,
 	onAddAgent,
-	onFirstMessage,
-	messages,
+	onSessionCreated,
 	sessionAgent,
 	sessionWorkspace,
 }: MainContentProps) {
@@ -134,8 +127,7 @@ export function MainContent({
 		return (
 			<main className="flex-1 flex items-center justify-center overflow-hidden">
 				<ChatPanel
-					initialMessages={[]}
-					onFirstMessage={onFirstMessage}
+					onSessionCreated={onSessionCreated}
 					workspaces={workspaces}
 					selectedWorkspaceId={preselectedWorkspaceId}
 					onAddWorkspace={onAddWorkspace}
@@ -182,7 +174,7 @@ export function MainContent({
 					onViewChange={setBottomView}
 					onMinimize={panelLayout.handleBottomMinimize}
 					onMaximize={panelLayout.handleBottomMaximize}
-					messages={messages}
+					session={selectedSession}
 					sessionAgent={sessionAgent}
 					sessionWorkspace={sessionWorkspace}
 					agentTypes={agentTypes}

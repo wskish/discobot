@@ -1,6 +1,7 @@
 # Binaries
 bin/
 tmp/
+build/
 __debug_bin*
 server
 

@@ -6,13 +6,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/anthropics/octobot/server/internal/middleware"
-	"github.com/anthropics/octobot/server/internal/service"
 )
-
-// projectService returns a project service (created on demand)
-func (h *Handler) projectService() *service.ProjectService {
-	return service.NewProjectService(h.store)
-}
 
 // ListProjects returns all projects for the current user
 func (h *Handler) ListProjects(w http.ResponseWriter, r *http.Request) {
@@ -22,7 +16,7 @@ func (h *Handler) ListProjects(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	projects, err := h.projectService().ListProjects(r.Context(), userID)
+	projects, err := h.projectService.ListProjects(r.Context(), userID)
 	if err != nil {
 		h.Error(w, http.StatusInternalServerError, "Failed to list projects")
 		return
@@ -51,7 +45,7 @@ func (h *Handler) CreateProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	project, err := h.projectService().CreateProject(r.Context(), userID, req.Name)
+	project, err := h.projectService.CreateProject(r.Context(), userID, req.Name)
 	if err != nil {
 		h.Error(w, http.StatusInternalServerError, "Failed to create project")
 		return
@@ -64,7 +58,7 @@ func (h *Handler) CreateProject(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) GetProject(w http.ResponseWriter, r *http.Request) {
 	projectID := chi.URLParam(r, "projectId")
 
-	project, err := h.projectService().GetProject(r.Context(), projectID)
+	project, err := h.projectService.GetProject(r.Context(), projectID)
 	if err != nil {
 		h.Error(w, http.StatusNotFound, "Project not found")
 		return
@@ -79,7 +73,7 @@ func (h *Handler) UpdateProject(w http.ResponseWriter, r *http.Request) {
 
 	// Check if user is admin or owner
 	userID := middleware.GetUserID(r.Context())
-	role, err := h.projectService().GetMemberRole(r.Context(), projectID, userID)
+	role, err := h.projectService.GetMemberRole(r.Context(), projectID, userID)
 	if err != nil || (role != "owner" && role != "admin") {
 		h.Error(w, http.StatusForbidden, "Admin access required")
 		return
@@ -93,7 +87,7 @@ func (h *Handler) UpdateProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	project, err := h.projectService().UpdateProject(r.Context(), projectID, req.Name)
+	project, err := h.projectService.UpdateProject(r.Context(), projectID, req.Name)
 	if err != nil {
 		h.Error(w, http.StatusInternalServerError, "Failed to update project")
 		return
@@ -108,13 +102,13 @@ func (h *Handler) DeleteProject(w http.ResponseWriter, r *http.Request) {
 
 	// Check if user is owner
 	userID := middleware.GetUserID(r.Context())
-	role, err := h.projectService().GetMemberRole(r.Context(), projectID, userID)
+	role, err := h.projectService.GetMemberRole(r.Context(), projectID, userID)
 	if err != nil || role != "owner" {
 		h.Error(w, http.StatusForbidden, "Owner access required")
 		return
 	}
 
-	if err := h.projectService().DeleteProject(r.Context(), projectID); err != nil {
+	if err := h.projectService.DeleteProject(r.Context(), projectID); err != nil {
 		h.Error(w, http.StatusInternalServerError, "Failed to delete project")
 		return
 	}
@@ -126,7 +120,7 @@ func (h *Handler) DeleteProject(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) ListProjectMembers(w http.ResponseWriter, r *http.Request) {
 	projectID := chi.URLParam(r, "projectId")
 
-	members, err := h.projectService().ListMembers(r.Context(), projectID)
+	members, err := h.projectService.ListMembers(r.Context(), projectID)
 	if err != nil {
 		h.Error(w, http.StatusInternalServerError, "Failed to list members")
 		return
@@ -142,20 +136,20 @@ func (h *Handler) RemoveProjectMember(w http.ResponseWriter, r *http.Request) {
 
 	// Check if current user is admin or owner
 	userID := middleware.GetUserID(r.Context())
-	role, err := h.projectService().GetMemberRole(r.Context(), projectID, userID)
+	role, err := h.projectService.GetMemberRole(r.Context(), projectID, userID)
 	if err != nil || (role != "owner" && role != "admin") {
 		h.Error(w, http.StatusForbidden, "Admin access required")
 		return
 	}
 
 	// Cannot remove owner
-	targetRole, _ := h.projectService().GetMemberRole(r.Context(), projectID, targetUserID)
+	targetRole, _ := h.projectService.GetMemberRole(r.Context(), projectID, targetUserID)
 	if targetRole == "owner" {
 		h.Error(w, http.StatusForbidden, "Cannot remove project owner")
 		return
 	}
 
-	if err := h.projectService().RemoveMember(r.Context(), projectID, targetUserID); err != nil {
+	if err := h.projectService.RemoveMember(r.Context(), projectID, targetUserID); err != nil {
 		h.Error(w, http.StatusInternalServerError, "Failed to remove member")
 		return
 	}
@@ -169,7 +163,7 @@ func (h *Handler) CreateInvitation(w http.ResponseWriter, r *http.Request) {
 
 	// Check if user is admin or owner
 	userID := middleware.GetUserID(r.Context())
-	role, err := h.projectService().GetMemberRole(r.Context(), projectID, userID)
+	role, err := h.projectService.GetMemberRole(r.Context(), projectID, userID)
 	if err != nil || (role != "owner" && role != "admin") {
 		h.Error(w, http.StatusForbidden, "Admin access required")
 		return
@@ -191,7 +185,7 @@ func (h *Handler) CreateInvitation(w http.ResponseWriter, r *http.Request) {
 		req.Role = "member"
 	}
 
-	invitation, err := h.projectService().CreateInvitation(r.Context(), projectID, userID, req.Email, req.Role)
+	invitation, err := h.projectService.CreateInvitation(r.Context(), projectID, userID, req.Email, req.Role)
 	if err != nil {
 		h.Error(w, http.StatusInternalServerError, "Failed to create invitation")
 		return
@@ -205,7 +199,7 @@ func (h *Handler) AcceptInvitation(w http.ResponseWriter, r *http.Request) {
 	token := chi.URLParam(r, "token")
 	userID := middleware.GetUserID(r.Context())
 
-	if err := h.projectService().AcceptInvitation(r.Context(), token, userID); err != nil {
+	if err := h.projectService.AcceptInvitation(r.Context(), token, userID); err != nil {
 		h.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}
