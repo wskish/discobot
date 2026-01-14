@@ -91,9 +91,9 @@ export function createDefaultLogger(): Logger {
 }
 
 /**
- * Updates an env file with the CONTAINER_IMAGE variable.
+ * Updates an env file with the SANDBOX_IMAGE variable.
  * Creates the file if it doesn't exist.
- * Replaces existing CONTAINER_IMAGE if present, otherwise appends.
+ * Replaces existing SANDBOX_IMAGE if present, otherwise appends.
  */
 export async function updateEnvFile(
 	envFilePath: string,
@@ -112,9 +112,9 @@ export async function updateEnvFile(
 	const lines = envContent.split("\n");
 	let found = false;
 	const newLines = lines.map((line) => {
-		if (line.startsWith("CONTAINER_IMAGE=")) {
+		if (line.startsWith("SANDBOX_IMAGE=")) {
 			found = true;
-			return `CONTAINER_IMAGE=${imageRef}`;
+			return `SANDBOX_IMAGE=${imageRef}`;
 		}
 		return line;
 	});
@@ -124,7 +124,7 @@ export async function updateEnvFile(
 		while (newLines.length > 0 && newLines[newLines.length - 1] === "") {
 			newLines.pop();
 		}
-		newLines.push(`CONTAINER_IMAGE=${imageRef}`);
+		newLines.push(`SANDBOX_IMAGE=${imageRef}`);
 		newLines.push(""); // End with newline
 	}
 
@@ -200,30 +200,31 @@ export class AgentWatcher {
 		}
 
 		this.logger.success("Docker build succeeded");
-		return this.imageRef;
-	}
 
-	async getImageDigest(imageRef: string): Promise<string | null> {
-		const result = await this.runCommand(
+		// Get the image ID (sha256 digest) for deterministic references
+		const digestResult = await this.runCommand(
 			"docker",
-			["inspect", "--format", "{{.Id}}", imageRef],
+			["inspect", this.imageRef, "--format", "{{.Id}}"],
 			this.config.agentDir,
 		);
 
-		if (result.exitCode !== 0) {
+		if (digestResult.exitCode !== 0 || !digestResult.stdout.trim()) {
 			this.logger.error("Failed to get image digest:");
-			this.logger.error(result.stderr);
-			return null;
+			this.logger.error(digestResult.stderr || digestResult.stdout);
+			// Fall back to tag-based reference
+			return this.imageRef;
 		}
 
-		return result.stdout.trim();
+		const imageId = digestResult.stdout.trim();
+		this.logger.log(`Image ID: ${imageId}`);
+		return imageId;
 	}
 
 	async updateEnv(imageRef: string): Promise<boolean> {
 		const success = await updateEnvFile(this.config.envFilePath, imageRef);
 		if (success) {
 			this.logger.success(
-				`Updated ${this.config.envFilePath} with CONTAINER_IMAGE=${imageRef}`,
+				`Updated ${this.config.envFilePath} with SANDBOX_IMAGE=${imageRef}`,
 			);
 			this.onEnvUpdate?.(imageRef);
 		} else {
@@ -249,12 +250,7 @@ export class AgentWatcher {
 				return;
 			}
 
-			const digest = await this.getImageDigest(imageRef);
-			if (!digest) {
-				this.onBuildComplete?.(false, imageRef);
-				return;
-			}
-
+			// Use the image ID (sha256 digest) for deterministic container creation
 			await this.updateEnv(imageRef);
 
 			this.logger.log(

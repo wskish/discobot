@@ -83,33 +83,33 @@ describe("updateEnvFile", () => {
 		assert.equal(result, true);
 
 		const content = await readFile(envPath, "utf-8");
-		assert.ok(content.includes("CONTAINER_IMAGE=test-image:latest"));
+		assert.ok(content.includes("SANDBOX_IMAGE=test-image:latest"));
 	});
 
-	it("updates existing CONTAINER_IMAGE", async () => {
+	it("updates existing SANDBOX_IMAGE", async () => {
 		await writeFile(
 			envPath,
-			"PORT=3000\nCONTAINER_IMAGE=old-image:v1\nDATABASE_URL=postgres://\n",
+			"PORT=3000\nSANDBOX_IMAGE=old-image:v1\nDATABASE_URL=postgres://\n",
 		);
 
 		const result = await updateEnvFile(envPath, "new-image:v2");
 		assert.equal(result, true);
 
 		const content = await readFile(envPath, "utf-8");
-		assert.ok(content.includes("CONTAINER_IMAGE=new-image:v2"));
+		assert.ok(content.includes("SANDBOX_IMAGE=new-image:v2"));
 		assert.ok(!content.includes("old-image:v1"));
 		assert.ok(content.includes("PORT=3000"));
 		assert.ok(content.includes("DATABASE_URL=postgres://"));
 	});
 
-	it("appends CONTAINER_IMAGE if not present", async () => {
+	it("appends SANDBOX_IMAGE if not present", async () => {
 		await writeFile(envPath, "PORT=3000\nDATABASE_URL=postgres://\n");
 
 		const result = await updateEnvFile(envPath, "new-image:latest");
 		assert.equal(result, true);
 
 		const content = await readFile(envPath, "utf-8");
-		assert.ok(content.includes("CONTAINER_IMAGE=new-image:latest"));
+		assert.ok(content.includes("SANDBOX_IMAGE=new-image:latest"));
 		assert.ok(content.includes("PORT=3000"));
 	});
 
@@ -120,7 +120,7 @@ describe("updateEnvFile", () => {
 		assert.equal(result, true);
 
 		const content = await readFile(envPath, "utf-8");
-		assert.equal(content.trim(), "CONTAINER_IMAGE=test-image:dev");
+		assert.equal(content.trim(), "SANDBOX_IMAGE=test-image:dev");
 	});
 
 	it("preserves file structure with trailing newline", async () => {
@@ -178,11 +178,18 @@ describe("AgentWatcher", () => {
 	});
 
 	describe("with mock command runner", () => {
-		it("calls docker build with correct arguments", async () => {
+		it("calls docker build and inspect with correct arguments", async () => {
 			const calls: Array<{ command: string; args: string[]; cwd: string }> = [];
 
 			const mockRunner: CommandRunner = async (command, args, cwd) => {
 				calls.push({ command, args, cwd });
+				if (args.includes("inspect")) {
+					return {
+						stdout: "sha256:abc123def456\n",
+						stderr: "",
+						exitCode: 0,
+					};
+				}
 				return { stdout: "", stderr: "", exitCode: 0 };
 			};
 
@@ -196,12 +203,20 @@ describe("AgentWatcher", () => {
 				logger: createSilentLogger(),
 			});
 
-			await watcher.buildImage();
+			const result = await watcher.buildImage();
 
-			assert.equal(calls.length, 1);
+			assert.equal(calls.length, 2);
 			assert.equal(calls[0].command, "docker");
 			assert.deepEqual(calls[0].args, ["build", "-t", "my-image:dev", "."]);
 			assert.equal(calls[0].cwd, agentDir);
+			assert.equal(calls[1].command, "docker");
+			assert.deepEqual(calls[1].args, [
+				"inspect",
+				"my-image:dev",
+				"--format",
+				"{{.Id}}",
+			]);
+			assert.equal(result, "sha256:abc123def456");
 		});
 
 		it("returns null on build failure", async () => {
@@ -223,9 +238,9 @@ describe("AgentWatcher", () => {
 			assert.equal(result, null);
 		});
 
-		it("doBuild triggers build and updates env file", async () => {
+		it("doBuild triggers build and updates env file with digest", async () => {
 			let buildCalls = 0;
-			let inspectCalls = 0;
+			const mockDigest = "sha256:abc123def456789";
 
 			const mockRunner: CommandRunner = async (_command, args) => {
 				if (args.includes("build")) {
@@ -233,8 +248,7 @@ describe("AgentWatcher", () => {
 					return { stdout: "", stderr: "", exitCode: 0 };
 				}
 				if (args.includes("inspect")) {
-					inspectCalls++;
-					return { stdout: "sha256:abc123", stderr: "", exitCode: 0 };
+					return { stdout: `${mockDigest}\n`, stderr: "", exitCode: 0 };
 				}
 				return { stdout: "", stderr: "", exitCode: 1 };
 			};
@@ -260,13 +274,12 @@ describe("AgentWatcher", () => {
 			await watcher.doBuild();
 
 			assert.equal(buildCalls, 1);
-			assert.equal(inspectCalls, 1);
 			assert.equal(buildCompleted, true);
-			assert.equal(completedImageRef, "test-image:v1");
+			assert.equal(completedImageRef, mockDigest);
 
-			// Check env file was updated
+			// Check env file was updated with the digest
 			const envContent = await readFile(envPath, "utf-8");
-			assert.ok(envContent.includes("CONTAINER_IMAGE=test-image:v1"));
+			assert.ok(envContent.includes(`SANDBOX_IMAGE=${mockDigest}`));
 		});
 
 		it("queues build if one is in progress", async () => {
@@ -286,7 +299,7 @@ describe("AgentWatcher", () => {
 					return { stdout: "", stderr: "", exitCode: 0 };
 				}
 				if (args.includes("inspect")) {
-					return { stdout: "sha256:abc123", stderr: "", exitCode: 0 };
+					return { stdout: "sha256:test123\n", stderr: "", exitCode: 0 };
 				}
 				return { stdout: "", stderr: "", exitCode: 1 };
 			};
@@ -329,7 +342,7 @@ describe("AgentWatcher", () => {
 					return { stdout: "", stderr: "", exitCode: 0 };
 				}
 				if (args.includes("inspect")) {
-					return { stdout: "sha256:abc123", stderr: "", exitCode: 0 };
+					return { stdout: "sha256:test123\n", stderr: "", exitCode: 0 };
 				}
 				return { stdout: "", stderr: "", exitCode: 1 };
 			};
@@ -433,7 +446,7 @@ CMD ["echo", "hello"]
 		}
 	});
 
-	it("builds real Docker image and updates env file", async () => {
+	it("builds real Docker image and updates env file with digest", async () => {
 		const watcher = new AgentWatcher({
 			agentDir,
 			envFilePath: envPath,
@@ -454,27 +467,33 @@ CMD ["echo", "hello"]
 		await watcher.doBuild();
 
 		assert.equal(buildSuccess, true, "Build should succeed");
-		assert.equal(
-			imageRef,
-			"agent-watcher-test:e2e",
-			"Should return correct image ref",
+		assert.ok(
+			imageRef?.startsWith("sha256:"),
+			`Should return image digest (sha256:...), got: ${imageRef}`,
 		);
 
-		// Verify env file was updated
+		// Verify env file was updated with the digest
 		const envContent = await readFile(envPath, "utf-8");
 		assert.ok(
-			envContent.includes("CONTAINER_IMAGE=agent-watcher-test:e2e"),
-			"Env file should contain image reference",
+			envContent.includes("SANDBOX_IMAGE=sha256:"),
+			"Env file should contain image digest",
 		);
 
-		// Verify image exists in Docker
+		// Verify the digest in env file matches what was returned
+		assert.ok(
+			envContent.includes(`SANDBOX_IMAGE=${imageRef}`),
+			"Env file should contain the exact image digest",
+		);
+
+		// Verify image exists in Docker and digest matches
 		const inspectResult = execSync(
 			"docker inspect agent-watcher-test:e2e --format '{{.Id}}'",
 			{ encoding: "utf-8" },
 		);
-		assert.ok(
-			inspectResult.startsWith("sha256:"),
-			"Image should exist in Docker",
+		assert.equal(
+			inspectResult.trim(),
+			imageRef,
+			"Image ID from Docker should match returned digest",
 		);
 	});
 });

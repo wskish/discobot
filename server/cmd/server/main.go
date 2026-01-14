@@ -84,7 +84,7 @@ func main() {
 		log.Println("Terminal/sandbox operations will not be available")
 	} else {
 		sandboxProvider = dockerProvider
-		log.Printf("Sandbox provider initialized (type: docker)")
+		log.Printf("Sandbox provider initialized (type: docker, image: %s)", cfg.SandboxImage)
 
 		// Reconcile sandboxes on startup to ensure they use the correct image
 		sandboxSvc := service.NewSandboxService(s, sandboxProvider, cfg)
