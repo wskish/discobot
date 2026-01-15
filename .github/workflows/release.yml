@@ -17,11 +17,12 @@ jobs:
       matrix:
         include:
           - arch: amd64
-            platform: linux/amd64
-          - arch: arm64
-            platform: linux/arm64
+            runner: ubuntu-latest
+          # TODO: Enable when ARM runners available for private repos
+          # - arch: arm64
+          #   runner: ubuntu-24.04-arm
 
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runner }}
 
     steps:
       - name: Checkout
@@ -40,15 +41,7 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
       - name: Build VZ disk image
-        env:
-          DOCKER_DEFAULT_PLATFORM: ${{ matrix.platform }}
         run: pnpm build:vz-image --force
 
       - name: Upload VZ image
@@ -65,11 +58,12 @@ jobs:
       matrix:
         include:
           - arch: amd64
-            platform: linux/amd64
-          - arch: arm64
-            platform: linux/arm64
+            runner: ubuntu-latest
+          # TODO: Enable when ARM runners available for private repos
+          # - arch: arm64
+          #   runner: ubuntu-24.04-arm
 
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runner }}
 
     steps:
       - name: Checkout
@@ -88,15 +82,7 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
       - name: Build VZ kernel
-        env:
-          DOCKER_DEFAULT_PLATFORM: ${{ matrix.platform }}
         run: pnpm build:vz-kernel --force
 
       - name: Upload VZ kernel
@@ -114,14 +100,15 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # macOS ARM64 (Apple Silicon)
-          - platform: macos-15
-            target: aarch64-apple-darwin
-            vz-arch: arm64
           # macOS x64 (Intel)
           - platform: macos-15
             target: x86_64-apple-darwin
             vz-arch: amd64
+          # TODO: Enable when ARM runners available for private repos
+          # # macOS ARM64 (Apple Silicon)
+          # - platform: macos-15
+          #   target: aarch64-apple-darwin
+          #   vz-arch: arm64
           # Windows x64
           - platform: windows-latest
             target: x86_64-pc-windows-msvc
