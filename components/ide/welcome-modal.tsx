@@ -33,6 +33,8 @@ interface WelcomeModalProps {
 	) => void;
 	/** Called when user skips the welcome flow (session-only, comes back on refresh) */
 	onSkip?: () => void;
+	/** If true, skips the workspace step (user already has workspaces) */
+	hasExistingWorkspaces?: boolean;
 }
 
 type Step = "agent" | "auth" | "workspace";
@@ -51,6 +53,7 @@ export function WelcomeModal({
 	configuredCredentials,
 	onComplete,
 	onSkip,
+	hasExistingWorkspaces,
 }: WelcomeModalProps) {
 	const [step, setStep] = React.useState<Step>("agent");
 	const [selectedAgent, setSelectedAgent] =
@@ -109,13 +112,23 @@ export function WelcomeModal({
 		setSelectedAgent(agent);
 
 		if (hasConfiguredProvider) {
-			// User already has valid credentials, go to workspace step
+			// User already has valid credentials
 			setSelectedAuthProviderId(null);
-			setStep("workspace");
+			if (hasExistingWorkspaces) {
+				// Skip workspace step - complete immediately
+				onComplete(agent, null, null);
+			} else {
+				setStep("workspace");
+			}
 		} else if (supportedProviders.length === 0 && agent.allowNoAuth) {
-			// Agent doesn't need auth and allows no auth, go to workspace step
+			// Agent doesn't need auth and allows no auth
 			setSelectedAuthProviderId(null);
-			setStep("workspace");
+			if (hasExistingWorkspaces) {
+				// Skip workspace step - complete immediately
+				onComplete(agent, null, null);
+			} else {
+				setStep("workspace");
+			}
 		} else {
 			// Need to select auth provider
 			setStep("auth");
@@ -125,7 +138,12 @@ export function WelcomeModal({
 	// Handle auth provider selection
 	const handleSelectAuthProvider = (providerId: string | null) => {
 		setSelectedAuthProviderId(providerId);
-		setStep("workspace");
+		if (hasExistingWorkspaces && selectedAgent) {
+			// Skip workspace step - complete immediately
+			onComplete(selectedAgent, providerId, null);
+		} else {
+			setStep("workspace");
+		}
 	};
 
 	// Handle workspace submission

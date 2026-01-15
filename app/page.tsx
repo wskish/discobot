@@ -328,6 +328,7 @@ export default function IDEChatPage() {
 				agentTypes={agentTypes}
 				authProviders={authProviders}
 				configuredCredentials={credentials}
+				hasExistingWorkspaces={workspaces.length > 0}
 				onSkip={() => setWelcomeSkipped(true)}
 				onComplete={async (agentType, authProviderId, workspace) => {
 					if (authProviderId) {
