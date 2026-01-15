@@ -3,7 +3,10 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"log"
+	"strings"
 
 	"github.com/anthropics/octobot/server/internal/events"
 	"github.com/anthropics/octobot/server/internal/model"
@@ -144,6 +147,7 @@ func (c *ChatService) ValidateSessionResources(ctx context.Context, projectID st
 // The sandbox handles message storage - we just proxy the stream without parsing.
 // Both messages and responses are passed through as raw data.
 // Credentials for the project are automatically included in the request header.
+// If the sandbox doesn't exist (e.g., container was deleted), it will be recreated on-demand.
 func (c *ChatService) SendToSandbox(ctx context.Context, projectID, sessionID string, messages json.RawMessage) (<-chan SSELine, error) {
 	// Validate session belongs to project
 	_, err := c.GetSession(ctx, projectID, sessionID)
@@ -167,8 +171,53 @@ func (c *ChatService) SendToSandbox(ctx context.Context, projectID, sessionID st
 		}
 	}
 
-	// Send to sandbox and return raw SSE channel directly
-	return c.sandboxClient.SendMessages(ctx, sessionID, messages, opts)
+	// Try to send to sandbox
+	ch, err := c.sandboxClient.SendMessages(ctx, sessionID, messages, opts)
+	if err != nil {
+		// Check if sandbox doesn't exist or isn't running - recreate it on-demand
+		// Sandboxes are stateless and can be recreated from the session configuration
+		if errors.Is(err, sandbox.ErrNotFound) || errors.Is(err, sandbox.ErrNotRunning) || isSandboxUnavailableError(err) {
+			log.Printf("Sandbox unavailable for session %s, reinitializing on-demand: %v", sessionID, err)
+
+			// Update session status to show reinitialization is happening
+			if _, statusErr := c.sessionService.UpdateStatus(ctx, sessionID, model.SessionStatusReinitializing, nil); statusErr != nil {
+				log.Printf("Warning: failed to update session status for %s: %v", sessionID, statusErr)
+			}
+
+			// Emit SSE event for status change
+			if c.eventBroker != nil {
+				if pubErr := c.eventBroker.PublishSessionUpdated(ctx, projectID, sessionID, model.SessionStatusReinitializing); pubErr != nil {
+					log.Printf("Warning: failed to publish session update event: %v", pubErr)
+				}
+			}
+
+			// Reinitialize the sandbox synchronously
+			if initErr := c.sessionService.Initialize(ctx, sessionID); initErr != nil {
+				return nil, fmt.Errorf("sandbox unavailable and failed to reinitialize: %w", initErr)
+			}
+
+			// Retry sending messages after successful reinitialization
+			return c.sandboxClient.SendMessages(ctx, sessionID, messages, opts)
+		}
+		return nil, err
+	}
+
+	return ch, nil
+}
+
+// isSandboxUnavailableError checks if the error indicates the sandbox is unavailable
+// and should be recreated. This handles cases where the error message indicates
+// the sandbox doesn't exist or isn't running, but wasn't wrapped with sentinel errors.
+func isSandboxUnavailableError(err error) bool {
+	if err == nil {
+		return false
+	}
+	errStr := err.Error()
+	// Check for common sandbox unavailability messages
+	return strings.Contains(errStr, "sandbox not found") ||
+		strings.Contains(errStr, "sandbox is not running") ||
+		strings.Contains(errStr, "container not found") ||
+		strings.Contains(errStr, "No such container")
 }
 
 // GetMessages returns all messages for a session by querying the sandbox.

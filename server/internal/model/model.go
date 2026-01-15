@@ -201,6 +201,7 @@ func (w *Workspace) BeforeCreate(tx *gorm.DB) error {
 // Session status constants representing the lifecycle of a session
 const (
 	SessionStatusInitializing    = "initializing"     // Session just created, starting setup
+	SessionStatusReinitializing  = "reinitializing"   // Recreating sandbox after it was deleted
 	SessionStatusCloning         = "cloning"          // Cloning git repository
 	SessionStatusPullingImage    = "pulling_image"    // Pulling sandbox Docker image
 	SessionStatusCreatingSandbox = "creating_sandbox" // Creating sandbox environment
