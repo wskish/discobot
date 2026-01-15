@@ -10,7 +10,55 @@ permissions:
   contents: write
 
 jobs:
+  # Build VZ assets (kernel + rootfs) on Linux using Docker
+  # These are needed for macOS Virtualization.framework builds
+  build-vz-assets:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            platform: linux/amd64
+          - arch: arm64
+            platform: linux/arm64
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build VZ disk image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./agent
+          platforms: ${{ matrix.platform }}
+          target: vz-disk-image
+          outputs: type=local,dest=./vz-assets-${{ matrix.arch }}
+
+      - name: Build VZ kernel
+        uses: docker/build-push-action@v6
+        with:
+          context: ./agent
+          platforms: ${{ matrix.platform }}
+          target: vz-kernel
+          outputs: type=local,dest=./vz-assets-${{ matrix.arch }}
+
+      - name: Upload VZ assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: vz-assets-${{ matrix.arch }}
+          path: ./vz-assets-${{ matrix.arch }}/
+          retention-days: 1
+
   build:
+    needs: build-vz-assets
     strategy:
       fail-fast: false
       matrix:
@@ -18,30 +66,34 @@ jobs:
           # macOS ARM64 (Apple Silicon)
           - platform: macos-15
             target: aarch64-apple-darwin
+            vz-arch: arm64
           # macOS x64 (Intel)
           - platform: macos-15
             target: x86_64-apple-darwin
+            vz-arch: amd64
           # Windows x64
           - platform: windows-latest
             target: x86_64-pc-windows-msvc
-          # Windows ARM64
-          - platform: windows-11-arm
-            target: aarch64-pc-windows-msvc
           # Linux x64
           - platform: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
-          # Linux ARM64
-          - platform: ubuntu-24.04-arm
-            target: aarch64-unknown-linux-gnu
 
     runs-on: ${{ matrix.platform }}
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
+
+      # Download pre-built VZ assets for macOS
+      - name: Download VZ assets
+        if: startsWith(matrix.platform, 'macos')
+        uses: actions/download-artifact@v4
+        with:
+          name: vz-assets-${{ matrix.vz-arch }}
+          path: ./src-tauri/resources/
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v4
         with:
           node-version: 22
 
@@ -57,9 +109,9 @@ jobs:
           target: ${{ matrix.target }}
 
       - name: Setup Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@v5
         with:
-          go-version: '1.25'
+          go-version: '1.24'
 
       # Linux dependencies
       - name: Install Linux dependencies
@@ -67,11 +119,6 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
-
-      # macOS Docker
-      - name: Setup Docker (macOS)
-        if: startsWith(matrix.platform, 'macos')
-        uses: docker/setup-docker-action@v4
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
