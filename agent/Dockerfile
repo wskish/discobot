@@ -84,7 +84,7 @@ RUN chown -R octobot:octobot /app
 
 USER octobot
 
-EXPOSE 3001
+EXPOSE 3002
 
 CMD ["./octobot-agent"]
 

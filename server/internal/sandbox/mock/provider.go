@@ -80,10 +80,10 @@ func (p *Provider) Create(ctx context.Context, sessionID string, opts sandbox.Cr
 		p.secrets[sessionID] = opts.SharedSecret
 	}
 
-	// Always simulate port 8080 assignment (deterministic for testing)
+	// Always simulate port 3002 assignment (deterministic for testing)
 	ports := []sandbox.AssignedPort{
 		{
-			ContainerPort: 8080,
+			ContainerPort: 3002,
 			HostPort:      40888, // Predictable for testing
 			HostIP:        "0.0.0.0",
 			Protocol:      "tcp",
@@ -279,16 +279,16 @@ func (p *Provider) HTTPClient(ctx context.Context, sessionID string) (*http.Clie
 		return nil, sandbox.ErrNotRunning
 	}
 
-	// Find the HTTP port (8080)
+	// Find the HTTP port (3002)
 	var httpPort *sandbox.AssignedPort
 	for i := range s.Ports {
-		if s.Ports[i].ContainerPort == 8080 {
+		if s.Ports[i].ContainerPort == 3002 {
 			httpPort = &s.Ports[i]
 			break
 		}
 	}
 	if httpPort == nil {
-		return nil, fmt.Errorf("sandbox does not expose port 8080")
+		return nil, fmt.Errorf("sandbox does not expose port 3002")
 	}
 
 	hostIP := httpPort.HostIP

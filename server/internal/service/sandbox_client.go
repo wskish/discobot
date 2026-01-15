@@ -62,16 +62,16 @@ func (c *SandboxChatClient) getSandboxURL(ctx context.Context, sessionID string)
 		return "", fmt.Errorf("sandbox is not running: %s", sb.Status)
 	}
 
-	// Find the chat port (8080)
+	// Find the chat port (3002)
 	var chatPort *sandbox.AssignedPort
 	for i := range sb.Ports {
-		if sb.Ports[i].ContainerPort == 8080 {
+		if sb.Ports[i].ContainerPort == 3002 {
 			chatPort = &sb.Ports[i]
 			break
 		}
 	}
 	if chatPort == nil {
-		return "", fmt.Errorf("sandbox does not expose port 8080")
+		return "", fmt.Errorf("sandbox does not expose port 3002")
 	}
 
 	hostIP := chatPort.HostIP

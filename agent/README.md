@@ -19,7 +19,7 @@ The agent runs inside a Docker container alongside the user's workspace. It:
 │  ┌─────────────┐    ┌─────────────┐    ┌─────────────────────┐ │
 │  │   Hono      │───▶│   ACP       │───▶│   Claude Code       │ │
 │  │   Server    │    │   Client    │    │   (spawned process) │ │
-│  │   :8080     │◀───│             │◀───│                     │ │
+│  │   :3002     │◀───│             │◀───│                     │ │
 │  └─────────────┘    └─────────────┘    └─────────────────────┘ │
 │         │                                                        │
 │         │ SSE Response                                           │
@@ -66,7 +66,7 @@ npm start
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `PORT` | `3001` | HTTP server port |
+| `PORT` | `3002` | HTTP server port |
 | `AGENT_COMMAND` | `claude-code-acp` | Command to spawn agent |
 | `AGENT_ARGS` | (empty) | Space-separated arguments |
 | `AGENT_CWD` | `process.cwd()` | Working directory for agent |
@@ -79,7 +79,7 @@ npm start
 docker build -t octobot-agent .
 
 # Run container
-docker run -p 8080:3001 \
+docker run -p 8080:3002 \
   -e ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY \
   -v /path/to/workspace:/workspace \
   octobot-agent

@@ -133,7 +133,7 @@ export function loadConfig(): AgentConfig {
 		process.cwd();
 
 	// Port
-	const port = metadata?.agent?.port || Number(process.env.PORT) || 3001;
+	const port = metadata?.agent?.port || Number(process.env.PORT) || 3002;
 
 	// Shared secret - from metadata or environment
 	const sharedSecretHash = metadata?.secret || process.env.OCTOBOT_SECRET;

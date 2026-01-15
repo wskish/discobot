@@ -32,12 +32,12 @@ provider, err := vz.NewProvider(cfg, vzCfg)
 │  ┌─────────────────┐    ┌─────────────────────────────────┐ │
 │  │   Go Server     │    │        VZ Provider               │ │
 │  │                 │    │                                   │ │
-│  │  HTTPClient ────┼────┼──► vsock:8080 ──┐                │ │
+│  │  HTTPClient ────┼────┼──► vsock:3002 ──┐                │ │
 │  │                 │    │                  │                │ │
 │  └─────────────────┘    │   ┌─────────────┼────────────┐   │ │
 │                         │   │    Linux VM  ▼            │   │ │
 │                         │   │                           │   │ │
-│                         │   │  socat vsock ──► TCP:3001 │   │ │
+│                         │   │  socat vsock ──► TCP:3002 │   │ │
 │                         │   │                     │     │   │ │
 │                         │   │              ┌──────▼───┐ │   │ │
 │                         │   │              │  Agent   │ │   │ │
@@ -58,11 +58,11 @@ provider, err := vz.NewProvider(cfg, vzCfg)
 The provider uses virtio-vsock for host-to-guest communication. Since Bun doesn't natively support AF_VSOCK, the agent automatically starts a socat proxy based on the VirtioFS metadata.
 
 **How it works:**
-1. Host writes vsock config to metadata: `{"agent": {"vsock": {"port": 8080}}}`
+1. Host writes vsock config to metadata: `{"agent": {"vsock": {"port": 3002}}}`
 2. Agent reads metadata on startup
-3. Agent spawns: `socat VSOCK-LISTEN:8080,reuseaddr,fork TCP:127.0.0.1:3001`
-4. Agent starts HTTP server on TCP port 3001
-5. Host connects via vsock:8080 → socat → TCP:3001
+3. Agent spawns: `socat VSOCK-LISTEN:3002,reuseaddr,fork TCP:127.0.0.1:3002`
+4. Agent starts HTTP server on TCP port 3002
+5. Host connects via vsock:3002 → socat → TCP:3002
 
 The Go server connects via vsock:
 
@@ -97,7 +97,7 @@ The agent reads configuration from `/run/octobot/metadata/metadata.json`:
   "agent": {
     "command": "claude-code-acp",
     "args": [],
-    "port": 8080
+    "port": 3002
   }
 }
 ```

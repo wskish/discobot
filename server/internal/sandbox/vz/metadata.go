@@ -101,16 +101,16 @@ func (p *Provider) createMetadata(sessionID string, opts sandbox.CreateOptions) 
 	}
 
 	// Build metadata
-	// Agent listens on TCP port 3001, socat forwards vsock:8080 → TCP:3001
-	const agentTCPPort = 3001
+	// Agent listens on TCP port 3002, socat forwards vsock:3002 → TCP:3002
+	const agentTCPPort = 3002
 	meta := VMMetadata{
 		SessionID: sessionID,
 		Env:       make(map[string]string),
 		Agent: &AgentMetadata{
 			Port: agentTCPPort,
 			Vsock: &VsockConfig{
-				Port:       VsockPort,    // vsock port host connects to (8080)
-				TargetPort: agentTCPPort, // TCP port agent listens on (3001)
+				Port:       VsockPort,    // vsock port host connects to (3002)
+				TargetPort: agentTCPPort, // TCP port agent listens on (3002)
 			},
 		},
 	}

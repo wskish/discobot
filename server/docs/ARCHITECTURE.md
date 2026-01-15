@@ -187,7 +187,7 @@ Client POST /chat
       │
       ▼
 ┌─────────────────────┐
-│  Sandbox Client     │ → POST to sandbox:8080/chat
+│  Sandbox Client     │ → POST to sandbox:3002/chat
 └─────────────────────┘
       │
       ▼
@@ -327,7 +327,7 @@ Start Chat → Enqueue session_init job
                Start agent process
                         │
                         ▼
-Chat Message → POST sandbox:8080/chat
+Chat Message → POST sandbox:3002/chat
                         │
                         ▼
                Stream SSE response

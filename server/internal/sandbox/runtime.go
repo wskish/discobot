@@ -21,7 +21,7 @@ type Provider interface {
 
 	// Create creates a new sandbox for the given session.
 	// The sandbox is created but not started.
-	// A single port (8080) is always exposed and assigned a random host port.
+	// A single port (3002) is always exposed and assigned a random host port.
 	// If the image doesn't exist locally, it will be pulled automatically.
 	Create(ctx context.Context, sessionID string, opts CreateOptions) (*Sandbox, error)
 
@@ -57,7 +57,7 @@ type Provider interface {
 
 	// HTTPClient returns an HTTP client configured to communicate with the sandbox.
 	// The client handles the transport layer (TCP for Docker, vsock for vz, etc.).
-	// The returned client connects to the sandbox's HTTP server (port 8080).
+	// The returned client connects to the sandbox's HTTP server (port 3002).
 	HTTPClient(ctx context.Context, sessionID string) (*http.Client, error)
 }
 

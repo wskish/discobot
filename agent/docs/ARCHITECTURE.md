@@ -33,7 +33,7 @@ The agent service runs inside a Docker container and provides:
 │   │         │         └──────────────┘              │           │  │
 │   └─────────│──────────────────────────────────────│───────────┘  │
 │             │                                       │              │
-│             │ HTTP :8080                           │ File         │
+│             │ HTTP :3002                           │ File         │
 │             ▼                                       ▼              │
 │        Go Server                              /tmp/session.json    │
 │                                                                    │

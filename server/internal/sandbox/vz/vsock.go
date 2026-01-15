@@ -16,7 +16,7 @@ import (
 )
 
 // VsockPort is the default vsock port for HTTP communication with the guest agent.
-const VsockPort = 8080
+const VsockPort = 3002
 
 // Dial creates a vsock connection to the guest VM.
 // The returned connection implements net.Conn and can be used with http.Transport.
@@ -67,7 +67,7 @@ func (p *Provider) DialContext(sessionID string, port uint32) func(ctx context.C
 }
 
 // httpClientForPort returns an http.Client configured to communicate with the guest VM over vsock.
-// The client connects to the specified vsock port (typically VsockPort/8080).
+// The client connects to the specified vsock port (typically VsockPort/3002).
 func (p *Provider) httpClientForPort(sessionID string, port uint32) *http.Client {
 	return &http.Client{
 		Transport: &http.Transport{

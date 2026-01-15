@@ -175,7 +175,7 @@ func (p *Provider) Create(
             "octobot.session": sessionID,
         },
         ExposedPorts: nat.PortSet{
-            "8080/tcp": struct{}{},
+            "3002/tcp": struct{}{},
         },
     }
 
@@ -184,7 +184,7 @@ func (p *Provider) Create(
         Binds:       opts.Binds,
         NetworkMode: dockercontainer.NetworkMode(opts.NetworkMode),
         PortBindings: nat.PortMap{
-            "8080/tcp": []nat.PortBinding{
+            "3002/tcp": []nat.PortBinding{
                 {HostIP: "127.0.0.1", HostPort: "0"}, // Random port
             },
         },
@@ -231,7 +231,7 @@ func (p *Provider) Get(ctx context.Context, sessionID string) (*Sandbox, error) 
     }
 
     // Get assigned port
-    bindings := info.NetworkSettings.Ports["8080/tcp"]
+    bindings := info.NetworkSettings.Ports["3002/tcp"]
     address := ""
     if len(bindings) > 0 {
         address = fmt.Sprintf("http://127.0.0.1:%s", bindings[0].HostPort)
@@ -349,7 +349,7 @@ func (m *MockProvider) Create(
         ID:        uuid.New().String(),
         SessionID: sessionID,
         Status:    "created",
-        Address:   "http://mock:8080",
+        Address:   "http://mock:3002",
         CreatedAt: time.Now(),
     }
 

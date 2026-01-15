@@ -35,7 +35,7 @@ const (
 	labelSecret = "octobot.secret"
 
 	// containerPort is the fixed port exposed by all sandboxes.
-	containerPort = 8080
+	containerPort = 3002
 
 	// workspaceOriginPath is where local workspaces are mounted inside the container.
 	workspaceOriginPath = "/.workspace.origin"
@@ -211,7 +211,7 @@ func (p *Provider) Create(ctx context.Context, sessionID string, opts sandbox.Cr
 		hostConfig.NetworkMode = containerTypes.NetworkMode(p.cfg.DockerNetwork)
 	}
 
-	// Always expose port 8080 with a random host port
+	// Always expose port 3002 with a random host port
 	port := nat.Port(fmt.Sprintf("%d/tcp", containerPort))
 	containerConfig.ExposedPorts = nat.PortSet{port: struct{}{}}
 	hostConfig.PortBindings = nat.PortMap{
@@ -783,7 +783,7 @@ func (p *Provider) HTTPClient(ctx context.Context, sessionID string) (*http.Clie
 		return nil, fmt.Errorf("sandbox is not running: %s", sb.Status)
 	}
 
-	// Find the HTTP port (8080)
+	// Find the HTTP port (3002)
 	var httpPort *sandbox.AssignedPort
 	for i := range sb.Ports {
 		if sb.Ports[i].ContainerPort == containerPort {

@@ -32,7 +32,7 @@ const (
 	labelSecret = "octobot.secret"
 
 	// containerPort is the fixed port exposed by all sandboxes.
-	containerPort = 8080
+	containerPort = 3002
 
 	// workspaceOriginPath is where workspaces are mounted inside the VM.
 	workspaceOriginPath = "/.workspace.origin"

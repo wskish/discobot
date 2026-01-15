@@ -197,12 +197,12 @@ func (s *SandboxService) ReconcileSandboxes(ctx context.Context) error {
 
 // SandboxEndpoint contains the information needed to communicate with a sandbox.
 type SandboxEndpoint struct {
-	Port   int    // Host port mapped to sandbox port 8080
+	Port   int    // Host port mapped to sandbox port 3002
 	Secret string // Raw shared secret (use for authentication)
 }
 
 // GetEndpoint returns the port and secret for communicating with the session's sandbox.
-// The port is the host port mapped to sandbox port 8080.
+// The port is the host port mapped to sandbox port 3002.
 // The secret is the raw shared secret stored during sandbox creation.
 func (s *SandboxService) GetEndpoint(ctx context.Context, sessionID string) (*SandboxEndpoint, error) {
 	sb, err := s.provider.Get(ctx, sessionID)
@@ -210,17 +210,17 @@ func (s *SandboxService) GetEndpoint(ctx context.Context, sessionID string) (*Sa
 		return nil, fmt.Errorf("failed to get sandbox: %w", err)
 	}
 
-	// Find the host port for sandbox port 8080
+	// Find the host port for sandbox port 3002
 	var port int
 	for _, p := range sb.Ports {
-		if p.ContainerPort == 8080 {
+		if p.ContainerPort == 3002 {
 			port = p.HostPort
 			break
 		}
 	}
 
 	if port == 0 {
-		return nil, fmt.Errorf("sandbox port 8080 not mapped")
+		return nil, fmt.Errorf("sandbox port 3002 not mapped")
 	}
 
 	// Get the raw secret from the provider
