@@ -195,6 +195,49 @@ func (s *SandboxService) ReconcileSandboxes(ctx context.Context) error {
 	return nil
 }
 
+// ReconcileSessionStates checks sessions that the database considers "running" and
+// verifies their sandbox state matches. If a sandbox has failed, the session is
+// marked as error. This should be called on server startup after ReconcileSandboxes.
+func (s *SandboxService) ReconcileSessionStates(ctx context.Context) error {
+	// Get all sessions that the database thinks are in an active state
+	// We only care about "running" sessions - if a sandbox died, we need to know
+	activeSessions, err := s.store.ListSessionsByStatuses(ctx, []string{"running"})
+	if err != nil {
+		return fmt.Errorf("failed to list active sessions: %w", err)
+	}
+
+	log.Printf("Reconciling state for %d active sessions", len(activeSessions))
+
+	for _, session := range activeSessions {
+		sb, err := s.provider.Get(ctx, session.ID)
+		if err == sandbox.ErrNotFound {
+			// Sandbox doesn't exist - this is OK, it can be recreated on demand
+			log.Printf("Session %s has no sandbox (will be created on demand)", session.ID)
+			continue
+		}
+		if err != nil {
+			log.Printf("Failed to get sandbox for session %s: %v", session.ID, err)
+			continue
+		}
+
+		// Check if sandbox is in a failed state
+		if sb.Status == sandbox.StatusFailed {
+			log.Printf("Session %s has failed sandbox (error: %s), marking session as error", session.ID, sb.Error)
+			errMsg := fmt.Sprintf("Sandbox failed: %s", sb.Error)
+			if err := s.store.UpdateSessionStatus(ctx, session.ID, "error", &errMsg); err != nil {
+				log.Printf("Failed to update session %s status: %v", session.ID, err)
+			}
+			continue
+		}
+
+		// Sandbox exists and is in an acceptable state (running, stopped, created)
+		// Stopped is OK because it can be restarted on demand
+		log.Printf("Session %s sandbox status: %s", session.ID, sb.Status)
+	}
+
+	return nil
+}
+
 // SandboxEndpoint contains the information needed to communicate with a sandbox.
 type SandboxEndpoint struct {
 	Port   int    // Host port mapped to sandbox port 3002

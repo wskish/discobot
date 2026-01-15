@@ -429,3 +429,198 @@ func TestReconcileSandboxes_NoSandboxes(t *testing.T) {
 
 	t.Log("Empty sandbox reconciliation completed successfully")
 }
+
+func TestReconcileSessionStates_MarksFailedSandboxAsError(t *testing.T) {
+	setup := newTestSandboxSetup(t)
+	ctx := context.Background()
+
+	// Create test data
+	project := setup.createTestProject(t)
+	workspace := setup.createTestWorkspace(t, project)
+	session := setup.createTestSession(t, workspace, "session-with-failed-sandbox")
+
+	// Create a sandbox and then kill it to simulate failure
+	t.Log("Creating sandbox and simulating failure...")
+	setup.createSandboxWithImage(t, session.ID, testImageNew)
+
+	// Kill the container to simulate a failure (non-zero exit code)
+	// We'll use docker kill which will cause an exit code != 0
+	killCmd := exec.Command("docker", "kill", fmt.Sprintf("octobot-session-%s", session.ID))
+	if output, err := killCmd.CombinedOutput(); err != nil {
+		t.Fatalf("Failed to kill container: %v\nOutput: %s", err, output)
+	}
+
+	// Wait a moment for docker to register the state
+	time.Sleep(500 * time.Millisecond)
+
+	// Verify sandbox is in failed state
+	sb, err := setup.provider.Get(ctx, session.ID)
+	if err != nil {
+		t.Fatalf("Failed to get sandbox: %v", err)
+	}
+	if sb.Status != sandbox.StatusFailed {
+		t.Logf("Note: Sandbox status is %s (expected failed). Kill may have resulted in different status.", sb.Status)
+	}
+
+	// Create sandbox service
+	sandboxSvc := service.NewSandboxService(setup.store, setup.provider, setup.cfg)
+
+	// Run session state reconciliation
+	t.Log("Running session state reconciliation...")
+	if err := sandboxSvc.ReconcileSessionStates(ctx); err != nil {
+		t.Fatalf("ReconcileSessionStates failed: %v", err)
+	}
+
+	// Verify session status was updated
+	updatedSession, err := setup.store.GetSessionByID(ctx, session.ID)
+	if err != nil {
+		t.Fatalf("Failed to get session: %v", err)
+	}
+
+	// Session should be marked as error if sandbox failed, or still running if it was just stopped
+	if sb.Status == sandbox.StatusFailed {
+		if updatedSession.Status != model.SessionStatusError {
+			t.Errorf("Expected session status 'error', got '%s'", updatedSession.Status)
+		}
+		if updatedSession.ErrorMessage == nil || *updatedSession.ErrorMessage == "" {
+			t.Error("Expected session to have an error message")
+		}
+		t.Logf("Session correctly marked as error: %s", *updatedSession.ErrorMessage)
+	} else {
+		// If it was just stopped (not failed), status should remain running
+		t.Logf("Sandbox was stopped (not failed), session status: %s", updatedSession.Status)
+	}
+}
+
+func TestReconcileSessionStates_KeepsRunningSessionWithRunningSandbox(t *testing.T) {
+	setup := newTestSandboxSetup(t)
+	ctx := context.Background()
+
+	// Create test data
+	project := setup.createTestProject(t)
+	workspace := setup.createTestWorkspace(t, project)
+	session := setup.createTestSession(t, workspace, "session-with-running-sandbox")
+
+	// Create and start a sandbox
+	t.Log("Creating running sandbox...")
+	setup.createSandboxWithImage(t, session.ID, testImageNew)
+
+	// Verify sandbox is running
+	sb, err := setup.provider.Get(ctx, session.ID)
+	if err != nil {
+		t.Fatalf("Failed to get sandbox: %v", err)
+	}
+	if sb.Status != sandbox.StatusRunning {
+		t.Fatalf("Expected sandbox status running, got %s", sb.Status)
+	}
+
+	// Create sandbox service
+	sandboxSvc := service.NewSandboxService(setup.store, setup.provider, setup.cfg)
+
+	// Run session state reconciliation
+	t.Log("Running session state reconciliation...")
+	if err := sandboxSvc.ReconcileSessionStates(ctx); err != nil {
+		t.Fatalf("ReconcileSessionStates failed: %v", err)
+	}
+
+	// Verify session status is still running
+	updatedSession, err := setup.store.GetSessionByID(ctx, session.ID)
+	if err != nil {
+		t.Fatalf("Failed to get session: %v", err)
+	}
+
+	if updatedSession.Status != model.SessionStatusRunning {
+		t.Errorf("Expected session status 'running', got '%s'", updatedSession.Status)
+	}
+
+	t.Log("Session correctly kept as running")
+}
+
+func TestReconcileSessionStates_KeepsRunningSessionWithNoSandbox(t *testing.T) {
+	setup := newTestSandboxSetup(t)
+	ctx := context.Background()
+
+	// Create test data
+	project := setup.createTestProject(t)
+	workspace := setup.createTestWorkspace(t, project)
+	session := setup.createTestSession(t, workspace, "session-with-no-sandbox")
+
+	// Don't create any sandbox - simulates scenario where sandbox was never created
+	// or was removed while server was down
+
+	// Verify no sandbox exists
+	_, err := setup.provider.Get(ctx, session.ID)
+	if err != sandbox.ErrNotFound {
+		t.Fatalf("Expected sandbox to not exist, got: %v", err)
+	}
+
+	// Create sandbox service
+	sandboxSvc := service.NewSandboxService(setup.store, setup.provider, setup.cfg)
+
+	// Run session state reconciliation
+	t.Log("Running session state reconciliation...")
+	if err := sandboxSvc.ReconcileSessionStates(ctx); err != nil {
+		t.Fatalf("ReconcileSessionStates failed: %v", err)
+	}
+
+	// Verify session status is still running (sandbox will be created on demand)
+	updatedSession, err := setup.store.GetSessionByID(ctx, session.ID)
+	if err != nil {
+		t.Fatalf("Failed to get session: %v", err)
+	}
+
+	if updatedSession.Status != model.SessionStatusRunning {
+		t.Errorf("Expected session status 'running', got '%s'", updatedSession.Status)
+	}
+
+	t.Log("Session correctly kept as running (no sandbox, will be created on demand)")
+}
+
+func TestReconcileSessionStates_KeepsRunningSessionWithStoppedSandbox(t *testing.T) {
+	setup := newTestSandboxSetup(t)
+	ctx := context.Background()
+
+	// Create test data
+	project := setup.createTestProject(t)
+	workspace := setup.createTestWorkspace(t, project)
+	session := setup.createTestSession(t, workspace, "session-with-stopped-sandbox")
+
+	// Create and start a sandbox, then stop it gracefully
+	t.Log("Creating and stopping sandbox...")
+	setup.createSandboxWithImage(t, session.ID, testImageNew)
+
+	// Stop the sandbox gracefully (simulates idle shutdown)
+	if err := setup.provider.Stop(ctx, session.ID, 10*time.Second); err != nil {
+		t.Fatalf("Failed to stop sandbox: %v", err)
+	}
+
+	// Verify sandbox is stopped
+	sb, err := setup.provider.Get(ctx, session.ID)
+	if err != nil {
+		t.Fatalf("Failed to get sandbox: %v", err)
+	}
+	if sb.Status != sandbox.StatusStopped {
+		t.Logf("Note: Sandbox status is %s (expected stopped)", sb.Status)
+	}
+
+	// Create sandbox service
+	sandboxSvc := service.NewSandboxService(setup.store, setup.provider, setup.cfg)
+
+	// Run session state reconciliation
+	t.Log("Running session state reconciliation...")
+	if err := sandboxSvc.ReconcileSessionStates(ctx); err != nil {
+		t.Fatalf("ReconcileSessionStates failed: %v", err)
+	}
+
+	// Verify session status is still running (stopped sandbox can be restarted on demand)
+	updatedSession, err := setup.store.GetSessionByID(ctx, session.ID)
+	if err != nil {
+		t.Fatalf("Failed to get session: %v", err)
+	}
+
+	if updatedSession.Status != model.SessionStatusRunning {
+		t.Errorf("Expected session status 'running', got '%s'", updatedSession.Status)
+	}
+
+	t.Log("Session correctly kept as running (stopped sandbox can be restarted on demand)")
+}

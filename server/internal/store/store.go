@@ -291,6 +291,26 @@ func (s *Store) ListSessionsByWorkspace(ctx context.Context, workspaceID string)
 	return sessions, err
 }
 
+// ListSessionsByStatuses returns all sessions with any of the given statuses.
+func (s *Store) ListSessionsByStatuses(ctx context.Context, statuses []string) ([]*model.Session, error) {
+	var sessions []*model.Session
+	err := s.db.WithContext(ctx).Where("status IN ?", statuses).Find(&sessions).Error
+	return sessions, err
+}
+
+// UpdateSessionStatus updates only the status and error message fields for a session.
+func (s *Store) UpdateSessionStatus(ctx context.Context, id, status string, errorMessage *string) error {
+	updates := map[string]interface{}{
+		"status": status,
+	}
+	if errorMessage != nil {
+		updates["error_message"] = *errorMessage
+	} else {
+		updates["error_message"] = nil
+	}
+	return s.db.WithContext(ctx).Model(&model.Session{}).Where("id = ?", id).Updates(updates).Error
+}
+
 func (s *Store) CreateSession(ctx context.Context, session *model.Session) error {
 	return s.db.WithContext(ctx).Create(session).Error
 }

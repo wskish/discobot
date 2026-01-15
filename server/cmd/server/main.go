@@ -123,6 +123,14 @@ func main() {
 			log.Printf("Warning: Failed to reconcile sandboxes: %v", err)
 		}
 		cancel()
+
+		// Reconcile session states with actual sandbox states
+		// This catches sessions that think they're running but have failed sandboxes
+		ctx, cancel = context.WithTimeout(context.Background(), 2*time.Minute)
+		if err := sandboxSvc.ReconcileSessionStates(ctx); err != nil {
+			log.Printf("Warning: Failed to reconcile session states: %v", err)
+		}
+		cancel()
 	}
 
 	// Create event poller and broker for SSE
