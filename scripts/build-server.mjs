@@ -12,8 +12,13 @@ const binariesDir = join(projectRoot, "src-tauri", "binaries");
 // Create binaries directory
 mkdirSync(binariesDir, { recursive: true });
 
-// Get target triple for current platform
+// Get target triple from environment or detect from current platform
 function getTargetTriple() {
+  // Use TAURI_TARGET_TRIPLE if set (from CI workflow)
+  if (process.env.TAURI_TARGET_TRIPLE) {
+    return process.env.TAURI_TARGET_TRIPLE;
+  }
+
   const platform = os.platform();
   const arch = os.arch();
 
@@ -32,7 +37,7 @@ function getTargetTriple() {
 }
 
 const targetTriple = getTargetTriple();
-const ext = os.platform() === "win32" ? ".exe" : "";
+const ext = targetTriple.includes("windows") ? ".exe" : "";
 const outputName = `octobot-server-${targetTriple}${ext}`;
 const outputPath = join(binariesDir, outputName);
 

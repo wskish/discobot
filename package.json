@@ -8,8 +8,8 @@
 		"dev:next": "next dev",
 		"dev:api": "cd server && go run github.com/air-verse/air@latest",
 		"dev:agent": "tsx --watch scripts/agent-watcher/index.ts",
-		"dev:tauri": "NEXT_PUBLIC_TAURI=true next dev --turbopack -p 1420",
-		"build:tauri": "NEXT_PUBLIC_TAURI=true next build",
+		"dev:tauri": "cross-env NEXT_PUBLIC_TAURI=true next dev --turbopack -p 1420",
+		"build:tauri": "cross-env NEXT_PUBLIC_TAURI=true next build",
 		"build:server": "node scripts/build-server.mjs",
 		"start": "next start",
 		"tauri": "tauri",
@@ -100,6 +100,7 @@
 	},
 	"devDependencies": {
 		"@biomejs/biome": "2.3.11",
+		"cross-env": "^7.0.3",
 		"@tauri-apps/cli": "^2",
 		"@tailwindcss/postcss": "^4.1.18",
 		"@types/node": "^25.0.8",
