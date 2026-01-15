@@ -1,7 +1,7 @@
 {
 	"$schema": "https://schema.tauri.app/config/2",
 	"productName": "octobot",
-	"version": "0.1.0",
+	"version": "../package.json",
 	"identifier": "ai.obot.oct",
 	"build": {
 		"beforeDevCommand": "pnpm dev:tauri",

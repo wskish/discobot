@@ -1,6 +1,6 @@
 {
 	"name": "octobot",
-	"version": "0.0.1",
+	"version": "0.0.1-alpha9",
 	"private": true,
 	"scripts": {
 		"build": "next build",
@@ -30,7 +30,8 @@
 		"check": "biome check . && npm run lint:go && npm run typecheck",
 		"check:fix": "biome check . --write && npm run lint:go && npm run typecheck",
 		"typecheck": "tsc --noEmit",
-		"refresh-models": "./scripts/refresh-models-data.sh"
+		"refresh-models": "./scripts/refresh-models-data.sh",
+		"release": "node scripts/release.mjs"
 	},
 	"dependencies": {
 		"@ai-sdk/react": "^3.0.36",
