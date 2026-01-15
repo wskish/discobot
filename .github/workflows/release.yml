@@ -16,10 +16,10 @@ jobs:
       matrix:
         include:
           # macOS ARM64 (Apple Silicon)
-          - platform: macos-latest
+          - platform: macos-15
             target: aarch64-apple-darwin
           # macOS x64 (Intel)
-          - platform: macos-latest
+          - platform: macos-15
             target: x86_64-apple-darwin
           # Windows x64
           - platform: windows-latest
