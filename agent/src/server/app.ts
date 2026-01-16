@@ -73,14 +73,14 @@ export function createApp(options: AppOptions) {
 
 	// POST /chat - Send messages and stream response
 	app.post("/chat", async (c) => {
-		const startTime = Date.now();
-		console.log("[POST /chat] Request received");
+		const reqId = crypto.randomUUID().slice(0, 8);
+		const log = (data: Record<string, unknown>) =>
+			console.log(JSON.stringify({ reqId, ...data }));
 
 		const body = await c.req.json<{ messages: UIMessage[] }>();
 		const { messages: inputMessages } = body;
 
 		if (!inputMessages || !Array.isArray(inputMessages)) {
-			console.log("[POST /chat] Error: messages array required");
 			return c.json({ error: "messages array required" }, 400);
 		}
 
@@ -89,19 +89,8 @@ export function createApp(options: AppOptions) {
 			.filter((m) => m.role === "user")
 			.pop();
 		if (!lastUserMessage) {
-			console.log("[POST /chat] Error: No user message found");
 			return c.json({ error: "No user message found" }, 400);
 		}
-
-		// Log the user message (truncate if too long)
-		const msgPreview =
-			lastUserMessage.parts
-				?.map((p) => (p.type === "text" ? p.text : `[${p.type}]`))
-				.join("")
-				.slice(0, 100) || "[no text]";
-		console.log(
-			`[POST /chat] User message: "${msgPreview}${msgPreview.length >= 100 ? "..." : ""}"`,
-		);
 
 		// Check for credential changes from header
 		const credentialsHeader = c.req.header(CREDENTIALS_HEADER) || null;
@@ -110,7 +99,6 @@ export function createApp(options: AppOptions) {
 
 		// If credentials changed, restart with new environment
 		if (credentialsChanged) {
-			console.log("Credentials changed, updating agent environment...");
 			await acpClient.updateEnvironment({ env: credentialEnv });
 		}
 
@@ -139,10 +127,19 @@ export function createApp(options: AppOptions) {
 		return streamSSE(c, async (stream) => {
 			let textBuffer = "";
 
+			// Helper to log and send SSE
+			const sendSSE = async (data: Record<string, unknown>) => {
+				log({ sse: data });
+				await stream.writeSSE({ data: JSON.stringify(data) });
+			};
+
 			// Set up update callback to stream responses
 			acpClient.setUpdateCallback((params: SessionNotification) => {
 				const update = params.update;
 				const part = sessionUpdateToUIPart(update);
+
+				// Log session update from ACP
+				log({ sessionUpdate: update });
 
 				if (part) {
 					// Update the assistant message in store
@@ -182,32 +179,24 @@ export function createApp(options: AppOptions) {
 					}
 
 					// Send SSE event in UIMessage Stream format
-					// Format: data: {"type":"...", ...}\n\n
 					if (part.type === "text") {
-						stream.writeSSE({
-							data: JSON.stringify({
-								type: "text-delta",
-								id: currentMsg?.id || "text",
-								delta: part.text,
-							}),
+						sendSSE({
+							type: "text-delta",
+							id: currentMsg?.id || "text",
+							delta: part.text,
 						});
 					} else if (part.type === "dynamic-tool") {
-						// Map dynamic-tool part to tool-input-available format
-						stream.writeSSE({
-							data: JSON.stringify({
-								type: "tool-input-available",
-								toolCallId: part.toolCallId,
-								toolName: part.toolName,
-								input: part.input,
-							}),
+						sendSSE({
+							type: "tool-input-available",
+							toolCallId: part.toolCallId,
+							toolName: part.toolName,
+							input: part.input,
 						});
 					} else if (part.type === "reasoning") {
-						stream.writeSSE({
-							data: JSON.stringify({
-								type: "reasoning-delta",
-								id: currentMsg?.id || "reasoning",
-								delta: part.text,
-							}),
+						sendSSE({
+							type: "reasoning-delta",
+							id: currentMsg?.id || "reasoning",
+							delta: part.text,
 						});
 					}
 				}
@@ -217,20 +206,12 @@ export function createApp(options: AppOptions) {
 				// Send prompt to ACP
 				await acpClient.prompt(contentBlocks);
 
-				const duration = Date.now() - startTime;
-				console.log(`[POST /chat] Completed successfully in ${duration}ms`);
-
-				// Send completion event in UIMessage Stream format
-				await stream.writeSSE({
-					data: JSON.stringify({
-						type: "finish",
-						messageId: assistantMessage.id,
-					}),
+				// Send completion event
+				await sendSSE({
+					type: "finish",
+					messageId: assistantMessage.id,
 				});
 			} catch (error) {
-				const duration = Date.now() - startTime;
-				console.error(`[POST /chat] Error after ${duration}ms:`, error);
-
 				// Extract error message from various error types (including JSON-RPC errors)
 				let errorText = "Unknown error";
 				if (error instanceof Error) {
@@ -249,15 +230,8 @@ export function createApp(options: AppOptions) {
 					}
 				}
 
-				// Send error in UIMessage Stream format
-				console.log(`[POST /chat] Sending error event: ${errorText}`);
-				await stream.writeSSE({
-					data: JSON.stringify({
-						type: "error",
-						errorText,
-					}),
-				});
-				console.log(`[POST /chat] Error event sent successfully`);
+				// Send error event
+				await sendSSE({ type: "error", errorText });
 			} finally {
 				acpClient.setUpdateCallback(null);
 			}

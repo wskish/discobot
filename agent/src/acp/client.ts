@@ -33,6 +33,15 @@ export interface EnvironmentUpdate {
 
 export type SessionUpdateCallback = (update: SessionNotification) => void;
 
+// Extract method names from ClientSideConnection that take a single param and return a Promise
+type ConnectionMethods = {
+	[K in keyof ClientSideConnection]: ClientSideConnection[K] extends (
+		params: infer _P,
+	) => Promise<infer _R>
+		? K
+		: never;
+}[keyof ClientSideConnection];
+
 export class ACPClient {
 	private connection: ClientSideConnection | null = null;
 	private process: ChildProcess | null = null;
@@ -41,6 +50,27 @@ export class ACPClient {
 	private updateCallback: SessionUpdateCallback | null = null;
 
 	constructor(private options: ACPClientOptions) {}
+
+	/** Execute an ACP request and log request/response as JSON (type-safe) */
+	private async request<M extends ConnectionMethods>(
+		method: M,
+		params: Parameters<ClientSideConnection[M]>[0],
+	): Promise<Awaited<ReturnType<ClientSideConnection[M]>>> {
+		if (!this.connection) {
+			throw new Error("Not connected");
+		}
+		const fn = this.connection[method].bind(this.connection) as (
+			p: typeof params,
+		) => Promise<Awaited<ReturnType<ClientSideConnection[M]>>>;
+		try {
+			const response = await fn(params);
+			console.log(JSON.stringify({ acp: method, request: params, response }));
+			return response;
+		} catch (error) {
+			console.log(JSON.stringify({ acp: method, request: params, error }));
+			throw error;
+		}
+	}
 
 	async connect(): Promise<void> {
 		const { command, args = [], cwd, env } = this.options;
@@ -94,16 +124,11 @@ export class ACPClient {
 		this.connection = new ClientSideConnection(createClient, stream);
 
 		// Initialize the connection
-		await this.connection.initialize({
+		await this.request("initialize", {
 			protocolVersion: 1,
-			clientInfo: {
-				name: "agent-service",
-				version: "1.0.0",
-			},
+			clientInfo: { name: "agent-service", version: "1.0.0" },
 			clientCapabilities: {},
 		});
-
-		console.log("ACP connection initialized");
 	}
 
 	async ensureSession(): Promise<string> {
@@ -118,15 +143,14 @@ export class ACPClient {
 			// First try unstable_resumeSession (experimental, supported by Claude Code ACP)
 			// This doesn't replay messages but reconnects to an existing session
 			try {
-				await this.connection.unstable_resumeSession({
+				await this.request("unstable_resumeSession", {
 					sessionId: this.sessionData.sessionId,
 					cwd: this.options.cwd,
 				});
 				this.sessionId = this.sessionData.sessionId;
-				console.log(`Resumed session: ${this.sessionId}`);
 				return this.sessionId;
-			} catch (resumeError) {
-				console.log("Failed to resume session:", resumeError);
+			} catch {
+				// Logged by request(), fall through to loadSession
 
 				// Fall back to loadSession (requires loadSession capability, replays messages)
 				try {
@@ -171,7 +195,7 @@ export class ACPClient {
 						}
 					};
 
-					await this.connection.loadSession({
+					await this.request("loadSession", {
 						sessionId: this.sessionData.sessionId,
 						cwd: this.options.cwd,
 						mcpServers: [],
@@ -192,12 +216,9 @@ export class ACPClient {
 					}
 
 					this.sessionId = this.sessionData.sessionId;
-					console.log(
-						`Loaded session: ${this.sessionId} with ${replayedMessages.length} messages`,
-					);
 					return this.sessionId;
-				} catch (loadError) {
-					console.log("Failed to load session, creating new one:", loadError);
+				} catch {
+					// Logged by request(), fall through to newSession
 				}
 			}
 		}
@@ -209,7 +230,7 @@ export class ACPClient {
 
 		clearMessages();
 
-		const response = await this.connection.newSession({
+		const response = await this.request("newSession", {
 			cwd: this.options.cwd,
 			mcpServers: [],
 		});
@@ -222,7 +243,6 @@ export class ACPClient {
 		};
 
 		await saveSession(this.sessionData);
-		console.log(`Created new session: ${this.sessionId}`);
 
 		return this.sessionId;
 	}
@@ -232,26 +252,15 @@ export class ACPClient {
 	}
 
 	async prompt(content: ContentBlock[]): Promise<void> {
-		if (!this.connection) {
-			throw new Error("Not connected");
-		}
-
 		const sessionId = await this.ensureSession();
-
-		await this.connection.prompt({
-			sessionId,
-			prompt: content,
-		});
+		await this.request("prompt", { sessionId, prompt: content });
 	}
 
 	async cancel(): Promise<void> {
-		if (!this.connection || !this.sessionId) {
+		if (!this.sessionId) {
 			return;
 		}
-
-		await this.connection.cancel({
-			sessionId: this.sessionId,
-		});
+		await this.request("cancel", { sessionId: this.sessionId });
 	}
 
 	async disconnect(): Promise<void> {
