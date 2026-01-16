@@ -75,6 +75,7 @@ async function saveMessages(): Promise<void> {
 			await mkdir(dir, { recursive: true });
 		}
 		await writeFile(MESSAGES_FILE, JSON.stringify(messages, null, 2), "utf-8");
+		console.log(`Saved ${messages.length} messages to ${MESSAGES_FILE}`);
 	} catch (error) {
 		console.error("Failed to save messages:", error);
 	}

@@ -5,7 +5,6 @@ import type { DynamicToolUIPart, UIMessage, UIMessageChunk } from "ai";
 import { readUIMessageStream } from "ai";
 import { sessionUpdateToUIPart } from "../acp/translate.js";
 import {
-	type StreamablePart,
 	createBlockIds,
 	createErrorChunk,
 	createFinishChunks,
@@ -15,6 +14,7 @@ import {
 	createTextChunks,
 	createToolChunks,
 	partToChunks,
+	type StreamablePart,
 } from "./stream.js";
 
 /**
@@ -671,7 +671,11 @@ describe("stream fixtures", () => {
 				},
 				// Second text block (NEW ID)
 				{ type: "text-start", id: "text-msg-interleaved-2" },
-				{ type: "text-delta", id: "text-msg-interleaved-2", delta: "Found it!" },
+				{
+					type: "text-delta",
+					id: "text-msg-interleaved-2",
+					delta: "Found it!",
+				},
 				{ type: "text-end", id: "text-msg-interleaved-2" },
 				{ type: "finish" },
 			],

@@ -48,7 +48,8 @@ describe("ACPClient", () => {
 			// Attach the exit handler (same as in client.ts)
 			mockProcess.on("exit", (code) => {
 				console.log(`Agent process exited with code ${code}`);
-				clientState.connection = null as unknown as typeof clientState.connection;
+				clientState.connection =
+					null as unknown as typeof clientState.connection;
 				clientState.sessionId = null as unknown as string;
 				clientState.process = null as unknown as typeof mockProcess;
 				connectionCleared = true;
@@ -96,7 +97,8 @@ describe("ACPClient", () => {
 
 			mockProcess.on("exit", (code) => {
 				console.log(`Agent process exited with code ${code}`);
-				clientState.connection = null as unknown as typeof clientState.connection;
+				clientState.connection =
+					null as unknown as typeof clientState.connection;
 				clientState.sessionId = null as unknown as string;
 				clientState.process = null as unknown as typeof mockProcess;
 			});
@@ -181,7 +183,11 @@ describe("ACPClient", () => {
 			// First connection
 			connect();
 			clientState.sessionId = "session-1";
-			assert.equal(isConnected(), true, "should be connected after first connect");
+			assert.equal(
+				isConnected(),
+				true,
+				"should be connected after first connect",
+			);
 			assert.equal(connectCount, 1, "connect should be called once");
 
 			// First process exits

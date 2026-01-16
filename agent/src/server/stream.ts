@@ -63,10 +63,7 @@ export function createBlockIds(messageId: string): StreamBlockIds {
 /**
  * Generates a unique text block ID.
  */
-function generateTextBlockId(
-	state: StreamState,
-	ids: StreamBlockIds,
-): string {
+function generateTextBlockId(state: StreamState, ids: StreamBlockIds): string {
 	state.textBlockCounter++;
 	return `text-${ids.messageId}-${state.textBlockCounter}`;
 }
