@@ -2,6 +2,8 @@ package service
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"log"
 	"time"
@@ -29,21 +31,41 @@ func NewSandboxService(s *store.Store, p sandbox.Provider, cfg *config.Config) *
 }
 
 // CreateForSession creates and starts a sandbox for the given session.
-// This should be called when a session is created (eager provisioning).
-func (s *SandboxService) CreateForSession(ctx context.Context, sessionID, workspacePath string) error {
-	return s.CreateForSessionWithSecret(ctx, sessionID, workspacePath, "", "")
-}
+// It retrieves the workspace path and commit from the session in the database
+// and generates a cryptographically secure shared secret.
+func (s *SandboxService) CreateForSession(ctx context.Context, sessionID string) error {
+	// Get session to retrieve workspace path and commit
+	session, err := s.store.GetSessionByID(ctx, sessionID)
+	if err != nil {
+		return fmt.Errorf("failed to get session: %w", err)
+	}
 
-// CreateForSessionWithSecret creates and starts a sandbox with a shared secret.
-// The secret is stored by the provider and a hashed version is made available
-// to the sandbox via the OCTOBOT_SECRET environment variable.
-func (s *SandboxService) CreateForSessionWithSecret(ctx context.Context, sessionID, workspacePath, sharedSecret, workspaceCommit string) error {
+	// Workspace path should be set during session initialization
+	workspacePath := ""
+	if session.WorkspacePath != nil {
+		workspacePath = *session.WorkspacePath
+	}
+	if workspacePath == "" {
+		return fmt.Errorf("session %s has no workspace path set", sessionID)
+	}
+
+	// Workspace commit may be empty for local (non-git) workspaces
+	workspaceCommit := ""
+	if session.WorkspaceCommit != nil {
+		workspaceCommit = *session.WorkspaceCommit
+	}
+
+	// Generate a cryptographically secure shared secret
+	sharedSecret := generateSandboxSecret(32)
+
 	// Create sandbox with session configuration
 	// Note: The sandbox image is configured globally on the provider via SANDBOX_IMAGE env var
 	opts := sandbox.CreateOptions{
 		SharedSecret: sharedSecret,
 		Labels: map[string]string{
-			"octobot.session.id": sessionID,
+			"octobot.session.id":   sessionID,
+			"octobot.workspace.id": session.WorkspaceID,
+			"octobot.project.id":   session.ProjectID,
 		},
 		WorkspacePath:   workspacePath,
 		WorkspaceCommit: workspaceCommit,
@@ -53,7 +75,7 @@ func (s *SandboxService) CreateForSessionWithSecret(ctx context.Context, session
 	}
 
 	// Create the sandbox
-	_, err := s.provider.Create(ctx, sessionID, opts)
+	_, err = s.provider.Create(ctx, sessionID, opts)
 	if err != nil {
 		return fmt.Errorf("failed to create sandbox: %w", err)
 	}
@@ -68,6 +90,16 @@ func (s *SandboxService) CreateForSessionWithSecret(ctx context.Context, session
 	return nil
 }
 
+// generateSandboxSecret generates a cryptographically secure random hex string.
+func generateSandboxSecret(length int) string {
+	bytes := make([]byte, length)
+	if _, err := rand.Read(bytes); err != nil {
+		// Fallback to a less random but still unique value
+		return fmt.Sprintf("%d", time.Now().UnixNano())
+	}
+	return hex.EncodeToString(bytes)
+}
+
 // GetForSession returns the sandbox state for a session.
 func (s *SandboxService) GetForSession(ctx context.Context, sessionID string) (*sandbox.Sandbox, error) {
 	return s.provider.Get(ctx, sessionID)
@@ -75,11 +107,11 @@ func (s *SandboxService) GetForSession(ctx context.Context, sessionID string) (*
 
 // EnsureRunning ensures a sandbox is running for the session.
 // If the sandbox doesn't exist or is stopped, it will be created/started.
-func (s *SandboxService) EnsureRunning(ctx context.Context, sessionID, workspacePath string) error {
+func (s *SandboxService) EnsureRunning(ctx context.Context, sessionID string) error {
 	sb, err := s.provider.Get(ctx, sessionID)
 	if err == sandbox.ErrNotFound {
 		// Sandbox doesn't exist, create it
-		return s.CreateForSession(ctx, sessionID, workspacePath)
+		return s.CreateForSession(ctx, sessionID)
 	}
 	if err != nil {
 		return fmt.Errorf("failed to get sandbox status: %w", err)
@@ -95,7 +127,7 @@ func (s *SandboxService) EnsureRunning(ctx context.Context, sessionID, workspace
 	case sandbox.StatusFailed:
 		// Remove and recreate
 		_ = s.provider.Remove(ctx, sessionID)
-		return s.CreateForSession(ctx, sessionID, workspacePath)
+		return s.CreateForSession(ctx, sessionID)
 	default:
 		return fmt.Errorf("unknown sandbox status: %s", sb.Status)
 	}
@@ -161,20 +193,13 @@ func (s *SandboxService) ReconcileSandboxes(ctx context.Context) error {
 		log.Printf("Sandbox for session %s uses outdated image %s (expected %s), recreating...",
 			sb.SessionID, sb.Image, expectedImage)
 
-		// Get the session to find the workspace path
-		session, err := s.store.GetSessionByID(ctx, sb.SessionID)
+		// Check if the session exists; if not, remove orphaned sandbox
+		_, err := s.store.GetSessionByID(ctx, sb.SessionID)
 		if err != nil {
 			log.Printf("Failed to get session %s, removing orphaned sandbox: %v", sb.SessionID, err)
 			if err := s.provider.Remove(ctx, sb.SessionID); err != nil {
 				log.Printf("Failed to remove orphaned sandbox for session %s: %v", sb.SessionID, err)
 			}
-			continue
-		}
-
-		// Get the workspace to find the path
-		workspace, err := s.store.GetWorkspaceByID(ctx, session.WorkspaceID)
-		if err != nil {
-			log.Printf("Failed to get workspace %s for session %s: %v", session.WorkspaceID, sb.SessionID, err)
 			continue
 		}
 
@@ -185,7 +210,8 @@ func (s *SandboxService) ReconcileSandboxes(ctx context.Context) error {
 		}
 
 		// Create a new sandbox with the correct image
-		if err := s.CreateForSession(ctx, sb.SessionID, workspace.Path); err != nil {
+		// CreateForSession will retrieve workspace path and commit from the session
+		if err := s.CreateForSession(ctx, sb.SessionID); err != nil {
 			log.Printf("Failed to recreate sandbox for session %s: %v", sb.SessionID, err)
 			continue
 		}

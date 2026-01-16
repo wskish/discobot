@@ -23,6 +23,7 @@ import (
 	"github.com/docker/docker/api/types/filters"
 	imageTypes "github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/api/types/mount"
+	volumeTypes "github.com/docker/docker/api/types/volume"
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/docker/go-connections/nat"
@@ -40,6 +41,12 @@ const (
 
 	// workspaceOriginPath is where local workspaces are mounted inside the container.
 	workspaceOriginPath = "/.workspace.origin"
+
+	// dataVolumePath is where the persistent data volume is mounted inside the container.
+	dataVolumePath = "/.data"
+
+	// dataVolumePrefix is the prefix for data volume names.
+	dataVolumePrefix = "octobot-data-"
 )
 
 // Provider implements the sandbox.Provider interface using Docker.
@@ -89,6 +96,11 @@ func containerName(sessionID string) string {
 	return fmt.Sprintf("octobot-session-%s", sessionID)
 }
 
+// volumeName returns the Docker volume name for a session's data volume.
+func volumeName(sessionID string) string {
+	return fmt.Sprintf("%s%s", dataVolumePrefix, sessionID)
+}
+
 // ImageExists checks if the configured sandbox image is available locally.
 func (p *Provider) ImageExists(ctx context.Context) bool {
 	_, err := p.client.ImageInspect(ctx, p.cfg.SandboxImage)
@@ -124,6 +136,19 @@ func (p *Provider) Create(ctx context.Context, sessionID string, opts sandbox.Cr
 	// Ensure image is available (pull if missing)
 	if err := p.ensureImage(ctx, image); err != nil {
 		return nil, fmt.Errorf("%w: %v", sandbox.ErrInvalidImage, err)
+	}
+
+	// Create data volume for persistent storage
+	dataVolName := volumeName(sessionID)
+	_, err := p.client.VolumeCreate(ctx, volumeTypes.CreateOptions{
+		Name: dataVolName,
+		Labels: map[string]string{
+			"octobot.session.id": sessionID,
+			"octobot.managed":    "true",
+		},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create data volume: %w", err)
 	}
 
 	// Prepare labels - store the raw secret as a label
@@ -177,7 +202,16 @@ func (p *Provider) Create(ctx context.Context, sessionID string, opts sandbox.Cr
 	}
 
 	// Host configuration with resource limits
-	hostConfig := &containerTypes.HostConfig{}
+	hostConfig := &containerTypes.HostConfig{
+		// Mount the data volume for persistent storage
+		Mounts: []mount.Mount{
+			{
+				Type:   mount.TypeVolume,
+				Source: dataVolName,
+				Target: dataVolumePath,
+			},
+		},
+	}
 
 	// Apply resource limits
 	if opts.Resources.MemoryMB > 0 {
@@ -348,7 +382,8 @@ func (p *Provider) Stop(ctx context.Context, sessionID string, timeout time.Dura
 	return nil
 }
 
-// Remove removes a sandbox and its resources.
+// Remove removes a sandbox container but preserves the data volume.
+// Data volumes (octobot-data-*) are left for the user to clean up manually if needed.
 func (p *Provider) Remove(ctx context.Context, sessionID string) error {
 	containerID, err := p.getContainerID(ctx, sessionID)
 	if err != nil {
@@ -360,7 +395,7 @@ func (p *Provider) Remove(ctx context.Context, sessionID string) error {
 
 	removeOptions := containerTypes.RemoveOptions{
 		Force:         true,
-		RemoveVolumes: true,
+		RemoveVolumes: true, // Only removes anonymous volumes, not our named data volume
 	}
 
 	if err := p.client.ContainerRemove(ctx, containerID, removeOptions); err != nil {

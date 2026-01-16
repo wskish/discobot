@@ -60,22 +60,11 @@ func (h *Handler) TerminalWebSocket(w http.ResponseWriter, r *http.Request) {
 		cols = 80
 	}
 
-	// Get workspace path for the session (needed to ensure container is running)
 	ctx := r.Context()
-	session, err := h.store.GetSessionByID(ctx, sessionID)
-	if err != nil {
-		h.Error(w, http.StatusNotFound, "session not found")
-		return
-	}
-
-	workspace, err := h.store.GetWorkspaceByID(ctx, session.WorkspaceID)
-	if err != nil {
-		h.Error(w, http.StatusNotFound, "workspace not found")
-		return
-	}
 
 	// Ensure sandbox is running
-	if err := h.sandboxService.EnsureRunning(ctx, sessionID, workspace.Path); err != nil {
+	// EnsureRunning will retrieve workspace path from the session
+	if err := h.sandboxService.EnsureRunning(ctx, sessionID); err != nil {
 		log.Printf("failed to ensure sandbox running for session %s: %v", sessionID, err)
 		h.Error(w, http.StatusInternalServerError, "failed to start sandbox")
 		return

@@ -154,11 +154,13 @@ func (s *testSandboxSetup) createTestWorkspace(t *testing.T, project *model.Proj
 // createTestSession creates a session for testing
 func (s *testSandboxSetup) createTestSession(t *testing.T, workspace *model.Workspace, name string) *model.Session {
 	t.Helper()
+	workspacePath := workspace.Path
 	session := &model.Session{
-		ProjectID:   workspace.ProjectID,
-		WorkspaceID: workspace.ID,
-		Name:        name,
-		Status:      model.SessionStatusRunning,
+		ProjectID:     workspace.ProjectID,
+		WorkspaceID:   workspace.ID,
+		Name:          name,
+		Status:        model.SessionStatusRunning,
+		WorkspacePath: &workspacePath, // Set workspace path for CreateForSession
 	}
 	if err := s.store.CreateSession(context.Background(), session); err != nil {
 		t.Fatalf("Failed to create session: %v", err)

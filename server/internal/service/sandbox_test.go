@@ -5,26 +5,87 @@ import (
 	"testing"
 	"time"
 
+	"github.com/glebarez/sqlite"
+	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
+
 	"github.com/obot-platform/octobot/server/internal/config"
+	"github.com/obot-platform/octobot/server/internal/model"
 	"github.com/obot-platform/octobot/server/internal/sandbox"
 	"github.com/obot-platform/octobot/server/internal/sandbox/mock"
+	"github.com/obot-platform/octobot/server/internal/store"
 )
 
 // Use the config constant for test consistency
 var testImage = config.DefaultSandboxImage
 
+// setupTestStore creates an in-memory SQLite database for testing
+func setupTestStore(t *testing.T) *store.Store {
+	t.Helper()
+
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{
+		Logger: logger.Default.LogMode(logger.Silent),
+	})
+	if err != nil {
+		t.Fatalf("failed to create test database: %v", err)
+	}
+
+	// Run migrations
+	if err := db.AutoMigrate(model.AllModels()...); err != nil {
+		t.Fatalf("failed to migrate test database: %v", err)
+	}
+
+	return store.New(db)
+}
+
+// createTestSession creates a session with the given workspace path for testing
+func createTestSession(t *testing.T, s *store.Store, sessionID, workspacePath string) {
+	t.Helper()
+
+	ctx := context.Background()
+
+	// Create a workspace first
+	workspace := &model.Workspace{
+		ID:         "test-workspace",
+		ProjectID:  "test-project",
+		Path:       workspacePath,
+		SourceType: "local",
+		Status:     "ready",
+	}
+	if err := s.CreateWorkspace(ctx, workspace); err != nil {
+		t.Fatalf("failed to create test workspace: %v", err)
+	}
+
+	// Create the session with workspace path set
+	session := &model.Session{
+		ID:            sessionID,
+		ProjectID:     "test-project",
+		WorkspaceID:   "test-workspace",
+		Name:          "Test Session",
+		Status:        model.SessionStatusRunning,
+		WorkspacePath: &workspacePath,
+	}
+	if err := s.CreateSession(ctx, session); err != nil {
+		t.Fatalf("failed to create test session: %v", err)
+	}
+}
+
 func TestSandboxService_CreateForSession(t *testing.T) {
 	mockProvider := mock.NewProviderWithImage(testImage)
+	testStore := setupTestStore(t)
 	cfg := &config.Config{
 		SandboxIdleTimeout: 30 * time.Minute,
 	}
-	svc := NewSandboxService(nil, mockProvider, cfg)
+	svc := NewSandboxService(testStore, mockProvider, cfg)
 
 	ctx := context.Background()
 	sessionID := "test-session-1"
 	workspacePath := "/home/user/workspace"
 
-	err := svc.CreateForSession(ctx, sessionID, workspacePath)
+	// Create test session with workspace path
+	createTestSession(t, testStore, sessionID, workspacePath)
+
+	err := svc.CreateForSession(ctx, sessionID)
 	if err != nil {
 		t.Fatalf("CreateForSession failed: %v", err)
 	}
@@ -46,20 +107,25 @@ func TestSandboxService_CreateForSession(t *testing.T) {
 
 func TestSandboxService_CreateForSession_AlreadyExists(t *testing.T) {
 	mockProvider := mock.NewProvider()
+	testStore := setupTestStore(t)
 	cfg := &config.Config{}
-	svc := NewSandboxService(nil, mockProvider, cfg)
+	svc := NewSandboxService(testStore, mockProvider, cfg)
 
 	ctx := context.Background()
 	sessionID := "test-session-1"
+	workspacePath := "/workspace"
+
+	// Create test session
+	createTestSession(t, testStore, sessionID, workspacePath)
 
 	// Create first time
-	err := svc.CreateForSession(ctx, sessionID, "/workspace")
+	err := svc.CreateForSession(ctx, sessionID)
 	if err != nil {
 		t.Fatalf("First CreateForSession failed: %v", err)
 	}
 
 	// Try to create again - should fail
-	err = svc.CreateForSession(ctx, sessionID, "/workspace")
+	err = svc.CreateForSession(ctx, sessionID)
 	if err == nil {
 		t.Error("Expected error when creating duplicate sandbox")
 	}
@@ -67,14 +133,19 @@ func TestSandboxService_CreateForSession_AlreadyExists(t *testing.T) {
 
 func TestSandboxService_GetForSession(t *testing.T) {
 	mockProvider := mock.NewProvider()
+	testStore := setupTestStore(t)
 	cfg := &config.Config{}
-	svc := NewSandboxService(nil, mockProvider, cfg)
+	svc := NewSandboxService(testStore, mockProvider, cfg)
 
 	ctx := context.Background()
 	sessionID := "test-session-1"
+	workspacePath := "/workspace"
+
+	// Create test session
+	createTestSession(t, testStore, sessionID, workspacePath)
 
 	// Create sandbox
-	err := svc.CreateForSession(ctx, sessionID, "/workspace")
+	err := svc.CreateForSession(ctx, sessionID)
 	if err != nil {
 		t.Fatalf("CreateForSession failed: %v", err)
 	}
@@ -92,8 +163,9 @@ func TestSandboxService_GetForSession(t *testing.T) {
 
 func TestSandboxService_GetForSession_NotFound(t *testing.T) {
 	mockProvider := mock.NewProvider()
+	testStore := setupTestStore(t)
 	cfg := &config.Config{}
-	svc := NewSandboxService(nil, mockProvider, cfg)
+	svc := NewSandboxService(testStore, mockProvider, cfg)
 
 	ctx := context.Background()
 
@@ -105,14 +177,19 @@ func TestSandboxService_GetForSession_NotFound(t *testing.T) {
 
 func TestSandboxService_EnsureRunning_CreatesNew(t *testing.T) {
 	mockProvider := mock.NewProvider()
+	testStore := setupTestStore(t)
 	cfg := &config.Config{}
-	svc := NewSandboxService(nil, mockProvider, cfg)
+	svc := NewSandboxService(testStore, mockProvider, cfg)
 
 	ctx := context.Background()
 	sessionID := "test-session-1"
+	workspacePath := "/workspace"
+
+	// Create test session
+	createTestSession(t, testStore, sessionID, workspacePath)
 
 	// EnsureRunning should create if not exists
-	err := svc.EnsureRunning(ctx, sessionID, "/workspace")
+	err := svc.EnsureRunning(ctx, sessionID)
 	if err != nil {
 		t.Fatalf("EnsureRunning failed: %v", err)
 	}
@@ -129,20 +206,25 @@ func TestSandboxService_EnsureRunning_CreatesNew(t *testing.T) {
 
 func TestSandboxService_EnsureRunning_AlreadyRunning(t *testing.T) {
 	mockProvider := mock.NewProvider()
+	testStore := setupTestStore(t)
 	cfg := &config.Config{}
-	svc := NewSandboxService(nil, mockProvider, cfg)
+	svc := NewSandboxService(testStore, mockProvider, cfg)
 
 	ctx := context.Background()
 	sessionID := "test-session-1"
+	workspacePath := "/workspace"
+
+	// Create test session
+	createTestSession(t, testStore, sessionID, workspacePath)
 
 	// Create and start
-	err := svc.CreateForSession(ctx, sessionID, "/workspace")
+	err := svc.CreateForSession(ctx, sessionID)
 	if err != nil {
 		t.Fatalf("CreateForSession failed: %v", err)
 	}
 
 	// EnsureRunning on already running sandbox should succeed
-	err = svc.EnsureRunning(ctx, sessionID, "/workspace")
+	err = svc.EnsureRunning(ctx, sessionID)
 	if err != nil {
 		t.Fatalf("EnsureRunning failed: %v", err)
 	}
@@ -150,14 +232,19 @@ func TestSandboxService_EnsureRunning_AlreadyRunning(t *testing.T) {
 
 func TestSandboxService_EnsureRunning_StartsStopped(t *testing.T) {
 	mockProvider := mock.NewProvider()
+	testStore := setupTestStore(t)
 	cfg := &config.Config{}
-	svc := NewSandboxService(nil, mockProvider, cfg)
+	svc := NewSandboxService(testStore, mockProvider, cfg)
 
 	ctx := context.Background()
 	sessionID := "test-session-1"
+	workspacePath := "/workspace"
+
+	// Create test session
+	createTestSession(t, testStore, sessionID, workspacePath)
 
 	// Create and start
-	err := svc.CreateForSession(ctx, sessionID, "/workspace")
+	err := svc.CreateForSession(ctx, sessionID)
 	if err != nil {
 		t.Fatalf("CreateForSession failed: %v", err)
 	}
@@ -169,7 +256,7 @@ func TestSandboxService_EnsureRunning_StartsStopped(t *testing.T) {
 	}
 
 	// EnsureRunning should restart it
-	err = svc.EnsureRunning(ctx, sessionID, "/workspace")
+	err = svc.EnsureRunning(ctx, sessionID)
 	if err != nil {
 		t.Fatalf("EnsureRunning failed: %v", err)
 	}
@@ -186,14 +273,19 @@ func TestSandboxService_EnsureRunning_StartsStopped(t *testing.T) {
 
 func TestSandboxService_DestroyForSession(t *testing.T) {
 	mockProvider := mock.NewProvider()
+	testStore := setupTestStore(t)
 	cfg := &config.Config{}
-	svc := NewSandboxService(nil, mockProvider, cfg)
+	svc := NewSandboxService(testStore, mockProvider, cfg)
 
 	ctx := context.Background()
 	sessionID := "test-session-1"
+	workspacePath := "/workspace"
+
+	// Create test session
+	createTestSession(t, testStore, sessionID, workspacePath)
 
 	// Create sandbox
-	err := svc.CreateForSession(ctx, sessionID, "/workspace")
+	err := svc.CreateForSession(ctx, sessionID)
 	if err != nil {
 		t.Fatalf("CreateForSession failed: %v", err)
 	}
@@ -213,8 +305,9 @@ func TestSandboxService_DestroyForSession(t *testing.T) {
 
 func TestSandboxService_DestroyForSession_NotFound(t *testing.T) {
 	mockProvider := mock.NewProvider()
+	testStore := setupTestStore(t)
 	cfg := &config.Config{}
-	svc := NewSandboxService(nil, mockProvider, cfg)
+	svc := NewSandboxService(testStore, mockProvider, cfg)
 
 	ctx := context.Background()
 
@@ -227,14 +320,19 @@ func TestSandboxService_DestroyForSession_NotFound(t *testing.T) {
 
 func TestSandboxService_Exec(t *testing.T) {
 	mockProvider := mock.NewProvider()
+	testStore := setupTestStore(t)
 	cfg := &config.Config{}
-	svc := NewSandboxService(nil, mockProvider, cfg)
+	svc := NewSandboxService(testStore, mockProvider, cfg)
 
 	ctx := context.Background()
 	sessionID := "test-session-1"
+	workspacePath := "/workspace"
+
+	// Create test session
+	createTestSession(t, testStore, sessionID, workspacePath)
 
 	// Create sandbox
-	err := svc.CreateForSession(ctx, sessionID, "/workspace")
+	err := svc.CreateForSession(ctx, sessionID)
 	if err != nil {
 		t.Fatalf("CreateForSession failed: %v", err)
 	}
@@ -252,14 +350,19 @@ func TestSandboxService_Exec(t *testing.T) {
 
 func TestSandboxService_Attach(t *testing.T) {
 	mockProvider := mock.NewProvider()
+	testStore := setupTestStore(t)
 	cfg := &config.Config{}
-	svc := NewSandboxService(nil, mockProvider, cfg)
+	svc := NewSandboxService(testStore, mockProvider, cfg)
 
 	ctx := context.Background()
 	sessionID := "test-session-1"
+	workspacePath := "/workspace"
+
+	// Create test session
+	createTestSession(t, testStore, sessionID, workspacePath)
 
 	// Create sandbox
-	err := svc.CreateForSession(ctx, sessionID, "/workspace")
+	err := svc.CreateForSession(ctx, sessionID)
 	if err != nil {
 		t.Fatalf("CreateForSession failed: %v", err)
 	}
@@ -285,5 +388,46 @@ func TestSandboxService_Attach(t *testing.T) {
 	}
 	if n == 0 {
 		t.Error("Expected some output from PTY")
+	}
+}
+
+func TestSandboxService_CreateForSession_NoWorkspacePath(t *testing.T) {
+	mockProvider := mock.NewProvider()
+	testStore := setupTestStore(t)
+	cfg := &config.Config{}
+	svc := NewSandboxService(testStore, mockProvider, cfg)
+
+	ctx := context.Background()
+	sessionID := "test-session-no-path"
+
+	// Create workspace without setting workspace path on session
+	workspace := &model.Workspace{
+		ID:         "test-workspace-2",
+		ProjectID:  "test-project",
+		Path:       "/some/path",
+		SourceType: "local",
+		Status:     "ready",
+	}
+	if err := testStore.CreateWorkspace(ctx, workspace); err != nil {
+		t.Fatalf("failed to create test workspace: %v", err)
+	}
+
+	// Create session WITHOUT workspace path (simulating a session that hasn't been initialized)
+	session := &model.Session{
+		ID:          sessionID,
+		ProjectID:   "test-project",
+		WorkspaceID: "test-workspace-2",
+		Name:        "Test Session",
+		Status:      model.SessionStatusInitializing,
+		// WorkspacePath is nil - not set
+	}
+	if err := testStore.CreateSession(ctx, session); err != nil {
+		t.Fatalf("failed to create test session: %v", err)
+	}
+
+	// CreateForSession should fail because workspace path is not set
+	err := svc.CreateForSession(ctx, sessionID)
+	if err == nil {
+		t.Error("Expected error when session has no workspace path")
 	}
 }

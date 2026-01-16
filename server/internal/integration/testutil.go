@@ -480,11 +480,13 @@ func (ts *TestServer) CreateTestWorkspace(project *model.Project, path string) *
 func (ts *TestServer) CreateTestSession(workspace *model.Workspace, name string) *model.Session {
 	ts.T.Helper()
 
+	workspacePath := workspace.Path
 	session := &model.Session{
-		ProjectID:   workspace.ProjectID,
-		WorkspaceID: workspace.ID,
-		Name:        name,
-		Status:      "open",
+		ProjectID:     workspace.ProjectID,
+		WorkspaceID:   workspace.ID,
+		Name:          name,
+		Status:        "open",
+		WorkspacePath: &workspacePath, // Set workspace path for CreateForSession
 	}
 
 	if err := ts.Store.CreateSession(context.Background(), session); err != nil {
