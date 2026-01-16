@@ -272,6 +272,13 @@ export class AgentWatcher {
 			clearTimeout(this.debounceTimer);
 		}
 
+		// If a build is in progress, mark that we need to rebuild when it completes.
+		// This ensures changes aren't missed if the debounce timer hasn't fired yet
+		// when the current build finishes.
+		if (this.buildInProgress) {
+			this.pendingBuild = true;
+		}
+
 		this.debounceTimer = setTimeout(() => {
 			this.debounceTimer = null;
 			this.doBuild();
@@ -309,6 +316,10 @@ export class AgentWatcher {
 
 		this.watcher.on("error", (err) => {
 			this.logger.error(`Watcher error: ${err}`);
+		});
+
+		this.watcher.on("close", () => {
+			this.logger.error("Watcher closed unexpectedly!");
 		});
 
 		// Handle graceful shutdown

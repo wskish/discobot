@@ -331,6 +331,70 @@ describe("AgentWatcher", () => {
 			// Should have built twice: initial + one pending (multiple requests coalesced)
 			assert.equal(buildCount, 2);
 		});
+
+		it("scheduleBuild sets pendingBuild when build is in progress", async () => {
+			// This tests the race condition where:
+			// 1. Build starts
+			// 2. File change triggers scheduleBuild() (sets debounce timer)
+			// 3. Build finishes BEFORE debounce timer fires
+			// 4. Without the fix, pendingBuild would be false and rebuild would be missed
+			let buildCount = 0;
+			let resolveFirstBuild: (() => void) | undefined;
+			const firstBuildPromise = new Promise<void>((resolve) => {
+				resolveFirstBuild = resolve;
+			});
+
+			const mockRunner: CommandRunner = async (_command, args) => {
+				if (args.includes("build")) {
+					buildCount++;
+					if (buildCount === 1) {
+						// First build waits for us to release it
+						await firstBuildPromise;
+					}
+					return { stdout: "", stderr: "", exitCode: 0 };
+				}
+				if (args.includes("inspect")) {
+					return {
+						stdout: `sha256:build${buildCount}\n`,
+						stderr: "",
+						exitCode: 0,
+					};
+				}
+				return { stdout: "", stderr: "", exitCode: 1 };
+			};
+
+			const watcher = new AgentWatcher({
+				agentDir,
+				envFilePath: envPath,
+				imageName: "test",
+				imageTag: "latest",
+				debounceMs: 500, // Long debounce - timer won't fire during test
+				runCommand: mockRunner,
+				logger: createSilentLogger(),
+			});
+
+			// Start first build (will wait)
+			const firstBuild = watcher.doBuild();
+
+			// Simulate file change during build - this calls scheduleBuild(),
+			// NOT doBuild() directly. The debounce timer is set but won't fire
+			// for 500ms. The fix ensures pendingBuild is set immediately.
+			watcher.scheduleBuild();
+
+			// Release first build - it should see pendingBuild=true and rebuild
+			resolveFirstBuild?.();
+			await firstBuild;
+
+			// Wait for the pending build to complete (triggered by finally block)
+			await new Promise((resolve) => setTimeout(resolve, 50));
+
+			// Should have built twice: initial + pending triggered by scheduleBuild
+			assert.equal(
+				buildCount,
+				2,
+				"Should rebuild after scheduleBuild during build",
+			);
+		});
 	});
 
 	describe("file watching", () => {

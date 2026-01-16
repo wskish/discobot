@@ -4,9 +4,9 @@
 	"private": true,
 	"scripts": {
 		"build": "next build",
-		"dev": "concurrently -n next,api,agent -c cyan,green,magenta \"next dev\" \"cd server && go run github.com/air-verse/air@latest\" \"tsx scripts/agent-watcher/index.ts\"",
+		"dev": "concurrently -n next,server,agent -c cyan,green,magenta \"pnpm dev:next\" \"pnpm dev:server\" \"pnpm dev:agent\"",
 		"dev:next": "next dev",
-		"dev:api": "cd server && go run github.com/air-verse/air@latest",
+		"dev:server": "cd server && go run github.com/air-verse/air@latest",
 		"dev:agent": "tsx --watch scripts/agent-watcher/index.ts",
 		"dev:tauri": "cross-env NEXT_PUBLIC_TAURI=true next dev --turbopack -p 1420",
 		"build:tauri": "cross-env NEXT_PUBLIC_TAURI=true next build",

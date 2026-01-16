@@ -51,9 +51,11 @@ FROM ubuntu:24.04 AS runtime
 
 # Install only essential runtime dependencies
 # socat is needed for vsock forwarding in VZ VMs
+# tini is a minimal init for proper child process reaping (PID 1)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     socat \
+    tini \
     && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user (handle case where UID 1000 already exists)
@@ -90,6 +92,8 @@ USER octobot
 
 EXPOSE 3002
 
+# Use tini as init to handle signals and reap zombie processes
+ENTRYPOINT ["/usr/bin/tini", "--"]
 CMD ["./octobot-agent"]
 
 # Stage 4: VZ disk image builder (non-default target)
