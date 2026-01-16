@@ -17,10 +17,9 @@ jobs:
       matrix:
         include:
           - arch: amd64
-            runner: ubuntu-latest
-          # TODO: Enable when ARM runners available for private repos
-          # - arch: arm64
-          #   runner: ubuntu-24.04-arm
+            runner: depot-ubuntu-latest
+          - arch: arm64
+            runner: depot-ubuntu-24.04-arm
 
     runs-on: ${{ matrix.runner }}
 
@@ -58,10 +57,9 @@ jobs:
       matrix:
         include:
           - arch: amd64
-            runner: ubuntu-latest
-          # TODO: Enable when ARM runners available for private repos
-          # - arch: arm64
-          #   runner: ubuntu-24.04-arm
+            runner: depot-ubuntu-latest
+          - arch: arm64
+            runner: depot-ubuntu-24.04-arm
 
     runs-on: ${{ matrix.runner }}
 
@@ -101,20 +99,22 @@ jobs:
       matrix:
         include:
           # macOS x64 (Intel)
-          - platform: macos-15
+          - platform: depot-macos-15
             target: x86_64-apple-darwin
             vz-arch: amd64
-          # TODO: Enable when ARM runners available for private repos
-          # # macOS ARM64 (Apple Silicon)
-          # - platform: macos-15
-          #   target: aarch64-apple-darwin
-          #   vz-arch: arm64
+          # macOS ARM64 (Apple Silicon)
+          - platform: depot-macos-15
+            target: aarch64-apple-darwin
+            vz-arch: arm64
           # Windows x64
-          - platform: windows-latest
+          - platform: depot-windows-latest
             target: x86_64-pc-windows-msvc
           # Linux x64
-          - platform: ubuntu-22.04
+          - platform: depot-ubuntu-22.04
             target: x86_64-unknown-linux-gnu
+          # Linux ARM64
+          - platform: depot-ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
 
     runs-on: ${{ matrix.platform }}
 
@@ -124,14 +124,14 @@ jobs:
 
       # Download pre-built VZ assets for macOS
       - name: Download VZ image
-        if: startsWith(matrix.platform, 'macos')
+        if: contains(matrix.platform, 'macos')
         uses: actions/download-artifact@v4
         with:
           name: vz-image-${{ matrix.vz-arch }}
           path: ./src-tauri/resources/
 
       - name: Download VZ kernel
-        if: startsWith(matrix.platform, 'macos')
+        if: contains(matrix.platform, 'macos')
         uses: actions/download-artifact@v4
         with:
           name: vz-kernel-${{ matrix.vz-arch }}
@@ -160,7 +160,7 @@ jobs:
 
       # Linux dependencies
       - name: Install Linux dependencies
-        if: startsWith(matrix.platform, 'ubuntu')
+        if: contains(matrix.platform, 'ubuntu')
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
