@@ -17,6 +17,7 @@ import (
 	"sync"
 	"time"
 
+	cerrdefs "github.com/containerd/errdefs"
 	"github.com/docker/docker/api/types"
 	containerTypes "github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
@@ -90,7 +91,7 @@ func containerName(sessionID string) string {
 
 // ImageExists checks if the configured sandbox image is available locally.
 func (p *Provider) ImageExists(ctx context.Context) bool {
-	_, _, err := p.client.ImageInspectWithRaw(ctx, p.cfg.SandboxImage)
+	_, err := p.client.ImageInspect(ctx, p.cfg.SandboxImage)
 	return err == nil
 }
 
@@ -292,7 +293,7 @@ func VerifySecret(plaintext, hashedSecret string) bool {
 // ensureImage checks if an image exists locally and pulls it if not.
 func (p *Provider) ensureImage(ctx context.Context, image string) error {
 	// Check if image exists locally
-	_, _, err := p.client.ImageInspectWithRaw(ctx, image)
+	_, err := p.client.ImageInspect(ctx, image)
 	if err == nil {
 		// Image exists locally
 		return nil
@@ -383,6 +384,11 @@ func (p *Provider) Get(ctx context.Context, sessionID string) (*sandbox.Sandbox,
 
 	info, err := p.client.ContainerInspect(ctx, containerID)
 	if err != nil {
+		// If the container was deleted externally, clear the stale cache entry
+		if cerrdefs.IsNotFound(err) {
+			p.clearContainerID(sessionID)
+			return nil, sandbox.ErrNotFound
+		}
 		return nil, fmt.Errorf("failed to inspect sandbox: %w", err)
 	}
 
@@ -444,6 +450,11 @@ func (p *Provider) GetSecret(ctx context.Context, sessionID string) (string, err
 
 	info, err := p.client.ContainerInspect(ctx, containerID)
 	if err != nil {
+		// If the container was deleted externally, clear the stale cache entry
+		if cerrdefs.IsNotFound(err) {
+			p.clearContainerID(sessionID)
+			return "", sandbox.ErrNotFound
+		}
 		return "", fmt.Errorf("failed to inspect sandbox: %w", err)
 	}
 
@@ -468,7 +479,7 @@ func (p *Provider) extractEnv(envSlice []string) map[string]string {
 }
 
 // extractPorts extracts assigned port mappings from container network settings.
-func (p *Provider) extractPorts(settings *types.NetworkSettings) []sandbox.AssignedPort {
+func (p *Provider) extractPorts(settings *containerTypes.NetworkSettings) []sandbox.AssignedPort {
 	if settings == nil {
 		return nil
 	}
@@ -496,7 +507,7 @@ func (p *Provider) Exec(ctx context.Context, sessionID string, cmd []string, opt
 	}
 
 	// Convert environment to slice
-	var env []string
+	env := make([]string, 0, len(opts.Env))
 	for k, v := range opts.Env {
 		env = append(env, fmt.Sprintf("%s=%s", k, v))
 	}
@@ -564,7 +575,7 @@ func (p *Provider) Attach(ctx context.Context, sessionID string, opts sandbox.At
 	}
 
 	// Convert environment to slice
-	var env []string
+	env := make([]string, 0, len(opts.Env))
 	for k, v := range opts.Env {
 		env = append(env, fmt.Sprintf("%s=%s", k, v))
 	}
@@ -713,6 +724,14 @@ func (p *Provider) getContainerID(ctx context.Context, sessionID string) (string
 	p.containerIDsMu.Unlock()
 
 	return info.ID, nil
+}
+
+// clearContainerID removes a container ID from the cache.
+// This is used when a container is deleted externally.
+func (p *Provider) clearContainerID(sessionID string) {
+	p.containerIDsMu.Lock()
+	delete(p.containerIDs, sessionID)
+	p.containerIDsMu.Unlock()
 }
 
 // Close closes the Docker client connection.

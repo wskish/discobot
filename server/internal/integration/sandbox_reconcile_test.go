@@ -536,7 +536,7 @@ func TestReconcileSessionStates_KeepsRunningSessionWithRunningSandbox(t *testing
 	t.Log("Session correctly kept as running")
 }
 
-func TestReconcileSessionStates_KeepsRunningSessionWithNoSandbox(t *testing.T) {
+func TestReconcileSessionStates_MarksStoppedSessionWithNoSandbox(t *testing.T) {
 	setup := newTestSandboxSetup(t)
 	ctx := context.Background()
 
@@ -563,20 +563,20 @@ func TestReconcileSessionStates_KeepsRunningSessionWithNoSandbox(t *testing.T) {
 		t.Fatalf("ReconcileSessionStates failed: %v", err)
 	}
 
-	// Verify session status is still running (sandbox will be created on demand)
+	// Verify session status is marked as stopped (sandbox will be created on demand)
 	updatedSession, err := setup.store.GetSessionByID(ctx, session.ID)
 	if err != nil {
 		t.Fatalf("Failed to get session: %v", err)
 	}
 
-	if updatedSession.Status != model.SessionStatusRunning {
-		t.Errorf("Expected session status 'running', got '%s'", updatedSession.Status)
+	if updatedSession.Status != model.SessionStatusStopped {
+		t.Errorf("Expected session status 'stopped', got '%s'", updatedSession.Status)
 	}
 
-	t.Log("Session correctly kept as running (no sandbox, will be created on demand)")
+	t.Log("Session correctly marked as stopped (no sandbox, will be created on demand)")
 }
 
-func TestReconcileSessionStates_KeepsRunningSessionWithStoppedSandbox(t *testing.T) {
+func TestReconcileSessionStates_MarksStoppedSessionWithStoppedSandbox(t *testing.T) {
 	setup := newTestSandboxSetup(t)
 	ctx := context.Background()
 
@@ -612,15 +612,183 @@ func TestReconcileSessionStates_KeepsRunningSessionWithStoppedSandbox(t *testing
 		t.Fatalf("ReconcileSessionStates failed: %v", err)
 	}
 
-	// Verify session status is still running (stopped sandbox can be restarted on demand)
+	// Verify session status is marked as stopped (sandbox can be restarted on demand)
 	updatedSession, err := setup.store.GetSessionByID(ctx, session.ID)
 	if err != nil {
 		t.Fatalf("Failed to get session: %v", err)
 	}
 
-	if updatedSession.Status != model.SessionStatusRunning {
-		t.Errorf("Expected session status 'running', got '%s'", updatedSession.Status)
+	if updatedSession.Status != model.SessionStatusStopped {
+		t.Errorf("Expected session status 'stopped', got '%s'", updatedSession.Status)
 	}
 
-	t.Log("Session correctly kept as running (stopped sandbox can be restarted on demand)")
+	t.Log("Session correctly marked as stopped (sandbox can be restarted on demand)")
+}
+
+func TestProvider_GetReturnsNotFoundAfterExternalContainerDeletion(t *testing.T) {
+	setup := newTestSandboxSetup(t)
+	ctx := context.Background()
+
+	// Create test data
+	project := setup.createTestProject(t)
+	workspace := setup.createTestWorkspace(t, project)
+	session := setup.createTestSession(t, workspace, "session-external-delete")
+
+	// Create and start a sandbox
+	t.Log("Creating sandbox...")
+	setup.createSandboxWithImage(t, session.ID, testImageNew)
+
+	// Verify sandbox exists and is running
+	sb, err := setup.provider.Get(ctx, session.ID)
+	if err != nil {
+		t.Fatalf("Failed to get sandbox: %v", err)
+	}
+	if sb.Status != sandbox.StatusRunning {
+		t.Fatalf("Expected sandbox status running, got %s", sb.Status)
+	}
+	containerID := sb.ID
+	t.Logf("Sandbox created with container ID: %s", containerID)
+
+	// Call Get again to ensure the container ID is cached in the provider
+	_, err = setup.provider.Get(ctx, session.ID)
+	if err != nil {
+		t.Fatalf("Failed to get sandbox (caching call): %v", err)
+	}
+
+	// Externally delete the container using docker rm -f (simulates external deletion)
+	t.Log("Externally deleting container with docker rm -f...")
+	containerName := fmt.Sprintf("octobot-session-%s", session.ID)
+	rmCmd := exec.CommandContext(ctx, "docker", "rm", "-f", containerName)
+	if output, err := rmCmd.CombinedOutput(); err != nil {
+		t.Fatalf("Failed to remove container: %v\nOutput: %s", err, output)
+	}
+
+	// Now call Get - it should return ErrNotFound, not a wrapped "No such container" error
+	t.Log("Calling Get after external deletion...")
+	_, err = setup.provider.Get(ctx, session.ID)
+	if err == nil {
+		t.Fatal("Expected error after container deletion, got nil")
+	}
+	if err != sandbox.ErrNotFound {
+		t.Errorf("Expected sandbox.ErrNotFound after external deletion, got: %v", err)
+	}
+
+	t.Log("Provider correctly returns ErrNotFound after external container deletion")
+}
+
+func TestProvider_GetSecretReturnsNotFoundAfterExternalContainerDeletion(t *testing.T) {
+	setup := newTestSandboxSetup(t)
+	ctx := context.Background()
+
+	// Create test data
+	project := setup.createTestProject(t)
+	workspace := setup.createTestWorkspace(t, project)
+	session := setup.createTestSession(t, workspace, "session-external-delete-secret")
+
+	// Create sandbox with a secret
+	t.Log("Creating sandbox with secret...")
+	tempCfg := &config.Config{
+		SandboxImage: testImageNew,
+	}
+	tempProvider, err := docker.NewProvider(tempCfg)
+	if err != nil {
+		t.Fatalf("Failed to create temp provider: %v", err)
+	}
+	defer tempProvider.Close()
+
+	opts := sandbox.CreateOptions{
+		SharedSecret: "test-secret-12345",
+		Labels: map[string]string{
+			"octobot.session.id": session.ID,
+		},
+	}
+
+	_, err = tempProvider.Create(ctx, session.ID, opts)
+	if err != nil {
+		t.Fatalf("Failed to create sandbox: %v", err)
+	}
+
+	if err := tempProvider.Start(ctx, session.ID); err != nil {
+		t.Fatalf("Failed to start sandbox: %v", err)
+	}
+
+	// Verify we can get the secret
+	secret, err := setup.provider.GetSecret(ctx, session.ID)
+	if err != nil {
+		t.Fatalf("Failed to get secret: %v", err)
+	}
+	if secret == "" {
+		t.Fatal("Expected non-empty secret")
+	}
+	t.Logf("Got secret (length: %d)", len(secret))
+
+	// Externally delete the container
+	t.Log("Externally deleting container with docker rm -f...")
+	containerName := fmt.Sprintf("octobot-session-%s", session.ID)
+	rmCmd := exec.CommandContext(ctx, "docker", "rm", "-f", containerName)
+	if output, err := rmCmd.CombinedOutput(); err != nil {
+		t.Fatalf("Failed to remove container: %v\nOutput: %s", err, output)
+	}
+
+	// Now call GetSecret - it should return ErrNotFound
+	t.Log("Calling GetSecret after external deletion...")
+	_, err = setup.provider.GetSecret(ctx, session.ID)
+	if err == nil {
+		t.Fatal("Expected error after container deletion, got nil")
+	}
+	if err != sandbox.ErrNotFound {
+		t.Errorf("Expected sandbox.ErrNotFound after external deletion, got: %v", err)
+	}
+
+	t.Log("Provider correctly returns ErrNotFound for GetSecret after external container deletion")
+}
+
+func TestReconcileSessionStates_HandlesExternallyDeletedContainer(t *testing.T) {
+	setup := newTestSandboxSetup(t)
+	ctx := context.Background()
+
+	// Create test data
+	project := setup.createTestProject(t)
+	workspace := setup.createTestWorkspace(t, project)
+	session := setup.createTestSession(t, workspace, "session-external-delete-reconcile")
+
+	// Create and start a sandbox
+	t.Log("Creating sandbox...")
+	setup.createSandboxWithImage(t, session.ID, testImageNew)
+
+	// Verify sandbox exists
+	sb, err := setup.provider.Get(ctx, session.ID)
+	if err != nil {
+		t.Fatalf("Failed to get sandbox: %v", err)
+	}
+	t.Logf("Sandbox created with ID: %s", sb.ID)
+
+	// Externally delete the container (simulates someone running docker rm -f)
+	t.Log("Externally deleting container with docker rm -f...")
+	containerName := fmt.Sprintf("octobot-session-%s", session.ID)
+	rmCmd := exec.CommandContext(ctx, "docker", "rm", "-f", containerName)
+	if output, err := rmCmd.CombinedOutput(); err != nil {
+		t.Fatalf("Failed to remove container: %v\nOutput: %s", err, output)
+	}
+
+	// Create sandbox service
+	sandboxSvc := service.NewSandboxService(setup.store, setup.provider, setup.cfg)
+
+	// Run session state reconciliation - should handle the deleted container gracefully
+	t.Log("Running session state reconciliation after external deletion...")
+	if err := sandboxSvc.ReconcileSessionStates(ctx); err != nil {
+		t.Fatalf("ReconcileSessionStates failed: %v", err)
+	}
+
+	// Verify session status is marked as stopped (container gone, will be recreated on demand)
+	updatedSession, err := setup.store.GetSessionByID(ctx, session.ID)
+	if err != nil {
+		t.Fatalf("Failed to get session: %v", err)
+	}
+
+	if updatedSession.Status != model.SessionStatusStopped {
+		t.Errorf("Expected session status 'stopped' after external deletion, got '%s'", updatedSession.Status)
+	}
+
+	t.Log("Session correctly marked as stopped after external container deletion")
 }

@@ -160,16 +160,7 @@ func (c *ChatService) SendToSandbox(ctx context.Context, projectID, sessionID st
 	}
 
 	// Fetch credentials for the project
-	var opts *SendMessagesOptions
-	if c.credentialService != nil {
-		creds, err := c.credentialService.GetAllDecrypted(ctx, projectID)
-		if err != nil {
-			// Log but don't fail - credentials are optional
-			fmt.Printf("Warning: failed to fetch credentials for project %s: %v\n", projectID, err)
-		} else if len(creds) > 0 {
-			opts = &SendMessagesOptions{Credentials: creds}
-		}
-	}
+	opts := c.getCredentialOpts(ctx, projectID)
 
 	// Try to send to sandbox
 	ch, err := c.sandboxClient.SendMessages(ctx, sessionID, messages, opts)
@@ -220,6 +211,27 @@ func isSandboxUnavailableError(err error) bool {
 		strings.Contains(errStr, "No such container")
 }
 
+// getCredentialOpts fetches credentials for a project and returns RequestOptions.
+// Returns nil if credentials are not available or an error occurs.
+func (c *ChatService) getCredentialOpts(ctx context.Context, projectID string) *RequestOptions {
+	if c.credentialService == nil {
+		return nil
+	}
+
+	creds, err := c.credentialService.GetAllDecrypted(ctx, projectID)
+	if err != nil {
+		// Log but don't fail - credentials are optional
+		fmt.Printf("Warning: failed to fetch credentials for project %s: %v\n", projectID, err)
+		return nil
+	}
+
+	if len(creds) == 0 {
+		return nil
+	}
+
+	return &RequestOptions{Credentials: creds}
+}
+
 // GetMessages returns all messages for a session by querying the sandbox.
 // Returns empty slice if sandbox is not available or not running.
 func (c *ChatService) GetMessages(ctx context.Context, projectID, sessionID string) ([]UIMessage, error) {
@@ -234,7 +246,8 @@ func (c *ChatService) GetMessages(ctx context.Context, projectID, sessionID stri
 		return []UIMessage{}, nil
 	}
 
-	messages, err := c.sandboxClient.GetMessages(ctx, sessionID)
+	opts := c.getCredentialOpts(ctx, projectID)
+	messages, err := c.sandboxClient.GetMessages(ctx, sessionID, opts)
 	if err != nil {
 		// Sandbox not running or not accessible, return empty messages
 		return []UIMessage{}, nil

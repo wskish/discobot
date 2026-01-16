@@ -82,16 +82,36 @@ func (c *SandboxChatClient) getSandboxURL(ctx context.Context, sessionID string)
 	return fmt.Sprintf("http://%s:%d", hostIP, chatPort.HostPort), nil
 }
 
-// SendMessagesOptions contains optional parameters for SendMessages.
-type SendMessagesOptions struct {
+// RequestOptions contains optional parameters for sandbox requests.
+type RequestOptions struct {
 	// Credentials to pass to the sandbox via header (envVar -> value mappings)
 	Credentials []CredentialEnvVar
+}
+
+// applyRequestAuth sets Authorization and credentials headers on a request.
+func (c *SandboxChatClient) applyRequestAuth(ctx context.Context, req *http.Request, sessionID string, opts *RequestOptions) error {
+	// Add Authorization header with Bearer token
+	secret, err := c.provider.GetSecret(ctx, sessionID)
+	if err == nil && secret != "" {
+		req.Header.Set("Authorization", "Bearer "+secret)
+	}
+
+	// Add credentials header if provided
+	if opts != nil && len(opts.Credentials) > 0 {
+		credJSON, err := json.Marshal(opts.Credentials)
+		if err != nil {
+			return fmt.Errorf("failed to marshal credentials: %w", err)
+		}
+		req.Header.Set("X-Octobot-Credentials", string(credJSON))
+	}
+
+	return nil
 }
 
 // SendMessages sends messages to the sandbox and returns a channel of raw SSE lines.
 // The sandbox is expected to respond with SSE events in AI SDK UIMessage Stream format.
 // Messages and responses are passed through without parsing.
-func (c *SandboxChatClient) SendMessages(ctx context.Context, sessionID string, messages json.RawMessage, opts *SendMessagesOptions) (<-chan SSELine, error) {
+func (c *SandboxChatClient) SendMessages(ctx context.Context, sessionID string, messages json.RawMessage, opts *RequestOptions) (<-chan SSELine, error) {
 	baseURL, err := c.getSandboxURL(ctx, sessionID)
 	if err != nil {
 		return nil, err
@@ -112,19 +132,8 @@ func (c *SandboxChatClient) SendMessages(ctx context.Context, sessionID string, 
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "text/event-stream")
 
-	// Add Authorization header with Bearer token
-	secret, err := c.provider.GetSecret(ctx, sessionID)
-	if err == nil && secret != "" {
-		req.Header.Set("Authorization", "Bearer "+secret)
-	}
-
-	// Add credentials header if provided
-	if opts != nil && len(opts.Credentials) > 0 {
-		credJSON, err := json.Marshal(opts.Credentials)
-		if err != nil {
-			return nil, fmt.Errorf("failed to marshal credentials: %w", err)
-		}
-		req.Header.Set("X-Octobot-Credentials", string(credJSON))
+	if err := c.applyRequestAuth(ctx, req, sessionID, opts); err != nil {
+		return nil, err
 	}
 
 	// Send the request
@@ -184,7 +193,7 @@ func (c *SandboxChatClient) SendMessages(ctx context.Context, sessionID string, 
 
 // GetMessages retrieves message history from the sandbox.
 // The sandbox is expected to respond with an array of UIMessages.
-func (c *SandboxChatClient) GetMessages(ctx context.Context, sessionID string) ([]UIMessage, error) {
+func (c *SandboxChatClient) GetMessages(ctx context.Context, sessionID string, opts *RequestOptions) ([]UIMessage, error) {
 	baseURL, err := c.getSandboxURL(ctx, sessionID)
 	if err != nil {
 		return nil, err
@@ -195,10 +204,8 @@ func (c *SandboxChatClient) GetMessages(ctx context.Context, sessionID string) (
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	// Add Authorization header with Bearer token
-	secret, err := c.provider.GetSecret(ctx, sessionID)
-	if err == nil && secret != "" {
-		req.Header.Set("Authorization", "Bearer "+secret)
+	if err := c.applyRequestAuth(ctx, req, sessionID, opts); err != nil {
+		return nil, err
 	}
 
 	resp, err := c.client.Do(req)
