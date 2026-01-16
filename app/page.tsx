@@ -3,6 +3,7 @@
 import * as React from "react";
 import { AddAgentDialog } from "@/components/ide/add-agent-dialog";
 import { AddWorkspaceDialog } from "@/components/ide/add-workspace-dialog";
+import { CredentialsDialog } from "@/components/ide/credentials-dialog";
 import { DeleteWorkspaceDialog } from "@/components/ide/delete-workspace-dialog";
 import { Header, LeftSidebar, MainContent } from "@/components/ide/layout";
 import { SystemRequirementsDialog } from "@/components/ide/system-requirements-dialog";
@@ -113,11 +114,16 @@ export default function IDEChatPage() {
 	const [workspaceToDelete, setWorkspaceToDelete] =
 		React.useState<Workspace | null>(null);
 
-	// TODO: Wire up credentials dialog when needed
+	// Credentials dialog state
+	const [credentialsDialogOpen, setCredentialsDialogOpen] =
+		React.useState(false);
+	const [credentialsInitialProviderId, setCredentialsInitialProviderId] =
+		React.useState<string | null>(null);
+
 	const openCredentialsForProvider = React.useCallback(
-		(_providerId?: string) => {
-			// Placeholder for future credentials dialog
-			console.log("Credentials dialog not yet implemented");
+		(providerId?: string) => {
+			setCredentialsInitialProviderId(providerId ?? null);
+			setCredentialsDialogOpen(true);
 		},
 		[],
 	);
@@ -309,6 +315,17 @@ export default function IDEChatPage() {
 				onOpenChange={setDeleteWorkspaceDialogOpen}
 				workspace={workspaceToDelete}
 				onConfirm={handleConfirmDeleteWorkspace}
+			/>
+
+			<CredentialsDialog
+				open={credentialsDialogOpen}
+				onOpenChange={(open) => {
+					setCredentialsDialogOpen(open);
+					if (!open) {
+						setCredentialsInitialProviderId(null);
+					}
+				}}
+				initialProviderId={credentialsInitialProviderId}
 			/>
 
 			<SystemRequirementsDialog
