@@ -24,6 +24,8 @@ import {
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import type { Session, Workspace, WorkspaceStatus } from "@/lib/api-types";
+import { useDialogContext } from "@/lib/contexts/dialog-context";
+import { useSessionContext } from "@/lib/contexts/session-context";
 import { useDeleteSession, useSessions } from "@/lib/hooks/use-sessions";
 import { cn } from "@/lib/utils";
 
@@ -51,24 +53,18 @@ function parseWorkspacePath(path: string, sourceType: "local" | "git") {
 }
 
 interface SidebarTreeProps {
-	workspaces: Workspace[];
-	onSessionSelect: (session: Session) => void;
-	selectedSessionId: string | null;
-	onAddWorkspace: () => void;
-	onAddSession: (workspaceId: string) => void;
-	onDeleteWorkspace: (workspace: Workspace) => void;
 	className?: string;
 }
 
-export function SidebarTree({
-	workspaces,
-	onSessionSelect,
-	selectedSessionId,
-	onAddWorkspace,
-	onAddSession,
-	onDeleteWorkspace,
-	className,
-}: SidebarTreeProps) {
+export function SidebarTree({ className }: SidebarTreeProps) {
+	const {
+		workspaces,
+		selectedSessionId,
+		handleSessionSelect,
+		handleAddSession,
+	} = useSessionContext();
+	const { openWorkspaceDialog, openDeleteWorkspaceDialog } = useDialogContext();
+
 	const [expandedIds, setExpandedIds] = React.useState<Set<string>>(
 		new Set(["ws-1"]),
 	);
@@ -93,7 +89,7 @@ export function SidebarTree({
 				<div className="flex items-center gap-1">
 					<button
 						type="button"
-						onClick={onAddWorkspace}
+						onClick={openWorkspaceDialog}
 						className="p-1 rounded hover:bg-sidebar-accent transition-colors"
 						title="Add workspace"
 					>
@@ -120,11 +116,11 @@ export function SidebarTree({
 						workspace={workspace}
 						expandedIds={expandedIds}
 						toggleExpand={toggleExpand}
-						onSessionSelect={onSessionSelect}
+						onSessionSelect={handleSessionSelect}
 						selectedSessionId={selectedSessionId}
 						showClosed={showClosed}
-						onAddSession={onAddSession}
-						onDeleteWorkspace={onDeleteWorkspace}
+						onAddSession={handleAddSession}
+						onDeleteWorkspace={openDeleteWorkspaceDialog}
 					/>
 				))}
 			</div>
@@ -145,7 +141,7 @@ function WorkspaceNode({
 	workspace: Workspace;
 	expandedIds: Set<string>;
 	toggleExpand: (id: string) => void;
-	onSessionSelect: (session: Session) => void;
+	onSessionSelect: (session: { id: string }) => void;
 	selectedSessionId: string | null;
 	showClosed: boolean;
 	onAddSession: (workspaceId: string) => void;
@@ -299,6 +295,8 @@ function getSessionStatusIndicator(status: Session["status"]) {
 			);
 		case "closed":
 			return <Archive className="h-2.5 w-2.5 text-muted-foreground" />;
+		case "removing":
+			return <Loader2 className="h-2.5 w-2.5 text-red-500 animate-spin" />;
 		default:
 			return <CircleHelp className="h-2.5 w-2.5 text-muted-foreground" />;
 	}
@@ -322,7 +320,7 @@ function SessionNode({
 	isSelected,
 }: {
 	session: Session;
-	onSessionSelect: (session: Session) => void;
+	onSessionSelect: (session: { id: string }) => void;
 	isSelected: boolean;
 }) {
 	const [menuOpen, setMenuOpen] = React.useState(false);

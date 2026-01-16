@@ -4,55 +4,17 @@ import * as React from "react";
 import { ChatPanel } from "@/components/ide/chat-panel";
 import { FilePanel } from "@/components/ide/file-panel";
 import { ResizeHandle } from "@/components/ide/resize-handle";
-import type {
-	Agent,
-	FileNode,
-	Session,
-	SupportedAgentType,
-	Workspace,
-} from "@/lib/api-types";
+import type { FileNode } from "@/lib/api-types";
+import { useSessionContext } from "@/lib/contexts/session-context";
 import { usePanelLayout } from "@/lib/hooks/use-panel-layout";
 import { BottomPanel } from "./bottom-panel";
 import { DiffPanel } from "./diff-panel";
 
 type BottomView = "chat" | "terminal";
 
-interface MainContentProps {
-	// Session state
-	selectedSession: Session | null;
+export function MainContent() {
+	const { selectedSession, chatResetTrigger } = useSessionContext();
 
-	// Centered chat props
-	workspaces: Workspace[];
-	agents: Agent[];
-	agentTypes: SupportedAgentType[];
-	preselectedWorkspaceId: string | null;
-	workspaceSelectTrigger: number;
-	chatResetTrigger: number;
-	selectedAgentId: string | null;
-	onAddWorkspace: () => void;
-	onAddAgent: () => void;
-	onSessionCreated: (sessionId: string) => void;
-
-	// Session chat props
-	sessionAgent: Agent | null;
-	sessionWorkspace: Workspace | null;
-}
-
-export function MainContent({
-	selectedSession,
-	workspaces,
-	agents,
-	agentTypes,
-	preselectedWorkspaceId,
-	workspaceSelectTrigger,
-	chatResetTrigger,
-	selectedAgentId,
-	onAddWorkspace,
-	onAddAgent,
-	onSessionCreated,
-	sessionAgent,
-	sessionWorkspace,
-}: MainContentProps) {
 	const [bottomView, setBottomView] = React.useState<BottomView>("chat");
 	const [openFiles, setOpenFiles] = React.useState<FileNode[]>([]);
 	const [activeFileId, setActiveFileId] = React.useState<string | null>(null);
@@ -128,19 +90,7 @@ export function MainContent({
 	if (showCenteredChat) {
 		return (
 			<main className="flex-1 flex items-center justify-center overflow-hidden">
-				<ChatPanel
-					key={chatResetTrigger}
-					onSessionCreated={onSessionCreated}
-					workspaces={workspaces}
-					selectedWorkspaceId={preselectedWorkspaceId}
-					onAddWorkspace={onAddWorkspace}
-					className="w-full h-full"
-					workspaceSelectTrigger={workspaceSelectTrigger}
-					agents={agents}
-					selectedAgentId={selectedAgentId}
-					onAddAgent={onAddAgent}
-					agentTypes={agentTypes}
-				/>
+				<ChatPanel key={chatResetTrigger} className="w-full h-full" />
 			</main>
 		);
 	}
@@ -177,11 +127,6 @@ export function MainContent({
 					onViewChange={setBottomView}
 					onMinimize={panelLayout.handleBottomMinimize}
 					onMaximize={panelLayout.handleBottomMaximize}
-					session={selectedSession}
-					sessionAgent={sessionAgent}
-					sessionWorkspace={sessionWorkspace}
-					agentTypes={agentTypes}
-					agents={agents}
 				/>
 			</main>
 

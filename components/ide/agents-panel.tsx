@@ -16,17 +16,13 @@ import {
 	DropdownMenuItem,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import type { Agent, Icon, SupportedAgentType } from "@/lib/api-types";
+import type { Agent, Icon } from "@/lib/api-types";
+import { useDialogContext } from "@/lib/contexts/dialog-context";
+import { useSessionContext } from "@/lib/contexts/session-context";
 import { useAgents } from "@/lib/hooks/use-agents";
 import { cn } from "@/lib/utils";
 
 interface AgentsPanelProps {
-	agents: Agent[];
-	agentTypes?: SupportedAgentType[];
-	selectedAgentId: string | null;
-	onAgentSelect: (agent: Agent) => void;
-	onAddAgent?: () => void;
-	onConfigureAgent?: (agent: Agent) => void;
 	isMinimized: boolean;
 	onToggleMinimize: () => void;
 	className?: string;
@@ -34,17 +30,15 @@ interface AgentsPanelProps {
 }
 
 export function AgentsPanel({
-	agents,
-	agentTypes,
-	selectedAgentId,
-	onAgentSelect,
-	onAddAgent,
-	onConfigureAgent,
 	isMinimized,
 	onToggleMinimize,
 	className,
 	style,
 }: AgentsPanelProps) {
+	const { agents, agentTypes, selectedAgentId, selectAgent } =
+		useSessionContext();
+	const { openAgentDialog } = useDialogContext();
+
 	return (
 		<div
 			className={cn(
@@ -65,19 +59,17 @@ export function AgentsPanel({
 					Agents
 				</span>
 				<div className="flex items-center gap-1">
-					{onAddAgent && (
-						<button
-							type="button"
-							onClick={(e) => {
-								e.stopPropagation();
-								onAddAgent();
-							}}
-							className="p-1 rounded hover:bg-sidebar-accent transition-colors"
-							title="Add agent"
-						>
-							<Plus className="h-3.5 w-3.5 text-muted-foreground" />
-						</button>
-					)}
+					<button
+						type="button"
+						onClick={(e) => {
+							e.stopPropagation();
+							openAgentDialog();
+						}}
+						className="p-1 rounded hover:bg-sidebar-accent transition-colors"
+						title="Add agent"
+					>
+						<Plus className="h-3.5 w-3.5 text-muted-foreground" />
+					</button>
 					<button
 						type="button"
 						className="p-1 rounded hover:bg-sidebar-accent transition-colors"
@@ -100,10 +92,8 @@ export function AgentsPanel({
 								agent={agent}
 								icons={agentType?.icons}
 								isSelected={selectedAgentId === agent.id}
-								onSelect={() => onAgentSelect(agent)}
-								onConfigure={
-									onConfigureAgent ? () => onConfigureAgent(agent) : undefined
-								}
+								onSelect={() => selectAgent(agent.id)}
+								onConfigure={() => openAgentDialog(agent)}
 							/>
 						);
 					})}
@@ -124,15 +114,13 @@ function AgentNode({
 	icons?: Icon[];
 	isSelected: boolean;
 	onSelect: () => void;
-	onConfigure?: () => void;
+	onConfigure: () => void;
 }) {
 	const [menuOpen, setMenuOpen] = React.useState(false);
 	const { deleteAgent, setDefaultAgent } = useAgents();
 
 	const handleConfigure = () => {
-		if (onConfigure) {
-			onConfigure();
-		}
+		onConfigure();
 	};
 
 	const handleDelete = async () => {

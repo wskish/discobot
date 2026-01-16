@@ -27,12 +27,8 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import type {
-	Agent,
-	Session,
-	SupportedAgentType,
-	Workspace,
-} from "@/lib/api-types";
+import type { Agent, Workspace } from "@/lib/api-types";
+import { useSessionContext } from "@/lib/contexts/session-context";
 import { cn } from "@/lib/utils";
 
 function getWorkspaceType(path: string): "github" | "git" | "local" {
@@ -82,43 +78,23 @@ interface HeaderProps {
 	leftSidebarOpen: boolean;
 	onToggleSidebar: () => void;
 	onNewSession: () => void;
-	// Breadcrumb data
-	workspaces?: Workspace[];
-	selectedSession?: Session | null;
-	sessionAgent?: Agent | null;
-	sessionWorkspace?: Workspace | null;
-	agentTypes?: SupportedAgentType[];
-	// Breadcrumb actions
-	onWorkspaceSelect?: (workspace: Workspace) => void;
-	onSessionSelect?: (session: Session) => void;
-	// Credentials dialog props
-	credentialsOpen?: boolean;
-	onCredentialsOpenChange?: (open: boolean) => void;
-	credentialsInitialProviderId?: string | null;
 }
 
 export function Header({
 	leftSidebarOpen,
 	onToggleSidebar,
 	onNewSession,
-	workspaces = [],
-	selectedSession,
-	sessionAgent,
-	sessionWorkspace,
-	agentTypes = [],
-	onWorkspaceSelect,
-	onSessionSelect,
-	credentialsOpen: externalCredentialsOpen,
-	onCredentialsOpenChange: externalOnCredentialsOpenChange,
-	credentialsInitialProviderId,
 }: HeaderProps) {
-	const [internalCredentialsOpen, setInternalCredentialsOpen] =
-		React.useState(false);
+	const {
+		workspaces,
+		agentTypes,
+		selectedSession,
+		sessionAgent,
+		sessionWorkspace,
+		handleSessionSelect,
+	} = useSessionContext();
 
-	// Use external state if provided, otherwise use internal state
-	const credentialsOpen = externalCredentialsOpen ?? internalCredentialsOpen;
-	const setCredentialsOpen =
-		externalOnCredentialsOpenChange ?? setInternalCredentialsOpen;
+	const [credentialsOpen, setCredentialsOpen] = React.useState(false);
 
 	const getAgentIcons = (a: Agent) => {
 		const agentType = agentTypes.find((t) => t.id === a.agentType);
@@ -132,6 +108,20 @@ export function Header({
 	}, [sessionWorkspace]);
 
 	const hasSession = selectedSession || sessionWorkspace;
+
+	// Handle workspace selection from breadcrumb dropdown
+	const handleWorkspaceSelect = React.useCallback(
+		(workspace: Workspace) => {
+			// Find first non-closed session in this workspace
+			const firstSession = workspace.sessions.find(
+				(s) => s.status !== "closed",
+			);
+			if (firstSession) {
+				handleSessionSelect(firstSession);
+			}
+		},
+		[handleSessionSelect],
+	);
 
 	// Detect macOS for window control placement
 	const [isMac, setIsMac] = React.useState(false);
@@ -210,7 +200,7 @@ export function Header({
 										return (
 											<DropdownMenuItem
 												key={ws.id}
-												onClick={() => onWorkspaceSelect?.(ws)}
+												onClick={() => handleWorkspaceSelect(ws)}
 												className="flex items-center gap-2"
 											>
 												<WorkspaceIcon
@@ -257,7 +247,7 @@ export function Header({
 												return (
 													<DropdownMenuItem
 														key={session.id}
-														onClick={() => onSessionSelect?.(session)}
+														onClick={() => handleSessionSelect(session)}
 														className="flex items-center gap-2"
 													>
 														<MessageSquare className="h-4 w-4 shrink-0 text-muted-foreground" />
@@ -333,7 +323,6 @@ export function Header({
 			<CredentialsDialog
 				open={credentialsOpen}
 				onOpenChange={setCredentialsOpen}
-				initialProviderId={credentialsInitialProviderId}
 			/>
 		</header>
 	);

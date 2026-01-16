@@ -51,13 +51,9 @@ import {
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { getApiBase } from "@/lib/api-config";
-import type {
-	Agent,
-	Session,
-	SessionStatus,
-	SupportedAgentType,
-	Workspace,
-} from "@/lib/api-types";
+import type { Agent, SessionStatus } from "@/lib/api-types";
+import { useDialogContext } from "@/lib/contexts/dialog-context";
+import { useSessionContext } from "@/lib/contexts/session-context";
 import { useMessages } from "@/lib/hooks/use-messages";
 import { cn } from "@/lib/utils";
 
@@ -118,18 +114,6 @@ function getMessageText(message: UIMessage): string {
 
 interface ChatPanelProps {
 	className?: string;
-	onSessionCreated?: (sessionId: string) => void;
-	workspaces?: Workspace[];
-	selectedWorkspaceId?: string | null;
-	onAddWorkspace?: () => void;
-	workspaceSelectTrigger?: number;
-	agents?: Agent[];
-	selectedAgentId?: string | null;
-	onAddAgent?: () => void;
-	agentTypes?: SupportedAgentType[];
-	session?: Session | null;
-	sessionAgent?: Agent | null;
-	sessionWorkspace?: Workspace | null;
 }
 
 // Map session status to human-readable text and icons
@@ -181,6 +165,12 @@ function getStatusDisplay(status: SessionStatus): {
 				icon: <CheckCircle className="h-4 w-4 text-muted-foreground" />,
 				isLoading: false,
 			};
+		case "removing":
+			return {
+				text: "Removing session...",
+				icon: <Loader2 className="h-4 w-4 animate-spin text-red-500" />,
+				isLoading: true,
+			};
 		default:
 			return {
 				text: String(status),
@@ -190,44 +180,50 @@ function getStatusDisplay(status: SessionStatus): {
 	}
 }
 
-export function ChatPanel({
-	className,
-	onSessionCreated,
-	workspaces = [],
-	selectedWorkspaceId,
-	onAddWorkspace,
-	workspaceSelectTrigger,
-	agents = [],
-	selectedAgentId,
-	onAddAgent,
-	agentTypes = [],
-	session,
-	sessionAgent,
-	sessionWorkspace,
-}: ChatPanelProps) {
+export function ChatPanel({ className }: ChatPanelProps) {
+	// Get data from context
+	const session = useSessionContext();
+	const dialogs = useDialogContext();
+
+	// Destructure for convenience
+	const {
+		workspaces,
+		agents,
+		agentTypes,
+		selectedSessionId,
+		selectedSession,
+		sessionAgent,
+		sessionWorkspace,
+		preselectedWorkspaceId,
+		selectedAgentId,
+		workspaceSelectTrigger,
+		handleSessionCreated,
+	} = session;
+
 	// For new chats, generate a client-side session ID
 	// This is generated once at mount and reset when a session is selected
 	const [pendingSessionId, setPendingSessionId] = React.useState<string | null>(
-		() => (session?.id ? null : generateId()),
+		() => (selectedSessionId ? null : generateId()),
 	);
 
 	// Reset pending ID when session changes
 	React.useEffect(() => {
-		if (session?.id) {
+		if (selectedSessionId) {
 			// Existing session selected, clear pending ID
 			setPendingSessionId(null);
 		} else if (!pendingSessionId) {
 			// No session and no pending ID, generate one
 			setPendingSessionId(generateId());
 		}
-	}, [session?.id, pendingSessionId]);
+	}, [selectedSessionId, pendingSessionId]);
 
 	// The effective chat ID: prefer existing session, fall back to pending
-	const chatId = session?.id || pendingSessionId;
+	const chatId = selectedSessionId || pendingSessionId;
 
 	const [localSelectedWorkspaceId, setLocalSelectedWorkspaceId] =
 		React.useState<string | null>(
-			selectedWorkspaceId || (workspaces.length > 0 ? workspaces[0].id : null),
+			preselectedWorkspaceId ||
+				(workspaces.length > 0 ? workspaces[0].id : null),
 		);
 	const [localSelectedAgentId, setLocalSelectedAgentId] = React.useState<
 		string | null
@@ -244,14 +240,15 @@ export function ChatPanel({
 	const [input, setInput] = React.useState("");
 
 	// Fetch existing messages when a session is selected
-	const { messages: existingMessages } = useMessages(session?.id || null);
+	// Use selectedSessionId directly (not derived selectedSession) to avoid stale cache issues
+	const { messages: existingMessages } = useMessages(selectedSessionId);
 
 	// Use refs to store the latest selection values for use in fetch
 	// This ensures sendMessage always uses current values even if useChat caches the transport
 	const selectionRef = React.useRef({
 		workspaceId: localSelectedWorkspaceId,
 		agentId: localSelectedAgentId,
-		sessionId: session?.id,
+		sessionId: selectedSessionId,
 	});
 
 	// Keep refs in sync with state
@@ -259,9 +256,9 @@ export function ChatPanel({
 		selectionRef.current = {
 			workspaceId: localSelectedWorkspaceId,
 			agentId: localSelectedAgentId,
-			sessionId: session?.id,
+			sessionId: selectedSessionId,
 		};
-	}, [localSelectedWorkspaceId, localSelectedAgentId, session?.id]);
+	}, [localSelectedWorkspaceId, localSelectedAgentId, selectedSessionId]);
 
 	// Create transport with custom fetch that always uses latest selection values
 	const transport = React.useMemo(
@@ -320,10 +317,10 @@ export function ChatPanel({
 		hasSession || messages.length > 0 ? "conversation" : "welcome";
 
 	React.useEffect(() => {
-		if (selectedWorkspaceId) {
-			setLocalSelectedWorkspaceId(selectedWorkspaceId);
+		if (preselectedWorkspaceId) {
+			setLocalSelectedWorkspaceId(preselectedWorkspaceId);
 		}
-	}, [selectedWorkspaceId]);
+	}, [preselectedWorkspaceId]);
 
 	React.useEffect(() => {
 		if (selectedAgentId) {
@@ -433,12 +430,15 @@ export function ChatPanel({
 		if (!messageText.trim() || isLoading) return;
 
 		// Validate selections for new sessions
-		if (!session?.id && (!localSelectedWorkspaceId || !localSelectedAgentId)) {
+		if (
+			!selectedSessionId &&
+			(!localSelectedWorkspaceId || !localSelectedAgentId)
+		) {
 			return;
 		}
 
 		// Track if this is a new session so we can notify parent after success
-		const isNewSession = !session?.id && pendingSessionId;
+		const isNewSession = !selectedSessionId && pendingSessionId;
 
 		// Clear input and send message
 		setInput("");
@@ -449,7 +449,7 @@ export function ChatPanel({
 			// For new chats, notify parent about the session ID AFTER the POST succeeds
 			// This ensures the session exists on the server before the client tries to use it
 			if (isNewSession) {
-				onSessionCreated?.(pendingSessionId);
+				handleSessionCreated(pendingSessionId);
 			}
 		} catch (err) {
 			console.error("Failed to send message:", err);
@@ -600,24 +600,27 @@ export function ChatPanel({
 			</div>
 
 			{/* Session status indicator - shows during initialization */}
-			{session &&
-				session.status !== "running" &&
-				session.status !== "closed" && (
+			{selectedSession &&
+				selectedSession.status !== "running" &&
+				selectedSession.status !== "closed" && (
 					<div
 						className={cn(
 							"flex items-center justify-center gap-2 py-3 px-4 border-b",
-							session.status === "error"
+							selectedSession.status === "error"
 								? "bg-destructive/10 border-destructive/20 text-destructive"
 								: "bg-muted/50 border-border text-muted-foreground",
 						)}
 					>
-						{getStatusDisplay(session.status).icon}
+						{getStatusDisplay(selectedSession.status).icon}
 						<span className="text-sm font-medium">
-							{getStatusDisplay(session.status).text}
+							{getStatusDisplay(selectedSession.status).text}
 						</span>
-						{session.status === "error" && session.errorMessage && (
-							<span className="text-sm">: {session.errorMessage}</span>
-						)}
+						{selectedSession.status === "error" &&
+							selectedSession.errorMessage && (
+								<span className="text-sm">
+									: {selectedSession.errorMessage}
+								</span>
+							)}
 					</div>
 				)}
 
@@ -694,7 +697,10 @@ export function ChatPanel({
 								</DropdownMenuItem>
 							))}
 							{agents.length > 0 && <DropdownMenuSeparator />}
-							<DropdownMenuItem onClick={onAddAgent} className="gap-2">
+							<DropdownMenuItem
+								onClick={() => dialogs.openAgentDialog()}
+								className="gap-2"
+							>
 								<Plus className="h-4 w-4" />
 								<span>Add Agent</span>
 							</DropdownMenuItem>
@@ -753,7 +759,10 @@ export function ChatPanel({
 								</DropdownMenuItem>
 							))}
 							{workspaces.length > 0 && <DropdownMenuSeparator />}
-							<DropdownMenuItem onClick={onAddWorkspace} className="gap-2">
+							<DropdownMenuItem
+								onClick={dialogs.openWorkspaceDialog}
+								className="gap-2"
+							>
 								<Plus className="h-4 w-4" />
 								<span>Add Workspace</span>
 							</DropdownMenuItem>

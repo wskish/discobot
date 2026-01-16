@@ -7,12 +7,7 @@ import {
 } from "@/components/ide/panel-controls";
 import { TerminalView } from "@/components/ide/terminal-view";
 import { Button } from "@/components/ui/button";
-import type {
-	Agent,
-	Session,
-	SupportedAgentType,
-	Workspace,
-} from "@/lib/api-types";
+import { useSessionContext } from "@/lib/contexts/session-context";
 
 type BottomView = "chat" | "terminal";
 
@@ -24,12 +19,6 @@ interface BottomPanelProps {
 	onViewChange: (view: BottomView) => void;
 	onMinimize: () => void;
 	onMaximize: () => void;
-	// Chat props
-	session: Session | null;
-	sessionAgent: Agent | null;
-	sessionWorkspace: Workspace | null;
-	agentTypes: SupportedAgentType[];
-	agents: Agent[];
 }
 
 export function BottomPanel({
@@ -40,12 +29,9 @@ export function BottomPanel({
 	onViewChange,
 	onMinimize,
 	onMaximize,
-	session,
-	sessionAgent,
-	sessionWorkspace,
-	agentTypes,
-	agents,
 }: BottomPanelProps) {
+	const { selectedSession } = useSessionContext();
+
 	return (
 		<div className="flex flex-col overflow-hidden" style={style}>
 			{/* Bottom panel header */}
@@ -85,14 +71,7 @@ export function BottomPanel({
 							hideHeader
 						/>
 					) : (
-						<ChatPanel
-							className="h-full"
-							session={session}
-							sessionAgent={sessionAgent}
-							sessionWorkspace={sessionWorkspace}
-							agentTypes={agentTypes}
-							agents={agents}
-						/>
+						<ChatPanel key={selectedSession?.id} className="h-full" />
 					)}
 				</div>
 			)}
