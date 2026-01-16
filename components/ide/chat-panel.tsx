@@ -289,6 +289,7 @@ export function ChatPanel({ className }: ChatPanelProps) {
 	// Use AI SDK's useChat hook
 	const {
 		messages,
+		setMessages,
 		sendMessage,
 		status: chatStatus,
 		error: chatError,
@@ -304,13 +305,23 @@ export function ChatPanel({ className }: ChatPanelProps) {
 		},
 	});
 
+	// Sync existingMessages to useChat state when they load
+	// This is needed because the messages prop only sets initial state
+	React.useEffect(() => {
+		if (existingMessages.length > 0) {
+			setMessages(existingMessages);
+		}
+	}, [existingMessages, setMessages]);
+
 	// Derive loading state from chat status
 	const isLoading = chatStatus === "streaming" || chatStatus === "submitted";
 	const hasError = chatStatus === "error";
 
 	// Determine mode based on whether we have messages or a session
 	// Use truthiness check since props may be undefined when not passed
-	const hasSession = !!sessionAgent || !!sessionWorkspace;
+	// Include selectedSessionId to handle cases where the session object hasn't loaded yet
+	const hasSession =
+		!!sessionAgent || !!sessionWorkspace || !!selectedSessionId;
 
 	// Mode is "conversation" if we have a session or messages
 	const mode: ChatMode =

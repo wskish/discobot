@@ -30,7 +30,7 @@ export function BottomPanel({
 	onMinimize,
 	onMaximize,
 }: BottomPanelProps) {
-	const { selectedSession } = useSessionContext();
+	const { selectedSessionId } = useSessionContext();
 
 	return (
 		<div className="flex flex-col overflow-hidden" style={style}>
@@ -71,7 +71,7 @@ export function BottomPanel({
 							hideHeader
 						/>
 					) : (
-						<ChatPanel key={selectedSession?.id} className="h-full" />
+						<ChatPanel key={selectedSessionId} className="h-full" />
 					)}
 				</div>
 			)}
