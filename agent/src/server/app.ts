@@ -230,13 +230,34 @@ export function createApp(options: AppOptions) {
 			} catch (error) {
 				const duration = Date.now() - startTime;
 				console.error(`[POST /chat] Error after ${duration}ms:`, error);
+
+				// Extract error message from various error types (including JSON-RPC errors)
+				let errorText = "Unknown error";
+				if (error instanceof Error) {
+					errorText = error.message;
+				} else if (error && typeof error === "object") {
+					const errorObj = error as Record<string, unknown>;
+					if (typeof errorObj.message === "string") {
+						errorText = errorObj.message;
+						// Include details from data.details if available (JSON-RPC format)
+						if (errorObj.data && typeof errorObj.data === "object") {
+							const data = errorObj.data as Record<string, unknown>;
+							if (typeof data.details === "string") {
+								errorText = `${errorText}: ${data.details}`;
+							}
+						}
+					}
+				}
+
 				// Send error in UIMessage Stream format
+				console.log(`[POST /chat] Sending error event: ${errorText}`);
 				await stream.writeSSE({
 					data: JSON.stringify({
 						type: "error",
-						errorText: error instanceof Error ? error.message : "Unknown error",
+						errorText,
 					}),
 				});
+				console.log(`[POST /chat] Error event sent successfully`);
 			} finally {
 				acpClient.setUpdateCallback(null);
 			}
