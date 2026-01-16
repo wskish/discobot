@@ -4,8 +4,8 @@ package dispatcher
 import (
 	"context"
 
-	"github.com/anthropics/octobot/server/internal/jobs"
-	"github.com/anthropics/octobot/server/internal/model"
+	"github.com/obot-platform/octobot/server/internal/jobs"
+	"github.com/obot-platform/octobot/server/internal/model"
 )
 
 // JobExecutor defines the interface for executing a specific job type.

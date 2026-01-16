@@ -13,8 +13,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/anthropics/octobot/server/internal/sandbox"
-	"github.com/anthropics/octobot/server/internal/sandbox/sandboxapi"
+	"github.com/obot-platform/octobot/server/internal/sandbox"
+	"github.com/obot-platform/octobot/server/internal/sandbox/sandboxapi"
 )
 
 // Retry configuration for sandbox requests.

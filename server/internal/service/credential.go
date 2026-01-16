@@ -6,11 +6,11 @@ import (
 	"log"
 	"time"
 
-	"github.com/anthropics/octobot/server/internal/config"
-	"github.com/anthropics/octobot/server/internal/encryption"
-	"github.com/anthropics/octobot/server/internal/model"
-	"github.com/anthropics/octobot/server/internal/providers"
-	"github.com/anthropics/octobot/server/internal/store"
+	"github.com/obot-platform/octobot/server/internal/config"
+	"github.com/obot-platform/octobot/server/internal/encryption"
+	"github.com/obot-platform/octobot/server/internal/model"
+	"github.com/obot-platform/octobot/server/internal/providers"
+	"github.com/obot-platform/octobot/server/internal/store"
 )
 
 // Supported providers

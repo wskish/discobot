@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/anthropics/octobot/server/internal/model"
+	"github.com/obot-platform/octobot/server/internal/model"
 )
 
 func TestAuthMe_Unauthenticated(t *testing.T) {

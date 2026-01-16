@@ -12,7 +12,7 @@ import (
 
 	"github.com/Code-Hex/vz/v3"
 
-	"github.com/anthropics/octobot/server/internal/sandbox"
+	"github.com/obot-platform/octobot/server/internal/sandbox"
 )
 
 // VsockPort is the default vsock port for HTTP communication with the guest agent.

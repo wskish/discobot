@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/anthropics/octobot/server/internal/sandbox"
+	"github.com/obot-platform/octobot/server/internal/sandbox"
 )
 
 func TestGetTerminalStatus_NotCreated(t *testing.T) {

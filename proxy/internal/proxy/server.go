@@ -6,11 +6,11 @@ import (
 	"net"
 	"sync"
 
-	"github.com/octobot/proxy/internal/cert"
-	"github.com/octobot/proxy/internal/config"
-	"github.com/octobot/proxy/internal/filter"
-	"github.com/octobot/proxy/internal/injector"
-	"github.com/octobot/proxy/internal/logger"
+	"github.com/obot-platform/octobot/proxy/internal/cert"
+	"github.com/obot-platform/octobot/proxy/internal/config"
+	"github.com/obot-platform/octobot/proxy/internal/filter"
+	"github.com/obot-platform/octobot/proxy/internal/injector"
+	"github.com/obot-platform/octobot/proxy/internal/logger"
 )
 
 // Server is the main proxy server with protocol detection.

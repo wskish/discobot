@@ -1,6 +1,6 @@
 package dispatcher
 
-import "github.com/anthropics/octobot/server/internal/jobs"
+import "github.com/obot-platform/octobot/server/internal/jobs"
 
 // ConcurrencyLimits defines max concurrent jobs per type.
 // These can be made configurable via config.Config if needed.

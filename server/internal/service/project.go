@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/anthropics/octobot/server/internal/model"
-	"github.com/anthropics/octobot/server/internal/store"
+	"github.com/obot-platform/octobot/server/internal/model"
+	"github.com/obot-platform/octobot/server/internal/store"
 )
 
 // ProjectService handles project operations

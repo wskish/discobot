@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/anthropics/octobot/server/internal/model"
-	"github.com/anthropics/octobot/server/internal/service"
+	"github.com/obot-platform/octobot/server/internal/model"
+	"github.com/obot-platform/octobot/server/internal/service"
 )
 
 // SessionInitExecutor handles session_init jobs.

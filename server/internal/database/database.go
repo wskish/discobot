@@ -12,8 +12,8 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 
-	"github.com/anthropics/octobot/server/internal/config"
-	"github.com/anthropics/octobot/server/internal/model"
+	"github.com/obot-platform/octobot/server/internal/config"
+	"github.com/obot-platform/octobot/server/internal/model"
 )
 
 // DB wraps the GORM DB connection with additional context

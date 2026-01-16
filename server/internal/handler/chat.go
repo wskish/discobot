@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/anthropics/octobot/server/internal/middleware"
-	"github.com/anthropics/octobot/server/internal/model"
-	"github.com/anthropics/octobot/server/internal/service"
+	"github.com/obot-platform/octobot/server/internal/middleware"
+	"github.com/obot-platform/octobot/server/internal/model"
+	"github.com/obot-platform/octobot/server/internal/service"
 )
 
 // ChatRequest represents the request body for the chat endpoint.

@@ -9,10 +9,10 @@ import (
 
 	"github.com/elazarl/goproxy"
 
-	"github.com/octobot/proxy/internal/cert"
-	"github.com/octobot/proxy/internal/filter"
-	"github.com/octobot/proxy/internal/injector"
-	"github.com/octobot/proxy/internal/logger"
+	"github.com/obot-platform/octobot/proxy/internal/cert"
+	"github.com/obot-platform/octobot/proxy/internal/filter"
+	"github.com/obot-platform/octobot/proxy/internal/injector"
+	"github.com/obot-platform/octobot/proxy/internal/logger"
 )
 
 // HTTPProxy wraps goproxy for HTTP/HTTPS proxying.

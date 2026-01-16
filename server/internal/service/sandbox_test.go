@@ -5,9 +5,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/anthropics/octobot/server/internal/config"
-	"github.com/anthropics/octobot/server/internal/sandbox"
-	"github.com/anthropics/octobot/server/internal/sandbox/mock"
+	"github.com/obot-platform/octobot/server/internal/config"
+	"github.com/obot-platform/octobot/server/internal/sandbox"
+	"github.com/obot-platform/octobot/server/internal/sandbox/mock"
 )
 
 // Use the config constant for test consistency

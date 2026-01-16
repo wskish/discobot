@@ -27,8 +27,8 @@ import (
 	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/docker/go-connections/nat"
 
-	"github.com/anthropics/octobot/server/internal/config"
-	"github.com/anthropics/octobot/server/internal/sandbox"
+	"github.com/obot-platform/octobot/server/internal/config"
+	"github.com/obot-platform/octobot/server/internal/sandbox"
 )
 
 const (

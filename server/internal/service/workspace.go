@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/anthropics/octobot/server/internal/events"
-	"github.com/anthropics/octobot/server/internal/git"
-	"github.com/anthropics/octobot/server/internal/model"
-	"github.com/anthropics/octobot/server/internal/store"
+	"github.com/obot-platform/octobot/server/internal/events"
+	"github.com/obot-platform/octobot/server/internal/git"
+	"github.com/obot-platform/octobot/server/internal/model"
+	"github.com/obot-platform/octobot/server/internal/store"
 )
 
 // Workspace represents a workspace with its sessions (for API responses)

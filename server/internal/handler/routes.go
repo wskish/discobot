@@ -3,7 +3,7 @@ package handler
 import (
 	"net/http"
 
-	"github.com/anthropics/octobot/server/internal/routes"
+	"github.com/obot-platform/octobot/server/internal/routes"
 )
 
 // GetRoutes returns all registered API routes with their metadata.

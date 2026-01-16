@@ -8,11 +8,11 @@ import (
 	"log"
 	"strings"
 
-	"github.com/anthropics/octobot/server/internal/events"
-	"github.com/anthropics/octobot/server/internal/model"
-	"github.com/anthropics/octobot/server/internal/sandbox"
-	"github.com/anthropics/octobot/server/internal/sandbox/sandboxapi"
-	"github.com/anthropics/octobot/server/internal/store"
+	"github.com/obot-platform/octobot/server/internal/events"
+	"github.com/obot-platform/octobot/server/internal/model"
+	"github.com/obot-platform/octobot/server/internal/sandbox"
+	"github.com/obot-platform/octobot/server/internal/sandbox/sandboxapi"
+	"github.com/obot-platform/octobot/server/internal/store"
 )
 
 // SessionInitEnqueuer is an interface for enqueuing session initialization jobs.

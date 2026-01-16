@@ -4,10 +4,10 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/anthropics/octobot/server/internal/config"
-	"github.com/anthropics/octobot/server/internal/model"
-	"github.com/anthropics/octobot/server/internal/service"
-	"github.com/anthropics/octobot/server/internal/store"
+	"github.com/obot-platform/octobot/server/internal/config"
+	"github.com/obot-platform/octobot/server/internal/model"
+	"github.com/obot-platform/octobot/server/internal/service"
+	"github.com/obot-platform/octobot/server/internal/store"
 )
 
 type contextKey string

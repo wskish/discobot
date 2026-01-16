@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/anthropics/octobot/server/internal/sandbox"
+	"github.com/obot-platform/octobot/server/internal/sandbox"
 )
 
 // DefaultMockImage is the default image used by the mock provider.

@@ -6,7 +6,7 @@ import (
 	"sort"
 	"sync"
 
-	"github.com/anthropics/octobot/server/static"
+	"github.com/obot-platform/octobot/server/static"
 )
 
 // Icon represents an icon with theme support

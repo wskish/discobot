@@ -23,8 +23,8 @@ import (
 
 	"github.com/Code-Hex/vz/v3"
 
-	"github.com/anthropics/octobot/server/internal/config"
-	"github.com/anthropics/octobot/server/internal/sandbox"
+	"github.com/obot-platform/octobot/server/internal/config"
+	"github.com/obot-platform/octobot/server/internal/sandbox"
 )
 
 const (

@@ -8,10 +8,10 @@ import (
 	"os/signal"
 	"syscall"
 
-	proxyapi "github.com/octobot/proxy/internal/api"
-	"github.com/octobot/proxy/internal/config"
-	"github.com/octobot/proxy/internal/logger"
-	"github.com/octobot/proxy/internal/proxy"
+	proxyapi "github.com/obot-platform/octobot/proxy/internal/api"
+	"github.com/obot-platform/octobot/proxy/internal/config"
+	"github.com/obot-platform/octobot/proxy/internal/logger"
+	"github.com/obot-platform/octobot/proxy/internal/proxy"
 )
 
 func main() {

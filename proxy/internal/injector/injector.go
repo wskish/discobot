@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"sync"
 
-	"github.com/octobot/proxy/internal/config"
+	"github.com/obot-platform/octobot/proxy/internal/config"
 )
 
 // Injector manages header injection rules.

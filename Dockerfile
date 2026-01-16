@@ -30,17 +30,17 @@ FROM golang:1.25 AS proxy-builder
 
 WORKDIR /build
 
-# Copy proxy module files first for better caching
-COPY proxy/go.mod proxy/go.sum ./
+# Copy module files first for better caching
+COPY go.mod go.sum ./
 
 # Download dependencies
 RUN go mod download
 
 # Copy proxy source
-COPY proxy/ ./
+COPY proxy/ ./proxy/
 
 # Build the proxy binary
-RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /proxy ./cmd/proxy
+RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /proxy ./proxy/cmd/proxy
 
 # Stage 3: Build the Bun standalone binary
 FROM oven/bun:1 AS bun-builder

@@ -13,10 +13,10 @@ import (
 
 	"github.com/elazarl/goproxy"
 
-	"github.com/octobot/proxy/internal/config"
-	"github.com/octobot/proxy/internal/filter"
-	"github.com/octobot/proxy/internal/injector"
-	"github.com/octobot/proxy/internal/logger"
+	"github.com/obot-platform/octobot/proxy/internal/config"
+	"github.com/obot-platform/octobot/proxy/internal/filter"
+	"github.com/obot-platform/octobot/proxy/internal/injector"
+	"github.com/obot-platform/octobot/proxy/internal/logger"
 )
 
 // testLogger creates a test logger

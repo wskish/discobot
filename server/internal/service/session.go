@@ -9,11 +9,11 @@ import (
 	"log"
 	"time"
 
-	"github.com/anthropics/octobot/server/internal/events"
-	"github.com/anthropics/octobot/server/internal/git"
-	"github.com/anthropics/octobot/server/internal/model"
-	"github.com/anthropics/octobot/server/internal/sandbox"
-	"github.com/anthropics/octobot/server/internal/store"
+	"github.com/obot-platform/octobot/server/internal/events"
+	"github.com/obot-platform/octobot/server/internal/git"
+	"github.com/obot-platform/octobot/server/internal/model"
+	"github.com/obot-platform/octobot/server/internal/sandbox"
+	"github.com/obot-platform/octobot/server/internal/store"
 )
 
 // Session represents a chat session (for API responses)

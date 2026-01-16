@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/anthropics/octobot/server/internal/events"
+	"github.com/obot-platform/octobot/server/internal/events"
 )
 
 func TestEvents_SSE_Connection(t *testing.T) {

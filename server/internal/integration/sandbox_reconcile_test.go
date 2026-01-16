@@ -7,13 +7,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/anthropics/octobot/server/internal/config"
-	"github.com/anthropics/octobot/server/internal/database"
-	"github.com/anthropics/octobot/server/internal/model"
-	"github.com/anthropics/octobot/server/internal/sandbox"
-	"github.com/anthropics/octobot/server/internal/sandbox/docker"
-	"github.com/anthropics/octobot/server/internal/service"
-	"github.com/anthropics/octobot/server/internal/store"
+	"github.com/obot-platform/octobot/server/internal/config"
+	"github.com/obot-platform/octobot/server/internal/database"
+	"github.com/obot-platform/octobot/server/internal/model"
+	"github.com/obot-platform/octobot/server/internal/sandbox"
+	"github.com/obot-platform/octobot/server/internal/sandbox/docker"
+	"github.com/obot-platform/octobot/server/internal/service"
+	"github.com/obot-platform/octobot/server/internal/store"
 )
 
 // Small, fast images for testing

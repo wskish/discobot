@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/anthropics/octobot/server/internal/store"
+	"github.com/obot-platform/octobot/server/internal/store"
 )
 
 // PollerConfig contains configuration for the event poller.

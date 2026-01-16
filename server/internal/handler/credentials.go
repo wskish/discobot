@@ -8,9 +8,9 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/anthropics/octobot/server/internal/middleware"
-	"github.com/anthropics/octobot/server/internal/oauth"
-	"github.com/anthropics/octobot/server/internal/service"
+	"github.com/obot-platform/octobot/server/internal/middleware"
+	"github.com/obot-platform/octobot/server/internal/oauth"
+	"github.com/obot-platform/octobot/server/internal/service"
 )
 
 // CreateCredentialRequest is the request body for creating/updating a credential

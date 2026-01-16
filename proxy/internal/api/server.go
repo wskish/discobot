@@ -11,9 +11,9 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 
-	"github.com/octobot/proxy/internal/config"
-	"github.com/octobot/proxy/internal/logger"
-	"github.com/octobot/proxy/internal/proxy"
+	"github.com/obot-platform/octobot/proxy/internal/config"
+	"github.com/obot-platform/octobot/proxy/internal/logger"
+	"github.com/obot-platform/octobot/proxy/internal/proxy"
 )
 
 // Server is the API server for runtime configuration.

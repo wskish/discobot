@@ -9,8 +9,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/anthropics/octobot/server/internal/oauth"
-	"github.com/anthropics/octobot/server/internal/service"
+	"github.com/obot-platform/octobot/server/internal/oauth"
+	"github.com/obot-platform/octobot/server/internal/service"
 )
 
 const (

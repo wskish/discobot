@@ -7,8 +7,8 @@ import (
 
 	"github.com/things-go/go-socks5"
 
-	"github.com/octobot/proxy/internal/filter"
-	"github.com/octobot/proxy/internal/logger"
+	"github.com/obot-platform/octobot/proxy/internal/filter"
+	"github.com/obot-platform/octobot/proxy/internal/logger"
 )
 
 // SOCKSProxy wraps go-socks5 for SOCKS5 proxying.

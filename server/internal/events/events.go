@@ -9,8 +9,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/anthropics/octobot/server/internal/model"
-	"github.com/anthropics/octobot/server/internal/store"
+	"github.com/obot-platform/octobot/server/internal/model"
+	"github.com/obot-platform/octobot/server/internal/store"
 )
 
 // EventType represents the type of event being broadcast

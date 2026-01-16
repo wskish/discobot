@@ -7,9 +7,9 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/octobot/proxy/internal/config"
-	"github.com/octobot/proxy/internal/logger"
-	"github.com/octobot/proxy/internal/proxy"
+	"github.com/obot-platform/octobot/proxy/internal/config"
+	"github.com/obot-platform/octobot/proxy/internal/logger"
+	"github.com/obot-platform/octobot/proxy/internal/proxy"
 )
 
 func testLogger(t *testing.T) *logger.Logger {

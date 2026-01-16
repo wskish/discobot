@@ -38,7 +38,7 @@ formatters:
   settings:
     goimports:
       local-prefixes:
-        - github.com/anthropics/octobot
+        - github.com/obot-platform/octobot
   exclusions:
     generated: lax
     paths:
