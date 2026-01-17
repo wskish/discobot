@@ -105,11 +105,16 @@ type CreateOptions struct {
 	// to the sandbox via the OCTOBOT_SECRET environment variable.
 	SharedSecret string
 
-	// WorkspacePath is either a local directory path or a git URL.
-	// For Docker: if it's a directory, it will be bind-mounted to /.workspace.origin
-	// and WORKSPACE_PATH env var will be set to /.workspace.origin.
-	// If it's a git URL, WORKSPACE_PATH will be set to the URL.
+	// WorkspacePath is the local directory to mount inside the sandbox at /.workspace.
+	// This is always a local directory path (either a local workspace or a cloned git repo).
+	// Sets WORKSPACE_PATH env var to /.workspace (the mount point).
 	WorkspacePath string
+
+	// WorkspaceSource is the original workspace source (local path or git URL).
+	// Sets WORKSPACE_SOURCE env var to this value.
+	// For local workspaces, this is the local directory path.
+	// For git workspaces, this is the git URL (e.g., https://github.com/user/repo.git).
+	WorkspaceSource string
 
 	// WorkspaceCommit is the git commit to checkout (optional).
 	// Set as WORKSPACE_COMMIT environment variable.

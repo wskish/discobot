@@ -34,8 +34,8 @@ const (
 	// containerPort is the fixed port exposed by all sandboxes.
 	containerPort = 3002
 
-	// workspaceOriginPath is where workspaces are mounted inside the VM.
-	workspaceOriginPath = "/.workspace.origin"
+	// workspacePath is where workspaces are mounted inside the VM.
+	workspacePath = "/.workspace"
 
 	// defaultCPUCount is the default number of CPUs for VMs.
 	defaultCPUCount = 2
@@ -222,16 +222,17 @@ func (p *Provider) Create(ctx context.Context, sessionID string, opts sandbox.Cr
 	}
 
 	// Build environment variables
+	// WORKSPACE_PATH is always the mount point inside the VM
+	// WORKSPACE_SOURCE is the original source (local path or git URL)
 	env := make(map[string]string)
 	if opts.SharedSecret != "" {
 		env["OCTOBOT_SECRET"] = hashSecret(opts.SharedSecret)
 	}
 	if opts.WorkspacePath != "" {
-		if isGitURL(opts.WorkspacePath) {
-			env["WORKSPACE_PATH"] = opts.WorkspacePath
-		} else {
-			env["WORKSPACE_PATH"] = workspaceOriginPath
-		}
+		env["WORKSPACE_PATH"] = workspacePath
+	}
+	if opts.WorkspaceSource != "" {
+		env["WORKSPACE_SOURCE"] = opts.WorkspaceSource
 	}
 	if opts.WorkspaceCommit != "" {
 		env["WORKSPACE_COMMIT"] = opts.WorkspaceCommit
@@ -912,14 +913,6 @@ func (p *Provider) Close() error {
 	}
 
 	return nil
-}
-
-// isGitURL returns true if the path looks like a git URL.
-func isGitURL(path string) bool {
-	return strings.HasPrefix(path, "http://") ||
-		strings.HasPrefix(path, "https://") ||
-		strings.HasPrefix(path, "git://") ||
-		strings.HasPrefix(path, "git@")
 }
 
 // hashSecret creates a salted SHA-256 hash of the secret.

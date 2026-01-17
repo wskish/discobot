@@ -409,6 +409,7 @@ func (s *SessionService) initializeSync(
 				"octobot.project.id":   projectID,
 			},
 			WorkspacePath:   workspacePath,
+			WorkspaceSource: workspace.Path, // Original source (git URL or local path) for WORKSPACE_PATH env var
 			WorkspaceCommit: workspaceCommit,
 		}
 

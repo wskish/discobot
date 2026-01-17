@@ -39,8 +39,8 @@ const (
 	// containerPort is the fixed port exposed by all sandboxes.
 	containerPort = 3002
 
-	// workspaceOriginPath is where local workspaces are mounted inside the container.
-	workspaceOriginPath = "/.workspace.origin"
+	// workspacePath is where workspaces are mounted inside the container.
+	workspacePath = "/.workspace"
 
 	// dataVolumePath is where the persistent data volume is mounted inside the container.
 	dataVolumePath = "/.data"
@@ -172,16 +172,14 @@ func (p *Provider) Create(ctx context.Context, sessionID string, opts sandbox.Cr
 		env = append(env, fmt.Sprintf("OCTOBOT_SECRET=%s", hashedSecret))
 	}
 
-	// Handle workspace path
-	isLocalPath := opts.WorkspacePath != "" && !isGitURL(opts.WorkspacePath)
+	// Handle workspace environment variables
+	// WORKSPACE_PATH is always the mount point inside the container
+	// WORKSPACE_SOURCE is the original source (local path or git URL)
 	if opts.WorkspacePath != "" {
-		if isLocalPath {
-			// Local directory: set env var to the mount point
-			env = append(env, fmt.Sprintf("WORKSPACE_PATH=%s", workspaceOriginPath))
-		} else {
-			// Git URL: set env var to the URL
-			env = append(env, fmt.Sprintf("WORKSPACE_PATH=%s", opts.WorkspacePath))
-		}
+		env = append(env, fmt.Sprintf("WORKSPACE_PATH=%s", workspacePath))
+	}
+	if opts.WorkspaceSource != "" {
+		env = append(env, fmt.Sprintf("WORKSPACE_SOURCE=%s", opts.WorkspaceSource))
 	}
 
 	// Add workspace commit if provided
@@ -221,8 +219,8 @@ func (p *Provider) Create(ctx context.Context, sessionID string, opts sandbox.Cr
 		hostConfig.NanoCPUs = int64(opts.Resources.CPUCores * 1e9)
 	}
 
-	// Mount local workspace directory if it's a local path
-	if isLocalPath {
+	// Mount workspace directory (always a local path)
+	if opts.WorkspacePath != "" {
 		// Ensure the source path is absolute (Docker requires absolute paths)
 		sourcePath := opts.WorkspacePath
 		if !filepath.IsAbs(sourcePath) {
@@ -236,7 +234,7 @@ func (p *Provider) Create(ctx context.Context, sessionID string, opts sandbox.Cr
 		hostConfig.Mounts = append(hostConfig.Mounts, mount.Mount{
 			Type:     mount.TypeBind,
 			Source:   sourcePath,
-			Target:   workspaceOriginPath,
+			Target:   workspacePath,
 			ReadOnly: true, // Read-only for the origin
 		})
 	}
@@ -278,14 +276,6 @@ func (p *Provider) Create(ctx context.Context, sessionID string, opts sandbox.Cr
 			"name": name,
 		},
 	}, nil
-}
-
-// isGitURL returns true if the path looks like a git URL.
-func isGitURL(path string) bool {
-	return strings.HasPrefix(path, "http://") ||
-		strings.HasPrefix(path, "https://") ||
-		strings.HasPrefix(path, "git://") ||
-		strings.HasPrefix(path, "git@")
 }
 
 // hashSecret creates a salted SHA-256 hash of the secret.

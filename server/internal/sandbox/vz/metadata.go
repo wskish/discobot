@@ -46,14 +46,15 @@ type VMMetadata struct {
 
 // WorkspaceMetadata contains workspace configuration.
 type WorkspaceMetadata struct {
-	// Path is either a local path (mounted) or git URL.
-	Path string `json:"path,omitempty"`
+	// Source is the original workspace source (git URL or local directory path).
+	// This corresponds to the WORKSPACE_SOURCE env var.
+	Source string `json:"source,omitempty"`
 
 	// Commit is the git commit to checkout (for git URLs).
 	Commit string `json:"commit,omitempty"`
 
-	// MountPoint is where the workspace is mounted in the guest.
-	// For local paths, this is typically /.workspace.origin
+	// MountPoint is where the workspace is mounted in the guest (/.workspace).
+	// This corresponds to the WORKSPACE_PATH env var.
 	MountPoint string `json:"mount_point,omitempty"`
 }
 
@@ -123,11 +124,9 @@ func (p *Provider) createMetadata(sessionID string, opts sandbox.CreateOptions) 
 	// Add workspace configuration
 	if opts.WorkspacePath != "" {
 		meta.Workspace = &WorkspaceMetadata{
-			Path:   opts.WorkspacePath,
-			Commit: opts.WorkspaceCommit,
-		}
-		if !isGitURL(opts.WorkspacePath) {
-			meta.Workspace.MountPoint = workspaceOriginPath
+			Source:     opts.WorkspaceSource,
+			Commit:     opts.WorkspaceCommit,
+			MountPoint: workspacePath,
 		}
 	}
 
