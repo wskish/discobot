@@ -56,6 +56,32 @@ interface SidebarTreeProps {
 	className?: string;
 }
 
+const STORAGE_KEY = "sidebar-expanded-workspaces";
+
+function loadExpandedIds(): Set<string> {
+	if (typeof window === "undefined") return new Set();
+	try {
+		const stored = localStorage.getItem(STORAGE_KEY);
+		if (stored) {
+			const parsed = JSON.parse(stored);
+			if (Array.isArray(parsed)) {
+				return new Set(parsed);
+			}
+		}
+	} catch {
+		// Ignore parse errors
+	}
+	return new Set();
+}
+
+function saveExpandedIds(ids: Set<string>) {
+	try {
+		localStorage.setItem(STORAGE_KEY, JSON.stringify([...ids]));
+	} catch {
+		// Ignore storage errors
+	}
+}
+
 export function SidebarTree({ className }: SidebarTreeProps) {
 	const {
 		workspaces,
@@ -65,10 +91,13 @@ export function SidebarTree({ className }: SidebarTreeProps) {
 	} = useSessionContext();
 	const { openWorkspaceDialog, openDeleteWorkspaceDialog } = useDialogContext();
 
-	const [expandedIds, setExpandedIds] = React.useState<Set<string>>(
-		new Set(["ws-1"]),
-	);
+	const [expandedIds, setExpandedIds] = React.useState<Set<string>>(new Set());
 	const [showClosed, setShowClosed] = React.useState(false);
+
+	// Load expanded state from localStorage on mount
+	React.useEffect(() => {
+		setExpandedIds(loadExpandedIds());
+	}, []);
 
 	const toggleExpand = (id: string) => {
 		const next = new Set(expandedIds);
@@ -78,6 +107,7 @@ export function SidebarTree({ className }: SidebarTreeProps) {
 			next.add(id);
 		}
 		setExpandedIds(next);
+		saveExpandedIds(next);
 	};
 
 	return (
