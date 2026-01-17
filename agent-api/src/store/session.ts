@@ -20,6 +20,51 @@ let sessionData: SessionData | null = null;
 // Debounce timer for saving messages
 let saveMessagesTimer: ReturnType<typeof setTimeout> | null = null;
 
+// Completion state tracking
+export interface CompletionState {
+	isRunning: boolean;
+	completionId: string | null;
+	startedAt: string | null;
+	error: string | null;
+}
+
+let completionState: CompletionState = {
+	isRunning: false,
+	completionId: null,
+	startedAt: null,
+	error: null,
+};
+
+export function getCompletionState(): CompletionState {
+	return { ...completionState };
+}
+
+export function startCompletion(completionId: string): boolean {
+	if (completionState.isRunning) {
+		return false; // Already running
+	}
+	completionState = {
+		isRunning: true,
+		completionId,
+		startedAt: new Date().toISOString(),
+		error: null,
+	};
+	return true;
+}
+
+export function finishCompletion(error?: string): void {
+	completionState = {
+		isRunning: false,
+		completionId: completionState.completionId,
+		startedAt: completionState.startedAt,
+		error: error || null,
+	};
+}
+
+export function isCompletionRunning(): boolean {
+	return completionState.isRunning;
+}
+
 export function getMessages(): UIMessage[] {
 	return messages;
 }

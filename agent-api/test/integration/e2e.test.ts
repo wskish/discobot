@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 import type { UIMessage } from "ai";
+import type {
+	ChatStartedResponse,
+	ChatStatusResponse,
+} from "../../src/api/types.js";
 import { createApp } from "../../src/server/app.js";
 import { clearMessages, clearSession } from "../../src/store/session.js";
 
@@ -25,6 +29,30 @@ interface MessagesResponse {
 
 interface DeleteResponse {
 	success: boolean;
+}
+
+/**
+ * Poll /chat/status until completion finishes or timeout.
+ */
+async function waitForCompletion(
+	app: ReturnType<typeof createApp>["app"],
+	timeoutMs = 120000,
+	pollIntervalMs = 500,
+): Promise<ChatStatusResponse> {
+	const startTime = Date.now();
+
+	while (Date.now() - startTime < timeoutMs) {
+		const res = await app.request("/chat/status");
+		const status = (await res.json()) as ChatStatusResponse;
+
+		if (!status.isRunning) {
+			return status;
+		}
+
+		await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+	}
+
+	throw new Error(`Completion did not finish within ${timeoutMs}ms`);
 }
 
 describe("Agent Service E2E Tests", () => {
@@ -102,7 +130,7 @@ describe("Agent Service E2E Tests", () => {
 		// This test requires a working Anthropic API connection
 		// Run with: source ~/.bashrc.d/anthropic && pnpm test
 		it(
-			"streams SSE response for valid message",
+			"starts completion and returns 202 Accepted",
 			{ timeout: 120000 },
 			async () => {
 				clearMessages();
@@ -121,32 +149,16 @@ describe("Agent Service E2E Tests", () => {
 					}),
 				});
 
-				assert.equal(res.status, 200);
-				assert.ok(
-					res.headers.get("content-type")?.startsWith("text/event-stream"),
-					"Should return SSE content type",
-				);
+				assert.equal(res.status, 202);
 
-				// Read the SSE stream
-				const text = await res.text();
-				const chunks = parseSSEChunks(text);
+				const body = (await res.json()) as ChatStartedResponse;
+				assert.equal(body.status, "started");
+				assert.ok(body.completionId, "Should return a completionId");
 
-				// Should have text-delta events and a finish event
-				const textDeltas = chunks.filter((c) => c.type === "text-delta");
-				const finishEvents = chunks.filter((c) => c.type === "finish");
-
-				assert.ok(textDeltas.length > 0, "Should have text-delta events");
-				assert.equal(
-					finishEvents.length,
-					1,
-					"Should have exactly one finish event",
-				);
-
-				// Verify we got some text content
-				const fullText = textDeltas
-					.map((c) => (c as unknown as { delta: string }).delta)
-					.join("");
-				assert.ok(fullText.length > 0, "Should have received text content");
+				// Wait for completion to finish
+				const finalStatus = await waitForCompletion(app);
+				assert.equal(finalStatus.isRunning, false);
+				assert.equal(finalStatus.error, null, "Completion should not have error");
 			},
 		);
 	});
@@ -205,29 +217,3 @@ describe("Agent Service E2E Tests", () => {
 		});
 	});
 });
-
-// Helper to parse SSE text into UIMessageChunks
-function parseSSEChunks(
-	text: string,
-): Array<{ type: string; [key: string]: unknown }> {
-	const chunks: Array<{ type: string; [key: string]: unknown }> = [];
-	const lines = text.split("\n");
-
-	for (const line of lines) {
-		if (line.startsWith("data:")) {
-			const data = line.slice(5).trim();
-			if (data) {
-				try {
-					const parsed = JSON.parse(data);
-					if (parsed && typeof parsed.type === "string") {
-						chunks.push(parsed);
-					}
-				} catch {
-					// Skip non-JSON data lines
-				}
-			}
-		}
-	}
-
-	return chunks;
-}

@@ -6,11 +6,12 @@
  * located at: server/internal/sandbox/sandboxapi/types.go
  *
  * API Endpoints:
- *   GET  /        - Health check
- *   GET  /health  - Detailed health status
- *   GET  /chat    - Get all messages
- *   POST /chat    - Send messages and stream response (SSE)
- *   DELETE /chat  - Clear session and messages
+ *   GET  /            - Health check
+ *   GET  /health      - Detailed health status
+ *   GET  /chat        - Get all messages
+ *   POST /chat        - Start completion (returns 202 Accepted, runs in background)
+ *   GET  /chat/status - Get completion status
+ *   DELETE /chat      - Clear session and messages
  */
 
 import type { UIMessage } from "ai";
@@ -58,6 +59,34 @@ export interface GetMessagesResponse {
  */
 export interface ClearSessionResponse {
 	success: boolean;
+}
+
+/**
+ * POST /chat response (202 Accepted)
+ * The completion runs in the background. Poll GET /chat for messages.
+ */
+export interface ChatStartedResponse {
+	completionId: string;
+	status: "started";
+}
+
+/**
+ * POST /chat response (409 Conflict)
+ * Returned when a completion is already in progress.
+ */
+export interface ChatConflictResponse {
+	error: "completion_in_progress";
+	completionId: string;
+}
+
+/**
+ * GET /chat/status response
+ */
+export interface ChatStatusResponse {
+	isRunning: boolean;
+	completionId: string | null;
+	startedAt: string | null;
+	error: string | null;
 }
 
 /**

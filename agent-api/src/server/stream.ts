@@ -39,7 +39,7 @@ interface ClaudeCodeMeta {
 /**
  * Extract Claude Code metadata from ACP _meta field.
  */
-function getClaudeCodeMeta(
+export function getClaudeCodeMeta(
 	meta?: { [key: string]: unknown } | null,
 ): ClaudeCodeMeta | undefined {
 	if (!meta || typeof meta !== "object") return undefined;
@@ -52,7 +52,7 @@ function getClaudeCodeMeta(
  * Extract the tool name from an ACP tool call/update.
  * Priority: standard field (none in ACP) → _meta.claudeCode.toolName → title → "unknown"
  */
-function extractToolName(
+export function extractToolName(
 	title?: string,
 	meta?: { [key: string]: unknown } | null,
 ): string {
@@ -74,7 +74,7 @@ function extractTitle(title?: string): string | undefined {
  * Extract tool output from an ACP tool call/update.
  * Priority: rawOutput → _meta.claudeCode.toolResponse → content array → undefined
  */
-function extractToolOutput(
+export function extractToolOutput(
 	rawOutput: unknown,
 	content?: Array<ToolCallContent> | null,
 	meta?: { [key: string]: unknown } | null,
@@ -131,6 +131,20 @@ type ToolState =
 	| "output-error";
 
 /**
+ * Tracked state for a single tool call.
+ */
+interface ToolTrackingState {
+	/** Last emitted state */
+	state: ToolState;
+	/** Whether tool-input-available has been sent */
+	inputAvailableSent: boolean;
+	/** Last seen rawInput value (for use in fallback input-available) */
+	lastRawInput: unknown;
+	/** Last seen title (for use in fallback input-available) */
+	lastTitle: string | undefined;
+}
+
+/**
  * Tracks state for proper start/delta/end sequences in UIMessage Stream protocol.
  *
  * Each content type (text, reasoning) needs unique IDs for each block.
@@ -146,8 +160,8 @@ export interface StreamState {
 	textBlockCounter: number;
 	/** Counter for generating unique reasoning block IDs */
 	reasoningBlockCounter: number;
-	/** Map of toolCallId → last emitted state to avoid duplicate events */
-	toolStates: Map<string, ToolState>;
+	/** Map of toolCallId → tracking state for tool events */
+	toolStates: Map<string, ToolTrackingState>;
 }
 
 /**
@@ -357,6 +371,152 @@ function toolStatusToState(
 }
 
 /**
+ * Common parameters for generating tool chunks.
+ */
+interface ToolChunkParams {
+	toolCallId: string;
+	status?: "pending" | "in_progress" | "completed" | "failed" | null;
+	title?: string;
+	rawInput?: unknown;
+	rawOutput?: unknown;
+	content?: Array<ToolCallContent> | null;
+	_meta?: { [key: string]: unknown } | null;
+}
+
+/**
+ * Generates chunks for tool call events.
+ * Handles the full lifecycle:
+ * - tool-input-start: First encounter
+ * - tool-input-delta: When rawInput changes while pending
+ * - tool-input-available: When in_progress, or as fallback before output
+ * - tool-output-available/tool-output-error: When completed/failed
+ */
+function createToolChunksInternal(
+	params: ToolChunkParams,
+	state: StreamState,
+): UIMessageChunk[] {
+	const chunks: UIMessageChunk[] = [];
+
+	// Close any open text/reasoning blocks before tool content
+	chunks.push(...closeContentBlocks(state));
+
+	const prevTracking = state.toolStates.get(params.toolCallId);
+	const currentState = toolStatusToState(params.status);
+
+	// Extract fields with fallbacks to Claude Code extensions
+	const toolName = extractToolName(params.title, params._meta);
+	const title = extractTitle(params.title);
+	const providerMetadata = buildProviderMetadata(params._meta);
+
+	// Track the best known input and title (use current if available, else use previous)
+	const effectiveRawInput =
+		params.rawInput !== undefined
+			? params.rawInput
+			: (prevTracking?.lastRawInput ?? {});
+	const effectiveTitle = title ?? prevTracking?.lastTitle;
+
+	// Send tool-input-start on first encounter
+	if (!prevTracking) {
+		chunks.push({
+			type: "tool-input-start",
+			toolCallId: params.toolCallId,
+			toolName,
+			title,
+			providerMetadata,
+			dynamic: true,
+		});
+	}
+
+	// Track whether we've sent input-available
+	let inputAvailableSent = prevTracking?.inputAvailableSent ?? false;
+
+	// Send input-available when transitioning to in_progress (if not already sent)
+	if (currentState === "input-available" && !inputAvailableSent) {
+		chunks.push({
+			type: "tool-input-available",
+			toolCallId: params.toolCallId,
+			toolName,
+			title: effectiveTitle,
+			input: effectiveRawInput,
+			providerMetadata,
+			dynamic: true,
+		});
+		inputAvailableSent = true;
+	}
+
+	// Handle output states
+	if (currentState === "output-available") {
+		// Fallback: send input-available before output if we never sent it
+		if (!inputAvailableSent) {
+			chunks.push({
+				type: "tool-input-available",
+				toolCallId: params.toolCallId,
+				toolName,
+				title: effectiveTitle,
+				input: effectiveRawInput,
+				providerMetadata,
+				dynamic: true,
+			});
+			inputAvailableSent = true;
+		}
+
+		// Only send output-available if we haven't already
+		if (prevTracking?.state !== "output-available") {
+			const output = extractToolOutput(
+				params.rawOutput,
+				params.content,
+				params._meta,
+			);
+			chunks.push({
+				type: "tool-output-available",
+				toolCallId: params.toolCallId,
+				output,
+				dynamic: true,
+			});
+		}
+	} else if (currentState === "output-error") {
+		// Fallback: send input-available before error if we never sent it
+		if (!inputAvailableSent) {
+			chunks.push({
+				type: "tool-input-available",
+				toolCallId: params.toolCallId,
+				toolName,
+				title: effectiveTitle,
+				input: effectiveRawInput,
+				providerMetadata,
+				dynamic: true,
+			});
+			inputAvailableSent = true;
+		}
+
+		// Only send output-error if we haven't already
+		if (prevTracking?.state !== "output-error") {
+			const output = extractToolOutput(
+				params.rawOutput,
+				params.content,
+				params._meta,
+			);
+			chunks.push({
+				type: "tool-output-error",
+				toolCallId: params.toolCallId,
+				errorText: String(output || "Tool call failed"),
+				dynamic: true,
+			});
+		}
+	}
+
+	// Update tracked state (preserve last known input/title if not provided in this update)
+	state.toolStates.set(params.toolCallId, {
+		state: currentState,
+		inputAvailableSent,
+		lastRawInput: effectiveRawInput,
+		lastTitle: effectiveTitle,
+	});
+
+	return chunks;
+}
+
+/**
  * Generates chunks for an ACP ToolCall.
  * - Closes any open text/reasoning blocks first
  * - Returns appropriate tool events based on state.
@@ -366,75 +526,18 @@ export function createToolCallChunks(
 	toolCall: ToolCall,
 	state: StreamState,
 ): UIMessageChunk[] {
-	const chunks: UIMessageChunk[] = [];
-
-	// Close any open text/reasoning blocks before tool content
-	chunks.push(...closeContentBlocks(state));
-
-	const prevState = state.toolStates.get(toolCall.toolCallId);
-	const currentState = toolStatusToState(toolCall.status);
-
-	// Extract fields with fallbacks to Claude Code extensions
-	const toolName = extractToolName(toolCall.title, toolCall._meta);
-	const title = extractTitle(toolCall.title);
-	const providerMetadata = buildProviderMetadata(toolCall._meta);
-
-	// Send tool-input-start on first encounter
-	if (!prevState) {
-		chunks.push({
-			type: "tool-input-start",
+	return createToolChunksInternal(
+		{
 			toolCallId: toolCall.toolCallId,
-			toolName,
-			title,
-			providerMetadata,
-			dynamic: true,
-		});
-	}
-
-	// Emit appropriate event based on state transition
-	if (currentState === "input-available" && prevState !== "input-available") {
-		chunks.push({
-			type: "tool-input-available",
-			toolCallId: toolCall.toolCallId,
-			toolName,
-			title,
-			input: toolCall.rawInput || {},
-			providerMetadata,
-			dynamic: true,
-		});
-	} else if (
-		currentState === "output-available" &&
-		prevState !== "output-available"
-	) {
-		const output = extractToolOutput(
-			toolCall.rawOutput,
-			toolCall.content,
-			toolCall._meta,
-		);
-		chunks.push({
-			type: "tool-output-available",
-			toolCallId: toolCall.toolCallId,
-			output,
-			dynamic: true,
-		});
-	} else if (currentState === "output-error" && prevState !== "output-error") {
-		const output = extractToolOutput(
-			toolCall.rawOutput,
-			toolCall.content,
-			toolCall._meta,
-		);
-		chunks.push({
-			type: "tool-output-error",
-			toolCallId: toolCall.toolCallId,
-			errorText: String(output || "Tool call failed"),
-			dynamic: true,
-		});
-	}
-
-	// Update tracked state
-	state.toolStates.set(toolCall.toolCallId, currentState);
-
-	return chunks;
+			status: toolCall.status,
+			title: toolCall.title,
+			rawInput: toolCall.rawInput,
+			rawOutput: toolCall.rawOutput,
+			content: toolCall.content,
+			_meta: toolCall._meta,
+		},
+		state,
+	);
 }
 
 /**
@@ -447,75 +550,18 @@ export function createToolCallUpdateChunks(
 	update: ToolCallUpdate,
 	state: StreamState,
 ): UIMessageChunk[] {
-	const chunks: UIMessageChunk[] = [];
-
-	// Close any open text/reasoning blocks before tool content
-	chunks.push(...closeContentBlocks(state));
-
-	const prevState = state.toolStates.get(update.toolCallId);
-	const currentState = toolStatusToState(update.status);
-
-	// Extract fields with fallbacks to Claude Code extensions
-	const toolName = extractToolName(update.title ?? undefined, update._meta);
-	const title = extractTitle(update.title ?? undefined);
-	const providerMetadata = buildProviderMetadata(update._meta);
-
-	// Send tool-input-start on first encounter
-	if (!prevState) {
-		chunks.push({
-			type: "tool-input-start",
+	return createToolChunksInternal(
+		{
 			toolCallId: update.toolCallId,
-			toolName,
-			title,
-			providerMetadata,
-			dynamic: true,
-		});
-	}
-
-	// Emit appropriate event based on state transition
-	if (currentState === "input-available" && prevState !== "input-available") {
-		chunks.push({
-			type: "tool-input-available",
-			toolCallId: update.toolCallId,
-			toolName,
-			title,
-			input: update.rawInput || {},
-			providerMetadata,
-			dynamic: true,
-		});
-	} else if (
-		currentState === "output-available" &&
-		prevState !== "output-available"
-	) {
-		const output = extractToolOutput(
-			update.rawOutput,
-			update.content,
-			update._meta,
-		);
-		chunks.push({
-			type: "tool-output-available",
-			toolCallId: update.toolCallId,
-			output,
-			dynamic: true,
-		});
-	} else if (currentState === "output-error" && prevState !== "output-error") {
-		const output = extractToolOutput(
-			update.rawOutput,
-			update.content,
-			update._meta,
-		);
-		chunks.push({
-			type: "tool-output-error",
-			toolCallId: update.toolCallId,
-			errorText: String(output || "Tool call failed"),
-			dynamic: true,
-		});
-	}
-
-	// Update tracked state
-	state.toolStates.set(update.toolCallId, currentState);
-
-	return chunks;
+			status: update.status,
+			title: update.title ?? undefined,
+			rawInput: update.rawInput,
+			rawOutput: update.rawOutput,
+			content: update.content,
+			_meta: update._meta,
+		},
+		state,
+	);
 }
 
 /**

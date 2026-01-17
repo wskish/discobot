@@ -1,5 +1,5 @@
 packages:
-  - agent
+  - agent-api
 
 onlyBuiltDependencies:
   - '@tailwindcss/oxide'

@@ -488,6 +488,135 @@ describe("stream.ts", () => {
 			const chunks2 = createToolCallChunks(toolCall, state);
 			assert.equal(chunks2.length, 0);
 		});
+
+		it("emits tool-input-available as fallback when going directly from pending to completed", () => {
+			const state = createStreamState();
+
+			// First: pending (simulating Claude Code which skips in_progress)
+			const toolCall1: ToolCall = {
+				toolCallId: "tc-1",
+				title: "Bash",
+				status: "pending",
+				rawInput: { command: "ls" },
+			};
+			createToolCallChunks(toolCall1, state);
+
+			// Directly to completed (skipping in_progress)
+			const toolCall2: ToolCall = {
+				toolCallId: "tc-1",
+				title: "Bash",
+				status: "completed",
+				rawInput: { command: "ls" },
+				rawOutput: "file1.txt\nfile2.txt",
+			};
+			const chunks = createToolCallChunks(toolCall2, state);
+
+			// Should emit: input-available (fallback) + output-available
+			assert.equal(chunks.length, 2);
+			assert.equal(chunks[0].type, "tool-input-available");
+			assert.equal(chunks[1].type, "tool-output-available");
+
+			if (chunks[0].type === "tool-input-available") {
+				assert.deepEqual(chunks[0].input, { command: "ls" });
+			}
+			if (chunks[1].type === "tool-output-available") {
+				assert.equal(chunks[1].output, "file1.txt\nfile2.txt");
+			}
+		});
+
+		it("emits tool-input-available as fallback when going directly from pending to failed", () => {
+			const state = createStreamState();
+
+			// First: pending
+			const toolCall1: ToolCall = {
+				toolCallId: "tc-1",
+				title: "Write",
+				status: "pending",
+				rawInput: { path: "/readonly.txt" },
+			};
+			createToolCallChunks(toolCall1, state);
+
+			// Directly to failed
+			const toolCall2: ToolCall = {
+				toolCallId: "tc-1",
+				title: "Write",
+				status: "failed",
+				rawInput: { path: "/readonly.txt" },
+				rawOutput: "Permission denied",
+			};
+			const chunks = createToolCallChunks(toolCall2, state);
+
+			// Should emit: input-available (fallback) + output-error
+			assert.equal(chunks.length, 2);
+			assert.equal(chunks[0].type, "tool-input-available");
+			assert.equal(chunks[1].type, "tool-output-error");
+		});
+
+		it("does not emit duplicate input-available when already sent via in_progress", () => {
+			const state = createStreamState();
+
+			// First: in_progress (sends input-available)
+			const toolCall1: ToolCall = {
+				toolCallId: "tc-1",
+				title: "Read",
+				status: "in_progress",
+				rawInput: { path: "/test.txt" },
+			};
+			const chunks1 = createToolCallChunks(toolCall1, state);
+			assert.equal(chunks1.length, 2); // start + input-available
+
+			// Then: completed
+			const toolCall2: ToolCall = {
+				toolCallId: "tc-1",
+				title: "Read",
+				status: "completed",
+				rawInput: { path: "/test.txt" },
+				rawOutput: "contents",
+			};
+			const chunks2 = createToolCallChunks(toolCall2, state);
+
+			// Should only emit output-available (no duplicate input-available)
+			assert.equal(chunks2.length, 1);
+			assert.equal(chunks2[0].type, "tool-output-available");
+		});
+
+		it("preserves last known rawInput across multiple pending updates", () => {
+			const state = createStreamState();
+
+			// First: pending with empty input
+			const toolCall1: ToolCall = {
+				toolCallId: "tc-1",
+				title: "Bash",
+				status: "pending",
+				rawInput: {},
+			};
+			createToolCallChunks(toolCall1, state);
+
+			// Second: pending with populated input
+			const toolCall2: ToolCall = {
+				toolCallId: "tc-1",
+				title: "`ls -la`",
+				status: "pending",
+				rawInput: { command: "ls -la" },
+			};
+			createToolCallChunks(toolCall2, state);
+
+			// Third: completed without rawInput - should use last known
+			const toolCall3: ToolCall = {
+				toolCallId: "tc-1",
+				title: "`ls -la`",
+				status: "completed",
+				rawOutput: "file1.txt",
+			};
+			const chunks = createToolCallChunks(toolCall3, state);
+
+			// Should emit input-available with the last known input
+			assert.equal(chunks.length, 2);
+			assert.equal(chunks[0].type, "tool-input-available");
+			if (chunks[0].type === "tool-input-available") {
+				assert.deepEqual(chunks[0].input, { command: "ls -la" });
+			}
+		});
 	});
 
 	describe("createToolCallUpdateChunks", () => {
@@ -1099,6 +1228,115 @@ describe("stream fixtures", () => {
 			sessionUpdates: [],
 			expectedChunks: [
 				{ type: "start", messageId: "msg-empty" },
+				{ type: "finish" },
+			],
+		},
+		{
+			name: "Claude Code flow: text → tool (pending → completed) → text",
+			messageId: "msg-claude-code",
+			sessionUpdates: [
+				// Text before tool
+				{
+					sessionUpdate: "agent_message_chunk",
+					content: { type: "text", text: "I'll list the files." },
+				},
+				// Tool call with pending status and empty input
+				{
+					sessionUpdate: "tool_call",
+					toolCallId: "tc-bash",
+					title: "Terminal",
+					status: "pending",
+					rawInput: {},
+					_meta: { claudeCode: { toolName: "Bash" } },
+				},
+				// Tool call with pending status and populated input
+				{
+					sessionUpdate: "tool_call",
+					toolCallId: "tc-bash",
+					title: "`ls -la /tmp`",
+					status: "pending",
+					rawInput: { command: "ls -la /tmp", description: "List files" },
+					_meta: { claudeCode: { toolName: "Bash" } },
+				},
+				// Tool call update with toolResponse in _meta (skipping in_progress)
+				{
+					sessionUpdate: "tool_call_update",
+					toolCallId: "tc-bash",
+					_meta: {
+						claudeCode: {
+							toolName: "Bash",
+							toolResponse: {
+								stdout: "file1.txt\nfile2.txt",
+								stderr: "",
+								interrupted: false,
+							},
+						},
+					},
+				},
+				// Tool call update with completed status
+				{
+					sessionUpdate: "tool_call_update",
+					toolCallId: "tc-bash",
+					title: "`ls -la /tmp`",
+					status: "completed",
+					content: [
+						{
+							type: "content",
+							content: { type: "text", text: "file1.txt\nfile2.txt" },
+						},
+					],
+					_meta: { claudeCode: { toolName: "Bash" } },
+				},
+				// Text after tool
+				{
+					sessionUpdate: "agent_message_chunk",
+					content: { type: "text", text: "Found 2 files." },
+				},
+			],
+			expectedChunks: [
+				{ type: "start", messageId: "msg-claude-code" },
+				// First text block
+				{ type: "text-start", id: "text-msg-claude-code-1" },
+				{
+					type: "text-delta",
+					id: "text-msg-claude-code-1",
+					delta: "I'll list the files.",
+				},
+				{ type: "text-end", id: "text-msg-claude-code-1" },
+				// Tool start
+				{
+					type: "tool-input-start",
+					toolCallId: "tc-bash",
+					toolName: "Bash",
+					title: "Terminal",
+					providerMetadata: { claudeCode: { toolName: "Bash" } },
+					dynamic: true,
+				},
+				// Input available (fallback before output since in_progress was skipped)
+				{
+					type: "tool-input-available",
+					toolCallId: "tc-bash",
+					toolName: "Bash",
+					title: "`ls -la /tmp`",
+					input: { command: "ls -la /tmp", description: "List files" },
+					providerMetadata: { claudeCode: { toolName: "Bash" } },
+					dynamic: true,
+				},
+				// Output available
+				{
+					type: "tool-output-available",
+					toolCallId: "tc-bash",
+					output: "file1.txt\nfile2.txt",
+					dynamic: true,
+				},
+				// Second text block (different ID)
+				{ type: "text-start", id: "text-msg-claude-code-2" },
+				{
+					type: "text-delta",
+					id: "text-msg-claude-code-2",
+					delta: "Found 2 files.",
+				},
+				{ type: "text-end", id: "text-msg-claude-code-2" },
 				{ type: "finish" },
 			],
 		},
