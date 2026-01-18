@@ -48,6 +48,23 @@ COPY proxy/ ./proxy/
 # Build the proxy binary
 RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /proxy ./proxy/cmd/proxy
 
+# Stage 2b: Build the agent init process from source
+FROM golang:1.25 AS agent-builder
+
+WORKDIR /build
+
+# Copy module files first for better caching
+COPY go.mod go.sum ./
+
+# Download dependencies
+RUN go mod download
+
+# Copy agent source
+COPY agent/ ./agent/
+
+# Build the agent binary (static for portability)
+RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /obot-agent ./agent/cmd/agent
+
 # Stage 3: Build the Bun standalone binary (glibc)
 FROM oven/bun:1 AS bun-builder
 
@@ -95,14 +112,22 @@ RUN bun build ./src/index.ts \
 # Stage 4: Minimal Ubuntu runtime
 FROM ubuntu:24.04 AS runtime
 
-# Install only essential runtime dependencies
+# Install all apt packages first for better layer caching
+# (apt-get changes infrequently; binary copies change with each code change)
+# git is needed for workspace cloning
 # socat is needed for vsock forwarding in VZ VMs
-# tini is a minimal init for proper child process reaping (PID 1)
+# nodejs is needed for claude-code-acp
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
+    curl \
+    git \
     socat \
-    tini \
-    && rm -rf /var/lib/apt/lists/*
+    && curl -fsSL https://deb.nodesource.com/setup_25.x | bash - \
+    && apt-get install -y --no-install-recommends nodejs \
+    && npm install -g @zed-industries/claude-code-acp \
+    && apt-get purge -y curl \
+    && apt-get autoremove -y \
+    && rm -rf /var/lib/apt/lists/* /root/.npm
 
 # Create octobot user (handle case where UID 1000 already exists)
 RUN useradd -m -s /bin/bash -u 1000 octobot 2>/dev/null \
@@ -118,35 +143,25 @@ RUN mkdir -p /.data /.workspace /data /workspace /opt/octobot/bin \
     && chown octobot:octobot /.data /data /workspace
 
 # Copy binaries to /opt/octobot/bin
+# (placed after apt-get so code changes don't invalidate apt cache)
 COPY --from=bun-builder /app/obot-agent-api /opt/octobot/bin/obot-agent-api
 COPY --from=bun-builder-musl /app/obot-agent-api.musl /opt/octobot/bin/obot-agent-api.musl
 COPY --from=agentfs-builder /build/agentfs-bin /opt/octobot/bin/agentfs
 COPY --from=proxy-builder /proxy /opt/octobot/bin/proxy
+COPY --from=agent-builder /obot-agent /opt/octobot/bin/obot-agent
 RUN chmod +x /opt/octobot/bin/*
 
 # Add octobot binaries to PATH
 ENV PATH="/opt/octobot/bin:${PATH}"
 
-# Install claude-code-acp
-# We need Node.js 20+ for this npm package (uses import attributes syntax)
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates \
-    curl \
-    && curl -fsSL https://deb.nodesource.com/setup_25.x | bash - \
-    && apt-get install -y --no-install-recommends nodejs \
-    && npm install -g @zed-industries/claude-code-acp \
-    && apt-get purge -y curl \
-    && apt-get autoremove -y \
-    && rm -rf /var/lib/apt/lists/* /root/.npm
-
 WORKDIR /workspace
 
 EXPOSE 3002
 
-# Use tini as init to handle signals and reap zombie processes
-# Container starts as root for flexibility in mounting volumes
-ENTRYPOINT ["/usr/bin/tini", "--"]
-CMD ["/opt/octobot/bin/obot-agent-api"]
+# Use obot-agent as PID 1 init process
+# It handles signal forwarding, process reaping, and user switching
+# Container starts as root; obot-agent switches to octobot user for the API
+CMD ["/opt/octobot/bin/obot-agent"]
 
 # Stage 5: VZ disk image builder (non-default target)
 # Build with: docker build --target vz-disk-image --output type=local,dest=. .
@@ -195,9 +210,9 @@ mount -t virtiofs octobot-data /.data 2>/dev/null || true\n\
 # Mount workspace from host at /.workspace (read-only)\n\
 mount -t virtiofs octobot-workspace /.workspace 2>/dev/null || true\n\
 \n\
-# Start the agent\n\
+# Start the agent (obot-agent handles user switching and process reaping)\n\
 cd /workspace\n\
-exec /opt/octobot/bin/obot-agent-api\n\
+exec /opt/octobot/bin/obot-agent\n\
 ' > /rootfs/init \
     && chmod +x /rootfs/init
 
