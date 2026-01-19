@@ -113,7 +113,33 @@ type SSELine struct {
 	Done bool
 }
 
+// ensureRunning ensures the sandbox is running, starting it if necessary.
+// Returns nil if the sandbox is running, or an error if it cannot be started.
+func (c *SandboxChatClient) ensureRunning(ctx context.Context, sessionID string) error {
+	sb, err := c.provider.Get(ctx, sessionID)
+	if err != nil {
+		return fmt.Errorf("failed to get sandbox: %w", err)
+	}
+
+	// Already running
+	if sb.Status == sandbox.StatusRunning {
+		return nil
+	}
+
+	// Try to start if created or stopped
+	if sb.Status == sandbox.StatusCreated || sb.Status == sandbox.StatusStopped {
+		if err := c.provider.Start(ctx, sessionID); err != nil {
+			return fmt.Errorf("failed to start sandbox: %w", err)
+		}
+		return nil
+	}
+
+	// Failed or unknown status
+	return fmt.Errorf("sandbox is in %s state and cannot be started", sb.Status)
+}
+
 // getSandboxURL returns the base URL for the sandbox's HTTP endpoint.
+// Assumes the sandbox is already running - call ensureRunning first.
 func (c *SandboxChatClient) getSandboxURL(ctx context.Context, sessionID string) (string, error) {
 	sb, err := c.provider.Get(ctx, sessionID)
 	if err != nil {
@@ -171,10 +197,16 @@ func (c *SandboxChatClient) applyRequestAuth(ctx context.Context, req *http.Requ
 }
 
 // SendMessages sends messages to the sandbox and returns a channel of raw SSE lines.
-// The sandbox is expected to respond with SSE events in AI SDK UIMessage Stream format.
-// Messages and responses are passed through without parsing.
+// The sandbox returns 202 Accepted to start a background completion, then we call
+// GetStream to receive the SSE events.
+// Automatically starts the sandbox if it's not running.
 // Retries with exponential backoff on connection errors and 5xx responses.
 func (c *SandboxChatClient) SendMessages(ctx context.Context, sessionID string, messages json.RawMessage, opts *RequestOptions) (<-chan SSELine, error) {
+	// Ensure sandbox is running before sending messages
+	if err := c.ensureRunning(ctx, sessionID); err != nil {
+		return nil, err
+	}
+
 	// Build the request body once - pass messages through as-is
 	reqBody := sandboxapi.ChatRequest{Messages: messages}
 	bodyBytes, err := json.Marshal(reqBody)
@@ -186,10 +218,6 @@ func (c *SandboxChatClient) SendMessages(ctx context.Context, sessionID string, 
 	resp, err := retryWithBackoff(ctx, func() (*http.Response, int, error) {
 		baseURL, err := c.getSandboxURL(ctx, sessionID)
 		if err != nil {
-			// Treat sandbox not running as retryable
-			if strings.Contains(err.Error(), "sandbox is not running") {
-				return nil, 0, fmt.Errorf("connection refused: %w", err)
-			}
 			return nil, 0, err
 		}
 
@@ -199,7 +227,6 @@ func (c *SandboxChatClient) SendMessages(ctx context.Context, sessionID string, 
 			return nil, 0, fmt.Errorf("failed to create request: %w", err)
 		}
 		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("Accept", "text/event-stream")
 
 		if err := c.applyRequestAuth(ctx, req, sessionID, opts); err != nil {
 			return nil, 0, err
@@ -216,6 +243,64 @@ func (c *SandboxChatClient) SendMessages(ctx context.Context, sessionID string, 
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to send request: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	// Agent returns 202 Accepted when completion starts in background
+	if resp.StatusCode != http.StatusAccepted {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("sandbox returned status %d: %s", resp.StatusCode, string(body))
+	}
+
+	// Completion started - now get the SSE stream
+	return c.GetStream(ctx, sessionID, opts)
+}
+
+// GetStream connects to the sandbox's SSE stream for an in-progress completion.
+// Returns a channel of raw SSE lines. If no completion is in progress, the sandbox
+// returns 204 No Content and this method returns an empty closed channel.
+// Automatically starts the sandbox if it's not running.
+// Retries with exponential backoff on connection errors and 5xx responses.
+func (c *SandboxChatClient) GetStream(ctx context.Context, sessionID string, opts *RequestOptions) (<-chan SSELine, error) {
+	// Ensure sandbox is running before connecting to stream
+	if err := c.ensureRunning(ctx, sessionID); err != nil {
+		return nil, err
+	}
+
+	// Use retry logic to handle container startup delays
+	resp, err := retryWithBackoff(ctx, func() (*http.Response, int, error) {
+		baseURL, err := c.getSandboxURL(ctx, sessionID)
+		if err != nil {
+			return nil, 0, err
+		}
+
+		req, err := http.NewRequestWithContext(ctx, "GET", baseURL+"/chat", nil)
+		if err != nil {
+			return nil, 0, fmt.Errorf("failed to create request: %w", err)
+		}
+		req.Header.Set("Accept", "text/event-stream")
+
+		if err := c.applyRequestAuth(ctx, req, sessionID, opts); err != nil {
+			return nil, 0, err
+		}
+
+		resp, err := c.client.Do(req)
+		if err != nil {
+			return nil, 0, err
+		}
+
+		return resp, resp.StatusCode, nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to send request: %w", err)
+	}
+
+	// 204 No Content means no completion in progress
+	if resp.StatusCode == http.StatusNoContent {
+		_ = resp.Body.Close()
+		ch := make(chan SSELine)
+		close(ch)
+		return ch, nil
 	}
 
 	if resp.StatusCode != http.StatusOK {
@@ -269,16 +354,18 @@ func (c *SandboxChatClient) SendMessages(ctx context.Context, sessionID string, 
 
 // GetMessages retrieves message history from the sandbox.
 // The sandbox is expected to respond with an array of UIMessages.
+// Automatically starts the sandbox if it's not running.
 // Retries with exponential backoff on connection errors and 5xx responses.
 func (c *SandboxChatClient) GetMessages(ctx context.Context, sessionID string, opts *RequestOptions) ([]sandboxapi.UIMessage, error) {
+	// Ensure sandbox is running before fetching messages
+	if err := c.ensureRunning(ctx, sessionID); err != nil {
+		return nil, err
+	}
+
 	// Use retry logic to handle container startup delays
 	resp, err := retryWithBackoff(ctx, func() (*http.Response, int, error) {
 		baseURL, err := c.getSandboxURL(ctx, sessionID)
 		if err != nil {
-			// Treat sandbox not running as retryable
-			if strings.Contains(err.Error(), "sandbox is not running") {
-				return nil, 0, fmt.Errorf("connection refused: %w", err)
-			}
 			return nil, 0, err
 		}
 

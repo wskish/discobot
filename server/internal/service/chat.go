@@ -163,13 +163,13 @@ func (c *ChatService) SendToSandbox(ctx context.Context, projectID, sessionID st
 	// Fetch credentials for the project
 	opts := c.getCredentialOpts(ctx, projectID)
 
-	// Try to send to sandbox
+	// Try to send to sandbox (client auto-starts if stopped)
 	ch, err := c.sandboxClient.SendMessages(ctx, sessionID, messages, opts)
 	if err != nil {
-		// Check if sandbox doesn't exist or isn't running - recreate it on-demand
+		// Check if sandbox doesn't exist - recreate it on-demand
 		// Sandboxes are stateless and can be recreated from the session configuration
-		if errors.Is(err, sandbox.ErrNotFound) || errors.Is(err, sandbox.ErrNotRunning) || isSandboxUnavailableError(err) {
-			log.Printf("Sandbox unavailable for session %s, reinitializing on-demand: %v", sessionID, err)
+		if errors.Is(err, sandbox.ErrNotFound) || isSandboxNotFoundError(err) {
+			log.Printf("Sandbox not found for session %s, reinitializing on-demand: %v", sessionID, err)
 
 			// Update session status to show reinitialization is happening
 			if _, statusErr := c.sessionService.UpdateStatus(ctx, sessionID, model.SessionStatusReinitializing, nil); statusErr != nil {
@@ -197,17 +197,17 @@ func (c *ChatService) SendToSandbox(ctx context.Context, projectID, sessionID st
 	return ch, nil
 }
 
-// isSandboxUnavailableError checks if the error indicates the sandbox is unavailable
-// and should be recreated. This handles cases where the error message indicates
-// the sandbox doesn't exist or isn't running, but wasn't wrapped with sentinel errors.
-func isSandboxUnavailableError(err error) bool {
+// isSandboxNotFoundError checks if the error indicates the sandbox doesn't exist
+// and needs to be recreated. This handles cases where the error message indicates
+// the sandbox doesn't exist, but wasn't wrapped with sentinel errors.
+// Note: "not running" errors are handled by the client's auto-start logic.
+func isSandboxNotFoundError(err error) bool {
 	if err == nil {
 		return false
 	}
 	errStr := err.Error()
-	// Check for common sandbox unavailability messages
+	// Check for common sandbox not found messages
 	return strings.Contains(errStr, "sandbox not found") ||
-		strings.Contains(errStr, "sandbox is not running") ||
 		strings.Contains(errStr, "container not found") ||
 		strings.Contains(errStr, "No such container")
 }
@@ -233,8 +233,27 @@ func (c *ChatService) getCredentialOpts(ctx context.Context, projectID string) *
 	return &RequestOptions{Credentials: creds}
 }
 
+// GetStream returns a channel of SSE events for an in-progress completion.
+// If no completion is in progress, returns an empty closed channel.
+// This is used by the resume endpoint to catch up on events.
+func (c *ChatService) GetStream(ctx context.Context, projectID, sessionID string) (<-chan SSELine, error) {
+	// Validate session belongs to project
+	_, err := c.GetSession(ctx, projectID, sessionID)
+	if err != nil {
+		return nil, err
+	}
+
+	if c.sandboxClient == nil {
+		return nil, fmt.Errorf("sandbox provider not available")
+	}
+
+	opts := c.getCredentialOpts(ctx, projectID)
+	return c.sandboxClient.GetStream(ctx, sessionID, opts)
+}
+
 // GetMessages returns all messages for a session by querying the sandbox.
-// Returns empty slice if sandbox is not available or not running.
+// The sandbox is automatically started if it's not running.
+// Returns an error if the sandbox cannot be reached or doesn't exist.
 func (c *ChatService) GetMessages(ctx context.Context, projectID, sessionID string) ([]sandboxapi.UIMessage, error) {
 	// Validate session belongs to project
 	_, err := c.GetSession(ctx, projectID, sessionID)
@@ -243,18 +262,11 @@ func (c *ChatService) GetMessages(ctx context.Context, projectID, sessionID stri
 	}
 
 	if c.sandboxClient == nil {
-		// Sandbox provider not available, return empty messages
-		return []sandboxapi.UIMessage{}, nil
+		return nil, fmt.Errorf("sandbox provider not available")
 	}
 
 	opts := c.getCredentialOpts(ctx, projectID)
-	messages, err := c.sandboxClient.GetMessages(ctx, sessionID, opts)
-	if err != nil {
-		// Sandbox not running or not accessible, return empty messages
-		return []sandboxapi.UIMessage{}, nil
-	}
-
-	return messages, nil
+	return c.sandboxClient.GetMessages(ctx, sessionID, opts)
 }
 
 // deriveSessionName attempts to extract a session name from the messages.
