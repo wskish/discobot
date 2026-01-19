@@ -13,32 +13,32 @@
  * - React Profiler tracks render counts
  */
 
-import { Profiler, type ProfilerOnRenderCallback } from "react";
-import { render, screen, cleanup, act } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
-import { test, describe, afterEach } from "node:test";
 import assert from "node:assert";
-
+import { afterEach, describe, test } from "node:test";
+import { act, cleanup, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { Profiler, type ProfilerOnRenderCallback } from "react";
+import { SWRConfig } from "swr";
+import { DialogProvider } from "../../lib/contexts/dialog-context.js";
 // Import the actual providers and components
 import { SessionProvider } from "../../lib/contexts/session-context.js";
-import { DialogProvider } from "../../lib/contexts/dialog-context.js";
 import { ChatPanel } from "./chat-panel.js";
-import { SWRConfig } from "swr";
 
 // Wrapper component that provides all necessary contexts
 function TestWrapper({ children }: { children: React.ReactNode }) {
 	return (
-		<SWRConfig value={{
-			provider: () => new Map(),
-			dedupingInterval: 0,
-			revalidateOnFocus: false,
-			revalidateOnReconnect: false,
-			fetcher: () => Promise.resolve({ workspaces: [], agents: [], agentTypes: [] })
-		}}>
+		<SWRConfig
+			value={{
+				provider: () => new Map(),
+				dedupingInterval: 0,
+				revalidateOnFocus: false,
+				revalidateOnReconnect: false,
+				fetcher: () =>
+					Promise.resolve({ workspaces: [], agents: [], agentTypes: [] }),
+			}}
+		>
 			<SessionProvider>
-				<DialogProvider>
-					{children}
-				</DialogProvider>
+				<DialogProvider>{children}</DialogProvider>
 			</SessionProvider>
 		</SWRConfig>
 	);
@@ -63,35 +63,39 @@ describe("ChatPanel", () => {
 					<Profiler id="ChatPanel" onRender={onRender}>
 						<ChatPanel />
 					</Profiler>
-				</TestWrapper>
+				</TestWrapper>,
 			);
 
 			// Wait for initial effects to settle
 			await act(async () => {
-				await new Promise(resolve => setTimeout(resolve, 100));
+				await new Promise((resolve) => setTimeout(resolve, 100));
 			});
 
-			const countAfterSetup = renderCounts["ChatPanel"];
-			const textarea = screen.getByPlaceholderText(/what would you like to work on/i);
+			const countAfterSetup = renderCounts.ChatPanel;
+			const textarea = screen.getByPlaceholderText(
+				/what would you like to work on/i,
+			);
 
 			// Type "hello" (5 characters)
 			await user.type(textarea, "hello");
 
 			await act(async () => {
-				await new Promise(resolve => setTimeout(resolve, 50));
+				await new Promise((resolve) => setTimeout(resolve, 50));
 			});
 
-			const countAfterTyping = renderCounts["ChatPanel"];
+			const countAfterTyping = renderCounts.ChatPanel;
 			const rendersFromTyping = countAfterTyping - countAfterSetup;
 
-			console.log(`[ChatPanel render test] setup=${countAfterSetup}, afterTyping=${countAfterTyping}, fromTyping=${rendersFromTyping}`);
+			console.log(
+				`[ChatPanel render test] setup=${countAfterSetup}, afterTyping=${countAfterTyping}, fromTyping=${rendersFromTyping}`,
+			);
 
 			// Document current behavior - ideally this should be 0
 			// If input state is properly isolated, typing shouldn't cause ChatPanel re-renders
 			// This test serves as a regression detector
 			assert.ok(
 				countAfterSetup >= 1,
-				`ChatPanel should render at least once on mount (got ${countAfterSetup})`
+				`ChatPanel should render at least once on mount (got ${countAfterSetup})`,
 			);
 		});
 	});

@@ -44,9 +44,6 @@ type ToolUpdate = (ToolCall | ToolCallUpdate) & {
 	sessionUpdate: "tool_call" | "tool_call_update";
 };
 
-// Header name for credentials passed from server
-const CREDENTIALS_HEADER = "X-Octobot-Credentials";
-
 export type StartCompletionResult =
 	| { ok: true; status: 202; response: ChatStartedResponse }
 	| { ok: false; status: 409; response: ChatConflictResponse }
@@ -146,7 +143,7 @@ export function tryStartCompletion(
  */
 function runCompletion(
 	acpClient: ACPClient,
-	completionId: string,
+	_completionId: string,
 	lastUserMessage: UIMessage,
 	credentialsChanged: boolean,
 	credentialEnv: Record<string, string>,

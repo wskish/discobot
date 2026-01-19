@@ -229,9 +229,9 @@ func (s *SandboxService) ReconcileSandboxes(ctx context.Context) error {
 // after ReconcileSandboxes.
 //
 // This handles two cases:
-// 1. Sessions marked "running" but sandbox is missing/stopped/failed
-// 2. Sessions stuck in intermediate states (initializing, creating_sandbox, etc.)
-//    where the server died mid-creation and the sandbox doesn't exist
+//  1. Sessions marked "running" but sandbox is missing/stopped/failed
+//  2. Sessions stuck in intermediate states (initializing, creating_sandbox, etc.)
+//     where the server died mid-creation and the sandbox doesn't exist
 func (s *SandboxService) ReconcileSessionStates(ctx context.Context) error {
 	// Get all sessions that need reconciliation:
 	// - "running" sessions where sandbox might have died

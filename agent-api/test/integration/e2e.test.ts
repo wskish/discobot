@@ -158,7 +158,11 @@ describe("Agent Service E2E Tests", () => {
 				// Wait for completion to finish
 				const finalStatus = await waitForCompletion(app);
 				assert.equal(finalStatus.isRunning, false);
-				assert.equal(finalStatus.error, null, "Completion should not have error");
+				assert.equal(
+					finalStatus.error,
+					null,
+					"Completion should not have error",
+				);
 			},
 		);
 	});

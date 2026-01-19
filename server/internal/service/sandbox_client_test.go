@@ -300,8 +300,8 @@ func TestSandboxChatClient_SendMessages_WithCredentials(t *testing.T) {
 		t.Fatalf("SendMessages failed: %v", err)
 	}
 
-	// Drain channel
-	for range ch {
+	// Drain channel to completion
+	for range ch { //nolint:revive // empty block intentionally drains channel
 	}
 
 	// Verify credentials were sent
@@ -347,8 +347,8 @@ func TestSandboxChatClient_SendMessages_WithAuthorization(t *testing.T) {
 		t.Fatalf("SendMessages failed: %v", err)
 	}
 
-	// Drain channel
-	for range ch {
+	// Drain channel to completion
+	for range ch { //nolint:revive // empty block intentionally drains channel
 	}
 
 	// Verify authorization header was set

@@ -563,9 +563,9 @@ func (m *mockRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) 
 
 // pipeResponseWriter implements http.ResponseWriter writing to a pipe.
 type pipeResponseWriter struct {
-	header     http.Header
-	statusCode int
-	pipe       *io.PipeWriter
+	header      http.Header
+	statusCode  int
+	pipe        *io.PipeWriter
 	wroteHeader bool
 }
 

@@ -3,10 +3,13 @@
 
 import { JSDOM } from "jsdom";
 
-const dom = new JSDOM("<!DOCTYPE html><html><body><div id=\"root\"></div></body></html>", {
-	url: "http://localhost",
-	pretendToBeVisual: true,
-});
+const dom = new JSDOM(
+	'<!DOCTYPE html><html><body><div id="root"></div></body></html>',
+	{
+		url: "http://localhost",
+		pretendToBeVisual: true,
+	},
+);
 
 // Helper to define globals (handles read-only properties)
 function defineGlobal(name, value) {
@@ -44,19 +47,24 @@ defineGlobal("requestAnimationFrame", (cb) => setTimeout(cb, 0));
 defineGlobal("cancelAnimationFrame", (id) => clearTimeout(id));
 
 // Mock ResizeObserver
-defineGlobal("ResizeObserver", class ResizeObserver {
-	observe() {}
-	unobserve() {}
-	disconnect() {}
-});
+defineGlobal(
+	"ResizeObserver",
+	class ResizeObserver {
+		observe() {}
+		unobserve() {}
+		disconnect() {}
+	},
+);
 
 // Mock IntersectionObserver
-defineGlobal("IntersectionObserver", class IntersectionObserver {
-	constructor() {}
-	observe() {}
-	unobserve() {}
-	disconnect() {}
-});
+defineGlobal(
+	"IntersectionObserver",
+	class IntersectionObserver {
+		observe() {}
+		unobserve() {}
+		disconnect() {}
+	},
+);
 
 // Mock matchMedia
 defineGlobal("matchMedia", (query) => ({
@@ -89,7 +97,7 @@ defineGlobal("fetch", async (url, options) => {
 	if (typeof url === "string" && url.startsWith("/api")) {
 		return new Response(JSON.stringify({}), {
 			status: 200,
-			headers: { "Content-Type": "application/json" }
+			headers: { "Content-Type": "application/json" },
 		});
 	}
 	// Fall back to original fetch for other URLs

@@ -246,8 +246,8 @@ func (c *ChatService) reconcileSandbox(ctx context.Context, projectID, sessionID
 // withSandboxReconciliation wraps a sandbox operation with error handling
 // that triggers reconciliation on sandbox unavailable errors, then retries.
 func withSandboxReconciliation[T any](
-	c *ChatService,
 	ctx context.Context,
+	c *ChatService,
 	projectID, sessionID string,
 	operation func() (T, error),
 ) (T, error) {
@@ -296,7 +296,7 @@ func (c *ChatService) SendToSandbox(ctx context.Context, projectID, sessionID st
 	opts := c.getCredentialOpts(ctx, projectID)
 
 	// Use reconciliation wrapper for runtime errors (e.g., container deleted but DB says running)
-	return withSandboxReconciliation(c, ctx, projectID, sessionID, func() (<-chan SSELine, error) {
+	return withSandboxReconciliation(ctx, c, projectID, sessionID, func() (<-chan SSELine, error) {
 		return c.sandboxClient.SendMessages(ctx, sessionID, messages, opts)
 	})
 }
@@ -359,7 +359,7 @@ func (c *ChatService) GetStream(ctx context.Context, projectID, sessionID string
 	opts := c.getCredentialOpts(ctx, projectID)
 
 	// Use reconciliation wrapper for runtime errors
-	return withSandboxReconciliation(c, ctx, projectID, sessionID, func() (<-chan SSELine, error) {
+	return withSandboxReconciliation(ctx, c, projectID, sessionID, func() (<-chan SSELine, error) {
 		return c.sandboxClient.GetStream(ctx, sessionID, opts)
 	})
 }
@@ -385,7 +385,7 @@ func (c *ChatService) GetMessages(ctx context.Context, projectID, sessionID stri
 	opts := c.getCredentialOpts(ctx, projectID)
 
 	// Use reconciliation wrapper for runtime errors
-	return withSandboxReconciliation(c, ctx, projectID, sessionID, func() ([]sandboxapi.UIMessage, error) {
+	return withSandboxReconciliation(ctx, c, projectID, sessionID, func() ([]sandboxapi.UIMessage, error) {
 		return c.sandboxClient.GetMessages(ctx, sessionID, opts)
 	})
 }

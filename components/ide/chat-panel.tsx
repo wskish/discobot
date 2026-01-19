@@ -689,7 +689,9 @@ export function ChatPanel({ className }: ChatPanelProps) {
 											</>
 										) : (
 											<>
-												<span className="text-muted-foreground">Select agent</span>
+												<span className="text-muted-foreground">
+													Select agent
+												</span>
 												<ChevronDown className="h-4 w-4 shrink-0 opacity-50" />
 											</>
 										)}
@@ -770,7 +772,10 @@ export function ChatPanel({ className }: ChatPanelProps) {
 											onClick={() => setLocalSelectedWorkspaceId(ws.id)}
 											className="gap-2"
 										>
-											<WorkspaceIcon path={ws.path} className="h-4 w-4 shrink-0" />
+											<WorkspaceIcon
+												path={ws.path}
+												className="h-4 w-4 shrink-0"
+											/>
 											<span className="truncate">
 												{getWorkspaceDisplayName(ws.path)}
 											</span>
@@ -872,11 +877,7 @@ export function ChatPanel({ className }: ChatPanelProps) {
 						: "px-4 py-4 border-t border-border",
 				)}
 			>
-				<Input
-					onSubmit={handleSubmit}
-					status={status}
-					className="max-w-full"
-				>
+				<Input onSubmit={handleSubmit} status={status} className="max-w-full">
 					<PromptInputAttachmentsPreview />
 					<PromptInputTextarea
 						placeholder={

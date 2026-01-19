@@ -97,14 +97,8 @@ describe("GET /chat SSE endpoint", () => {
 
 			// Verify events are present in the stream
 			assert.ok(body.includes("data:"), "Should contain SSE data lines");
-			assert.ok(
-				body.includes("msg-sse-test"),
-				"Should contain the message ID",
-			);
-			assert.ok(
-				body.includes("Hello World"),
-				"Should contain the text delta",
-			);
+			assert.ok(body.includes("msg-sse-test"), "Should contain the message ID");
+			assert.ok(body.includes("Hello World"), "Should contain the text delta");
 			assert.ok(body.includes("[DONE]"), "Should contain [DONE] signal");
 		});
 	});

@@ -234,8 +234,6 @@ func (s *testSandboxSetup) createSandboxWithImage(t *testing.T, sessionID, image
 }
 
 func TestReconcileSandboxes_ReplacesOutdatedImage(t *testing.T) {
-	
-	
 	setup := newTestSandboxSetup(t)
 	ctx := context.Background()
 
@@ -289,7 +287,6 @@ func TestReconcileSandboxes_ReplacesOutdatedImage(t *testing.T) {
 }
 
 func TestReconcileSandboxes_SkipsCorrectImage(t *testing.T) {
-	
 	setup := newTestSandboxSetup(t)
 	ctx := context.Background()
 
@@ -337,7 +334,6 @@ func TestReconcileSandboxes_SkipsCorrectImage(t *testing.T) {
 }
 
 func TestReconcileSandboxes_RemovesOrphanedSandboxes(t *testing.T) {
-	
 	setup := newTestSandboxSetup(t)
 	ctx := context.Background()
 
@@ -372,7 +368,6 @@ func TestReconcileSandboxes_RemovesOrphanedSandboxes(t *testing.T) {
 }
 
 func TestReconcileSandboxes_MultipleSandboxes(t *testing.T) {
-	
 	setup := newTestSandboxSetup(t)
 	ctx := context.Background()
 
@@ -445,7 +440,6 @@ func TestReconcileSandboxes_MultipleSandboxes(t *testing.T) {
 }
 
 func TestReconcileSandboxes_NoSandboxes(t *testing.T) {
-	
 	setup := newTestSandboxSetup(t)
 	ctx := context.Background()
 

@@ -86,14 +86,17 @@ describe("Completion State", () => {
 			assert.equal(state.error, "Something went wrong");
 		});
 
-		it("clears completion events on finish", () => {
+		it("does not clear completion events on finish (they persist for SSE replay)", () => {
 			startCompletion("test-completion");
 			const event: UIMessageChunk = { type: "start", messageId: "msg-1" };
 			addCompletionEvent(event);
 			assert.equal(getCompletionEvents().length, 1);
 
 			finishCompletion();
-			assert.equal(getCompletionEvents().length, 0);
+			// Events are NOT cleared on finish - SSE handler needs them
+			// Events are cleared at start of next completion via clearCompletionEvents()
+			assert.equal(getCompletionEvents().length, 1);
+			clearCompletionEvents(); // Cleanup
 		});
 	});
 
@@ -270,8 +273,10 @@ describe("Completion events workflow", () => {
 
 		// Verify state after finish
 		assert.equal(isCompletionRunning(), false);
-		assert.equal(getCompletionEvents().length, 0); // Events cleared
+		// Events are NOT cleared on finish - they persist for SSE replay
+		assert.equal(getCompletionEvents().length, 6);
 		assert.equal(getCompletionState().error, null);
+		clearCompletionEvents(); // Cleanup
 	});
 
 	it("handles completion with error", () => {

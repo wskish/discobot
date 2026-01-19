@@ -80,7 +80,9 @@ export function createApp(options: AppOptions) {
 				const sendNewEvents = async () => {
 					const events = getCompletionEvents();
 					while (lastEventIndex < events.length) {
-						await stream.writeSSE({ data: JSON.stringify(events[lastEventIndex]) });
+						await stream.writeSSE({
+							data: JSON.stringify(events[lastEventIndex]),
+						});
 						lastEventIndex++;
 					}
 				};
