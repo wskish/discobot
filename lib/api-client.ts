@@ -41,6 +41,11 @@ class ApiClient {
 			},
 		});
 
+		// Treat 404 as success for DELETE requests (resource already gone)
+		if (options?.method === "DELETE" && response.status === 404) {
+			return undefined as T;
+		}
+
 		if (!response.ok) {
 			const error = await response
 				.json()
