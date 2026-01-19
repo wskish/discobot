@@ -31,6 +31,7 @@ This is a monorepo with three main components:
 ├── app/                    # Next.js frontend (UI)
 ├── components/             # React components
 ├── lib/                    # Shared utilities and hooks
+├── agent/                  # Container init process (Go)
 ├── agent-api/              # Container agent API service (TypeScript/Bun)
 ├── server/                 # Go backend server
 ├── proxy/                  # HTTP/SOCKS5 proxy with header injection (Go)
@@ -43,6 +44,7 @@ This is a monorepo with three main components:
 - [UI Architecture](./docs/ui/ARCHITECTURE.md) - Frontend architecture
 - [UI Design Documents](./docs/ui/design/) - UI module designs
 - [Server Documentation](./server/README.md) - Go backend
+- [Agent Documentation](./agent/README.md) - Container init process
 - [Agent API Documentation](./agent-api/README.md) - Container agent API service
 - [Proxy Documentation](./proxy/README.md) - HTTP/SOCKS5 MITM proxy
 

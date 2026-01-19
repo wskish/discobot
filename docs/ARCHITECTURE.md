@@ -6,6 +6,7 @@ This document describes the overall architecture of Octobot, an IDE-like chat in
 
 - [UI Architecture](./ui/ARCHITECTURE.md) - Frontend React/Next.js architecture
 - [Server Documentation](../server/README.md) - Go backend server
+- [Agent Documentation](../agent/README.md) - Container init process (PID 1)
 - [Agent API Documentation](../agent-api/README.md) - Container agent API service
 - [Proxy Documentation](../proxy/README.md) - HTTP/SOCKS5 proxy with header injection
 
@@ -120,9 +121,12 @@ Credentials are encrypted with AES-256-GCM before storage.
          │    │   Agent Container    │     │   MITM Proxy         │
          │    │   (per session)      │     │   (per container)    │
          │    │   ┌──────────────┐   │     │   ┌──────────────┐   │
-         │    │   │ Node.js Agent│   │ ──▶ │   │ HTTP/SOCKS5  │   │
-         │    │   │ + AI CLI     │   │     │   │ + TLS MITM   │   │
-         │    │   └──────────────┘   │     │   └──────────────┘   │
+         │    │   │ obot-agent   │   │     │   │ HTTP/SOCKS5  │   │
+         │    │   │ (PID 1 init) │   │     │   │ + TLS MITM   │   │
+         │    │   │      ↓       │   │     │   └──────────────┘   │
+         │    │   │ obot-agent-  │   │ ──▶ │                      │
+         │    │   │ api + AI CLI │   │     │                      │
+         │    │   └──────────────┘   │     │                      │
          │    └──────────────────────┘     └──────────────────────┘
          │                                            │
          └────────────────┬───────────────────────────┘
@@ -353,5 +357,6 @@ Each workspace will have an associated Docker container:
 
 - [UI Architecture](./ui/ARCHITECTURE.md) - Frontend architecture and components
 - [Server README](../server/README.md) - Go backend documentation
+- [Agent README](../agent/README.md) - Container init process documentation
 - [Agent API README](../agent-api/README.md) - Container agent API documentation
 - [CLAUDE.md](../CLAUDE.md) - AI coding agent guidelines
