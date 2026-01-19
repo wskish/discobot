@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"time"
 
 	"github.com/obot-platform/octobot/server/internal/events"
 	"github.com/obot-platform/octobot/server/internal/model"
@@ -144,15 +145,142 @@ func (c *ChatService) ValidateSessionResources(ctx context.Context, projectID st
 	return nil
 }
 
+// ensureSandboxReady checks the session state from the database and ensures
+// the sandbox is ready. This is a fast check (DB only) for known non-running states.
+// For states like "stopped" or "error", it will trigger reconciliation.
+// For "initializing" states, it will wait briefly then reconcile if still not ready.
+func (c *ChatService) ensureSandboxReady(ctx context.Context, projectID, sessionID string) error {
+	sess, err := c.GetSession(ctx, projectID, sessionID)
+	if err != nil {
+		return err
+	}
+
+	switch sess.Status {
+	case model.SessionStatusRunning:
+		// Fast path: DB says running, assume good
+		return nil
+	case model.SessionStatusStopped, model.SessionStatusError:
+		// Need to reconcile
+		return c.reconcileSandbox(ctx, projectID, sessionID)
+	case model.SessionStatusInitializing, model.SessionStatusReinitializing,
+		model.SessionStatusCloning, model.SessionStatusPullingImage, model.SessionStatusCreatingSandbox:
+		// Still initializing - wait briefly for it to complete
+		if err := c.waitForSessionReady(ctx, sessionID); err != nil {
+			// If wait failed/timed out, try to reconcile
+			log.Printf("Session %s wait failed (%v), attempting reconciliation", sessionID, err)
+			return c.reconcileSandbox(ctx, projectID, sessionID)
+		}
+		return nil
+	default:
+		// Unknown status - try to reconcile
+		return c.reconcileSandbox(ctx, projectID, sessionID)
+	}
+}
+
+// waitForSessionReady polls the session status until it reaches a terminal state.
+// Terminal states are: running, error, or stopped.
+// Returns an error if the session doesn't become ready within the timeout.
+func (c *ChatService) waitForSessionReady(ctx context.Context, sessionID string) error {
+	const (
+		pollInterval = 500 * time.Millisecond
+		maxWait      = 30 * time.Second
+	)
+
+	deadline := time.Now().Add(maxWait)
+	ticker := time.NewTicker(pollInterval)
+	defer ticker.Stop()
+
+	for {
+		sess, err := c.store.GetSessionByID(ctx, sessionID)
+		if err != nil {
+			return fmt.Errorf("session not found: %w", err)
+		}
+
+		switch sess.Status {
+		case model.SessionStatusRunning:
+			return nil
+		case model.SessionStatusError, model.SessionStatusStopped:
+			// Terminal failure state - don't wait, let caller handle reconciliation
+			return fmt.Errorf("session in %s state", sess.Status)
+		}
+
+		// Check timeout
+		if time.Now().After(deadline) {
+			return fmt.Errorf("timeout waiting for session to be ready (status: %s)", sess.Status)
+		}
+
+		// Wait for next poll or context cancellation
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ticker.C:
+			// Continue polling
+		}
+	}
+}
+
+// reconcileSandbox reinitializes the sandbox and updates status with SSE events.
+func (c *ChatService) reconcileSandbox(ctx context.Context, projectID, sessionID string) error {
+	log.Printf("Reconciling sandbox for session %s", sessionID)
+
+	// Update status to reinitializing
+	if _, err := c.sessionService.UpdateStatus(ctx, sessionID, model.SessionStatusReinitializing, nil); err != nil {
+		log.Printf("Warning: failed to update session status for %s: %v", sessionID, err)
+	}
+
+	// Emit SSE event for status change
+	if c.eventBroker != nil {
+		if err := c.eventBroker.PublishSessionUpdated(ctx, projectID, sessionID, model.SessionStatusReinitializing); err != nil {
+			log.Printf("Warning: failed to publish session update event: %v", err)
+		}
+	}
+
+	// Reinitialize the sandbox
+	if err := c.sessionService.Initialize(ctx, sessionID); err != nil {
+		return fmt.Errorf("failed to reinitialize sandbox: %w", err)
+	}
+
+	return nil
+}
+
+// withSandboxReconciliation wraps a sandbox operation with error handling
+// that triggers reconciliation on sandbox unavailable errors, then retries.
+func withSandboxReconciliation[T any](
+	c *ChatService,
+	ctx context.Context,
+	projectID, sessionID string,
+	operation func() (T, error),
+) (T, error) {
+	result, err := operation()
+	if err == nil {
+		return result, nil
+	}
+
+	// Check if sandbox is unavailable - reconcile and retry
+	if errors.Is(err, sandbox.ErrNotFound) || errors.Is(err, sandbox.ErrNotRunning) || isSandboxUnavailableError(err) {
+		log.Printf("Sandbox unavailable for session %s, reconciling: %v", sessionID, err)
+
+		if reconcileErr := c.reconcileSandbox(ctx, projectID, sessionID); reconcileErr != nil {
+			var zero T
+			return zero, fmt.Errorf("sandbox unavailable and failed to reconcile: %w", reconcileErr)
+		}
+
+		// Retry operation after successful reconciliation
+		return operation()
+	}
+
+	var zero T
+	return zero, err
+}
+
 // SendToSandbox sends messages to the sandbox and returns a channel of raw SSE lines.
 // The sandbox handles message storage - we just proxy the stream without parsing.
 // Both messages and responses are passed through as raw data.
 // Credentials for the project are automatically included in the request header.
-// If the sandbox doesn't exist (e.g., container was deleted), it will be recreated on-demand.
+// If the sandbox is not running or doesn't exist, it will be reconciled on-demand.
 func (c *ChatService) SendToSandbox(ctx context.Context, projectID, sessionID string, messages json.RawMessage) (<-chan SSELine, error) {
 	// Validate session belongs to project
-	_, err := c.GetSession(ctx, projectID, sessionID)
-	if err != nil {
+	if _, err := c.GetSession(ctx, projectID, sessionID); err != nil {
 		return nil, err
 	}
 
@@ -160,54 +288,30 @@ func (c *ChatService) SendToSandbox(ctx context.Context, projectID, sessionID st
 		return nil, fmt.Errorf("sandbox provider not available")
 	}
 
-	// Fetch credentials for the project
-	opts := c.getCredentialOpts(ctx, projectID)
-
-	// Try to send to sandbox (client auto-starts if stopped)
-	ch, err := c.sandboxClient.SendMessages(ctx, sessionID, messages, opts)
-	if err != nil {
-		// Check if sandbox doesn't exist - recreate it on-demand
-		// Sandboxes are stateless and can be recreated from the session configuration
-		if errors.Is(err, sandbox.ErrNotFound) || isSandboxNotFoundError(err) {
-			log.Printf("Sandbox not found for session %s, reinitializing on-demand: %v", sessionID, err)
-
-			// Update session status to show reinitialization is happening
-			if _, statusErr := c.sessionService.UpdateStatus(ctx, sessionID, model.SessionStatusReinitializing, nil); statusErr != nil {
-				log.Printf("Warning: failed to update session status for %s: %v", sessionID, statusErr)
-			}
-
-			// Emit SSE event for status change
-			if c.eventBroker != nil {
-				if pubErr := c.eventBroker.PublishSessionUpdated(ctx, projectID, sessionID, model.SessionStatusReinitializing); pubErr != nil {
-					log.Printf("Warning: failed to publish session update event: %v", pubErr)
-				}
-			}
-
-			// Reinitialize the sandbox synchronously
-			if initErr := c.sessionService.Initialize(ctx, sessionID); initErr != nil {
-				return nil, fmt.Errorf("sandbox unavailable and failed to reinitialize: %w", initErr)
-			}
-
-			// Retry sending messages after successful reinitialization
-			return c.sandboxClient.SendMessages(ctx, sessionID, messages, opts)
-		}
+	// Check DB state first - fast reconciliation for known non-running states
+	if err := c.ensureSandboxReady(ctx, projectID, sessionID); err != nil {
 		return nil, err
 	}
 
-	return ch, nil
+	opts := c.getCredentialOpts(ctx, projectID)
+
+	// Use reconciliation wrapper for runtime errors (e.g., container deleted but DB says running)
+	return withSandboxReconciliation(c, ctx, projectID, sessionID, func() (<-chan SSELine, error) {
+		return c.sandboxClient.SendMessages(ctx, sessionID, messages, opts)
+	})
 }
 
-// isSandboxNotFoundError checks if the error indicates the sandbox doesn't exist
-// and needs to be recreated. This handles cases where the error message indicates
-// the sandbox doesn't exist, but wasn't wrapped with sentinel errors.
-// Note: "not running" errors are handled by the client's auto-start logic.
-func isSandboxNotFoundError(err error) bool {
+// isSandboxUnavailableError checks if the error indicates the sandbox is unavailable
+// and should be recreated. This handles cases where the error message indicates
+// the sandbox doesn't exist or isn't running, but wasn't wrapped with sentinel errors.
+func isSandboxUnavailableError(err error) bool {
 	if err == nil {
 		return false
 	}
 	errStr := err.Error()
-	// Check for common sandbox not found messages
+	// Check for common sandbox unavailability messages
 	return strings.Contains(errStr, "sandbox not found") ||
+		strings.Contains(errStr, "sandbox is not running") ||
 		strings.Contains(errStr, "container not found") ||
 		strings.Contains(errStr, "No such container")
 }
@@ -236,10 +340,10 @@ func (c *ChatService) getCredentialOpts(ctx context.Context, projectID string) *
 // GetStream returns a channel of SSE events for an in-progress completion.
 // If no completion is in progress, returns an empty closed channel.
 // This is used by the resume endpoint to catch up on events.
+// The sandbox is automatically reconciled if not running.
 func (c *ChatService) GetStream(ctx context.Context, projectID, sessionID string) (<-chan SSELine, error) {
 	// Validate session belongs to project
-	_, err := c.GetSession(ctx, projectID, sessionID)
-	if err != nil {
+	if _, err := c.GetSession(ctx, projectID, sessionID); err != nil {
 		return nil, err
 	}
 
@@ -247,17 +351,25 @@ func (c *ChatService) GetStream(ctx context.Context, projectID, sessionID string
 		return nil, fmt.Errorf("sandbox provider not available")
 	}
 
+	// Check DB state first - fast reconciliation for known non-running states
+	if err := c.ensureSandboxReady(ctx, projectID, sessionID); err != nil {
+		return nil, err
+	}
+
 	opts := c.getCredentialOpts(ctx, projectID)
-	return c.sandboxClient.GetStream(ctx, sessionID, opts)
+
+	// Use reconciliation wrapper for runtime errors
+	return withSandboxReconciliation(c, ctx, projectID, sessionID, func() (<-chan SSELine, error) {
+		return c.sandboxClient.GetStream(ctx, sessionID, opts)
+	})
 }
 
 // GetMessages returns all messages for a session by querying the sandbox.
-// The sandbox is automatically started if it's not running.
-// Returns an error if the sandbox cannot be reached or doesn't exist.
+// The sandbox is automatically reconciled if not running.
+// Returns an error if the sandbox cannot be reached after reconciliation.
 func (c *ChatService) GetMessages(ctx context.Context, projectID, sessionID string) ([]sandboxapi.UIMessage, error) {
 	// Validate session belongs to project
-	_, err := c.GetSession(ctx, projectID, sessionID)
-	if err != nil {
+	if _, err := c.GetSession(ctx, projectID, sessionID); err != nil {
 		return nil, err
 	}
 
@@ -265,8 +377,17 @@ func (c *ChatService) GetMessages(ctx context.Context, projectID, sessionID stri
 		return nil, fmt.Errorf("sandbox provider not available")
 	}
 
+	// Check DB state first - fast reconciliation for known non-running states
+	if err := c.ensureSandboxReady(ctx, projectID, sessionID); err != nil {
+		return nil, err
+	}
+
 	opts := c.getCredentialOpts(ctx, projectID)
-	return c.sandboxClient.GetMessages(ctx, sessionID, opts)
+
+	// Use reconciliation wrapper for runtime errors
+	return withSandboxReconciliation(c, ctx, projectID, sessionID, func() ([]sandboxapi.UIMessage, error) {
+		return c.sandboxClient.GetMessages(ctx, sessionID, opts)
+	})
 }
 
 // deriveSessionName attempts to extract a session name from the messages.

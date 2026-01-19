@@ -222,25 +222,42 @@ func (s *SandboxService) ReconcileSandboxes(ctx context.Context) error {
 	return nil
 }
 
-// ReconcileSessionStates checks sessions that the database considers "running" and
-// verifies their sandbox state matches. If a sandbox has failed, the session is
-// marked as error. If the sandbox is stopped or doesn't exist, the session is marked
-// as stopped. This should be called on server startup after ReconcileSandboxes.
+// ReconcileSessionStates checks sessions that the database considers active or
+// in-progress and verifies their sandbox state matches. If a sandbox has failed,
+// the session is marked as error. If the sandbox is stopped or doesn't exist,
+// the session is marked as stopped. This should be called on server startup
+// after ReconcileSandboxes.
+//
+// This handles two cases:
+// 1. Sessions marked "running" but sandbox is missing/stopped/failed
+// 2. Sessions stuck in intermediate states (initializing, creating_sandbox, etc.)
+//    where the server died mid-creation and the sandbox doesn't exist
 func (s *SandboxService) ReconcileSessionStates(ctx context.Context) error {
-	// Get all sessions that the database thinks are in an active state
-	// We only care about "running" sessions - if a sandbox died, we need to know
-	activeSessions, err := s.store.ListSessionsByStatuses(ctx, []string{"running"})
+	// Get all sessions that need reconciliation:
+	// - "running" sessions where sandbox might have died
+	// - intermediate states where server might have died mid-creation
+	statesToReconcile := []string{
+		model.SessionStatusRunning,
+		model.SessionStatusInitializing,
+		model.SessionStatusReinitializing,
+		model.SessionStatusCloning,
+		model.SessionStatusPullingImage,
+		model.SessionStatusCreatingSandbox,
+		model.SessionStatusStartingAgent,
+	}
+
+	activeSessions, err := s.store.ListSessionsByStatuses(ctx, statesToReconcile)
 	if err != nil {
 		return fmt.Errorf("failed to list active sessions: %w", err)
 	}
 
-	log.Printf("Reconciling state for %d active sessions", len(activeSessions))
+	log.Printf("Reconciling state for %d active/in-progress sessions", len(activeSessions))
 
 	for _, session := range activeSessions {
 		sb, err := s.provider.Get(ctx, session.ID)
 		if err == sandbox.ErrNotFound {
 			// Sandbox doesn't exist - mark as stopped, will be recreated on demand
-			log.Printf("Session %s has no sandbox, marking as stopped", session.ID)
+			log.Printf("Session %s (status: %s) has no sandbox, marking as stopped", session.ID, session.Status)
 			if err := s.store.UpdateSessionStatus(ctx, session.ID, model.SessionStatusStopped, nil); err != nil {
 				log.Printf("Failed to update session %s status: %v", session.ID, err)
 			}
@@ -261,17 +278,25 @@ func (s *SandboxService) ReconcileSessionStates(ctx context.Context) error {
 			continue
 		}
 
-		// Check if sandbox is stopped
-		if sb.Status == sandbox.StatusStopped {
-			log.Printf("Session %s has stopped sandbox, marking as stopped", session.ID)
+		// Check if sandbox is stopped or just created (not running)
+		if sb.Status == sandbox.StatusStopped || sb.Status == sandbox.StatusCreated {
+			log.Printf("Session %s has %s sandbox, marking as stopped", session.ID, sb.Status)
 			if err := s.store.UpdateSessionStatus(ctx, session.ID, model.SessionStatusStopped, nil); err != nil {
 				log.Printf("Failed to update session %s status: %v", session.ID, err)
 			}
 			continue
 		}
 
-		// Sandbox exists and is running
-		log.Printf("Session %s sandbox status: %s", session.ID, sb.Status)
+		// Sandbox exists and is running - update session status if it was in intermediate state
+		if session.Status != model.SessionStatusRunning && sb.Status == sandbox.StatusRunning {
+			log.Printf("Session %s was in %s state but sandbox is running, updating to running", session.ID, session.Status)
+			if err := s.store.UpdateSessionStatus(ctx, session.ID, model.SessionStatusRunning, nil); err != nil {
+				log.Printf("Failed to update session %s status: %v", session.ID, err)
+			}
+			continue
+		}
+
+		log.Printf("Session %s (status: %s) sandbox status: %s", session.ID, session.Status, sb.Status)
 	}
 
 	return nil

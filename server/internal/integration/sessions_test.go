@@ -2,6 +2,7 @@ package integration
 
 import (
 	"net/http"
+	"net/http/httptest"
 	"testing"
 )
 
@@ -304,10 +305,26 @@ func TestListMessages(t *testing.T) {
 	user := ts.CreateTestUser("test@example.com")
 	project := ts.CreateTestProject(user, "Test Project")
 	workspace := ts.CreateTestWorkspace(project, "/home/user/code")
-	session := ts.CreateTestSession(workspace, "Test Session")
+	agent := ts.CreateTestAgent(project, "Test Agent", "claude-code")
+
+	// Set up mock sandbox HTTP server that responds to /chat
+	mockSandboxServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/chat" && r.Method == "GET" && r.Header.Get("Accept") != "text/event-stream" {
+			// Return empty messages array
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"messages":[]}`))
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer mockSandboxServer.Close()
+
+	// Create session with sandbox using mock server
+	session := ts.CreateTestSessionWithMockSandbox(workspace, agent, "Test Session", mockSandboxServer.URL)
 	client := ts.AuthenticatedClient(user)
 
-	// Currently returns empty array (TODO endpoint)
+	// Get messages from sandbox - returns empty since no messages have been sent
 	resp := client.Get("/api/projects/" + project.ID + "/sessions/" + session.ID + "/messages")
 	defer resp.Body.Close()
 
@@ -319,6 +336,6 @@ func TestListMessages(t *testing.T) {
 	ParseJSON(t, resp, &result)
 
 	if len(result.Messages) != 0 {
-		t.Errorf("Expected 0 messages (TODO endpoint), got %d", len(result.Messages))
+		t.Errorf("Expected 0 messages, got %d", len(result.Messages))
 	}
 }

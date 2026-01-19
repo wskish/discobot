@@ -1,16 +1,13 @@
 package handler
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/obot-platform/octobot/server/internal/middleware"
-	"github.com/obot-platform/octobot/server/internal/model"
 	"github.com/obot-platform/octobot/server/internal/service"
 )
 
@@ -102,40 +99,8 @@ func (h *Handler) Chat(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-Accel-Buffering", "no") // Disable nginx buffering
 	w.Header().Set("x-vercel-ai-ui-message-stream", "v1")
 
-	// Wait for session to reach a terminal state (running, error, or stopped)
-	sess, err := h.waitForSessionReady(ctx, sessionID, 60*time.Second)
-	if err != nil {
-		writeSSEErrorAndDone(w, err.Error())
-		return
-	}
-
-	// If session is in error or stopped state, attempt to reinitialize
-	if sess.Status == model.SessionStatusError || sess.Status == model.SessionStatusStopped {
-		log.Printf("[Chat] Session %s is %s, attempting reinitialization", sessionID, sess.Status)
-
-		// Update status to reinitializing
-		if _, statusErr := h.sessionService.UpdateStatus(ctx, sessionID, model.SessionStatusReinitializing, nil); statusErr != nil {
-			log.Printf("[Chat] Warning: failed to update session status: %v", statusErr)
-		}
-
-		// Emit SSE event for status change
-		if h.eventBroker != nil {
-			if pubErr := h.eventBroker.PublishSessionUpdated(ctx, projectID, sessionID, model.SessionStatusReinitializing); pubErr != nil {
-				log.Printf("[Chat] Warning: failed to publish session update event: %v", pubErr)
-			}
-		}
-
-		// Attempt to reinitialize the session
-		if initErr := h.sessionService.Initialize(ctx, sessionID); initErr != nil {
-			log.Printf("[Chat] Reinitialization failed for session %s: %v", sessionID, initErr)
-			writeSSEErrorAndDone(w, fmt.Sprintf("Session reinitialization failed: %v", initErr))
-			return
-		}
-
-		log.Printf("[Chat] Session %s reinitialized successfully", sessionID)
-	}
-
 	// Send messages to sandbox and get raw SSE stream
+	// ChatService handles session state reconciliation (starting stopped containers, etc.)
 	sseCh, err := h.chatService.SendToSandbox(ctx, projectID, sessionID, req.Messages)
 	if err != nil {
 		writeSSEErrorAndDone(w, err.Error())
@@ -171,6 +136,85 @@ func (h *Handler) Chat(w http.ResponseWriter, r *http.Request) {
 	flusher.Flush()
 }
 
+// ChatStream handles resuming an in-progress chat stream.
+// GET /api/chat/{sessionId}/stream
+// Response: SSE stream if completion in progress, 204 No Content if not
+func (h *Handler) ChatStream(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	projectID := middleware.GetProjectID(ctx)
+	sessionID := r.PathValue("sessionId")
+
+	if sessionID == "" {
+		h.Error(w, http.StatusBadRequest, "sessionId is required")
+		return
+	}
+
+	// Validate session belongs to this project
+	existingSession, err := h.chatService.GetSessionByID(ctx, sessionID)
+	if err != nil {
+		// No session = no stream
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	if existingSession.ProjectID != projectID {
+		h.Error(w, http.StatusForbidden, "session does not belong to this project")
+		return
+	}
+
+	// Get the stream from sandbox
+	sseCh, err := h.chatService.GetStream(ctx, projectID, sessionID)
+	if err != nil {
+		// Sandbox unavailable or error - return 204 (no active stream)
+		log.Printf("[ChatStream] Error getting stream: %v", err)
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+
+	// Check if channel is already closed (no active completion)
+	select {
+	case _, ok := <-sseCh:
+		if !ok {
+			// Channel closed immediately - no active stream
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		// We consumed a message, need to handle it below after setting headers
+		// This is a bit awkward - ideally GetStream would tell us if there's an active stream
+		// For now, we'll set up SSE and send the message we already received
+	default:
+		// Channel not ready yet - we have a stream, set up SSE
+	}
+
+	// Set up SSE headers
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("X-Accel-Buffering", "no")
+	w.Header().Set("x-vercel-ai-ui-message-stream", "v1")
+
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		h.Error(w, http.StatusInternalServerError, "Streaming not supported")
+		return
+	}
+
+	// Pass through raw SSE lines from sandbox
+	for line := range sseCh {
+		if line.Done {
+			log.Printf("[ChatStream] Received [DONE] signal from sandbox")
+			_, _ = fmt.Fprintf(w, "data: [DONE]\n\n")
+			flusher.Flush()
+			return
+		}
+		_, _ = fmt.Fprintf(w, "data: %s\n\n", line.Data)
+		flusher.Flush()
+	}
+
+	// Send done signal if channel closed without explicit DONE
+	_, _ = fmt.Fprintf(w, "data: [DONE]\n\n")
+	flusher.Flush()
+}
+
 // writeSSEError sends an error SSE event in UIMessage Stream format.
 // This is used for Go server-originated errors (not pass-through from sandbox).
 func writeSSEError(w http.ResponseWriter, errorText string) {
@@ -189,38 +233,5 @@ func writeSSEErrorAndDone(w http.ResponseWriter, errorText string) {
 	_, _ = fmt.Fprintf(w, "data: [DONE]\n\n")
 	if f, ok := w.(http.Flusher); ok {
 		f.Flush()
-	}
-}
-
-// waitForSessionReady polls the session status until it reaches a terminal state.
-// Terminal states are: running, error, or stopped.
-func (h *Handler) waitForSessionReady(ctx context.Context, sessionID string, timeout time.Duration) (*model.Session, error) {
-	deadline := time.Now().Add(timeout)
-
-	for {
-		sess, err := h.store.GetSessionByID(ctx, sessionID)
-		if err != nil {
-			return nil, fmt.Errorf("session not found: %w", err)
-		}
-
-		// Session is ready when in a terminal state (running, error, or stopped)
-		if sess.Status == model.SessionStatusRunning ||
-			sess.Status == model.SessionStatusError ||
-			sess.Status == model.SessionStatusStopped {
-			return sess, nil
-		}
-
-		// Check timeout
-		if time.Now().After(deadline) {
-			return nil, fmt.Errorf("timeout waiting for session to be ready (status: %s)", sess.Status)
-		}
-
-		// Check context cancellation
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		case <-time.After(500 * time.Millisecond):
-			// Poll again
-		}
 	}
 }

@@ -11,7 +11,10 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
+	"net/url"
 	"os"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -281,8 +284,9 @@ func setupRouter(s *store.Store, cfg *config.Config, h *handler.Handler) *chi.Mu
 			r.Get("/sessions/{sessionId}/terminal/history", h.GetTerminalHistory)
 			r.Get("/sessions/{sessionId}/terminal/status", h.GetTerminalStatus)
 
-			// AI Chat endpoint (streaming)
+			// AI Chat endpoints (streaming)
 			r.Post("/chat", h.Chat)
+			r.Get("/chat/{sessionId}/stream", h.ChatStream)
 		})
 	})
 
@@ -492,6 +496,56 @@ func (ts *TestServer) CreateTestSession(workspace *model.Workspace, name string)
 	if err := ts.Store.CreateSession(context.Background(), session); err != nil {
 		ts.T.Fatalf("Failed to create test session: %v", err)
 	}
+
+	return session
+}
+
+// CreateTestSessionWithMockSandbox creates a test session with a properly configured
+// mock sandbox that points to the provided mock server URL.
+func (ts *TestServer) CreateTestSessionWithMockSandbox(workspace *model.Workspace, agent *model.Agent, name string, mockServerURL string) *model.Session {
+	ts.T.Helper()
+
+	// Parse mock server URL to get host and port
+	u, err := url.Parse(mockServerURL)
+	if err != nil {
+		ts.T.Fatalf("Failed to parse mock server URL: %v", err)
+	}
+	hostPort := strings.Split(u.Host, ":")
+	host := hostPort[0]
+	port := 80
+	if len(hostPort) > 1 {
+		port, _ = strconv.Atoi(hostPort[1])
+	}
+
+	workspacePath := workspace.Path
+	session := &model.Session{
+		ProjectID:     workspace.ProjectID,
+		WorkspaceID:   workspace.ID,
+		AgentID:       &agent.ID,
+		Name:          name,
+		Status:        model.SessionStatusRunning, // Session is ready
+		WorkspacePath: &workspacePath,
+	}
+
+	if err := ts.Store.CreateSession(context.Background(), session); err != nil {
+		ts.T.Fatalf("Failed to create test session: %v", err)
+	}
+
+	// Create and start a mock sandbox that points to the test server
+	ctx := context.Background()
+	_, err = ts.MockSandbox.Create(ctx, session.ID, sandbox.CreateOptions{
+		SharedSecret: "test-secret",
+	})
+	if err != nil {
+		ts.T.Fatalf("Failed to create mock sandbox: %v", err)
+	}
+
+	if err := ts.MockSandbox.Start(ctx, session.ID); err != nil {
+		ts.T.Fatalf("Failed to start mock sandbox: %v", err)
+	}
+
+	// Override the sandbox's port mapping to point to mock server
+	ts.MockSandbox.SetSandboxPort(session.ID, host, port)
 
 	return session
 }
