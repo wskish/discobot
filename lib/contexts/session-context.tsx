@@ -11,9 +11,10 @@ import type {
 import { useAgentTypes } from "@/lib/hooks/use-agent-types";
 import { useAgents } from "@/lib/hooks/use-agents";
 import {
-	usePersistedState,
 	STORAGE_KEYS,
+	usePersistedState,
 } from "@/lib/hooks/use-persisted-state";
+import { useProjectEvents } from "@/lib/hooks/use-project-events";
 import { useWorkspaces } from "@/lib/hooks/use-workspaces";
 
 interface SessionContextValue {
@@ -68,6 +69,10 @@ interface SessionProviderProps {
 }
 
 export function SessionProvider({ children }: SessionProviderProps) {
+	// Subscribe to SSE events first, before any data fetching
+	// This ensures we don't miss events that occur during initial data load
+	useProjectEvents();
+
 	// Data fetching
 	const {
 		workspaces,
@@ -125,30 +130,39 @@ export function SessionProvider({ children }: SessionProviderProps) {
 	}, [selectedSession, workspaces]);
 
 	// Actions
-	const selectSession = React.useCallback((sessionId: string | null) => {
-		setSelectedSessionId(sessionId);
-	}, []);
+	const selectSession = React.useCallback(
+		(sessionId: string | null) => {
+			setSelectedSessionId(sessionId);
+		},
+		[setSelectedSessionId],
+	);
 
 	const selectAgent = React.useCallback((agentId: string | null) => {
 		setSelectedAgentId(agentId);
 	}, []);
 
-	const handleSessionSelect = React.useCallback((session: { id: string }) => {
-		setSelectedSessionId(session.id);
-		setPreselectedWorkspaceId(null);
-	}, []);
+	const handleSessionSelect = React.useCallback(
+		(session: { id: string }) => {
+			setSelectedSessionId(session.id);
+			setPreselectedWorkspaceId(null);
+		},
+		[setSelectedSessionId],
+	);
 
 	const handleNewSession = React.useCallback(() => {
 		setSelectedSessionId(null);
 		setPreselectedWorkspaceId(null);
 		setChatResetTrigger((prev) => prev + 1);
-	}, []);
+	}, [setSelectedSessionId]);
 
-	const handleAddSession = React.useCallback((workspaceId: string) => {
-		setSelectedSessionId(null);
-		setPreselectedWorkspaceId(workspaceId);
-		setWorkspaceSelectTrigger((prev) => prev + 1);
-	}, []);
+	const handleAddSession = React.useCallback(
+		(workspaceId: string) => {
+			setSelectedSessionId(null);
+			setPreselectedWorkspaceId(workspaceId);
+			setWorkspaceSelectTrigger((prev) => prev + 1);
+		},
+		[setSelectedSessionId],
+	);
 
 	const handleSessionCreated = React.useCallback(
 		async (sessionId: string) => {
@@ -169,7 +183,7 @@ export function SessionProvider({ children }: SessionProviderProps) {
 				console.error("Failed to fetch created session:", error);
 			}
 		},
-		[mutateWorkspaces],
+		[mutateWorkspaces, setSelectedSessionId],
 	);
 
 	const value = React.useMemo<SessionContextValue>(

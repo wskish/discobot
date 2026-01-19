@@ -33,15 +33,14 @@ interface UseProjectEventsOptions {
 	autoReconnect?: boolean;
 	/** Reconnect delay in ms (default: 3000) */
 	reconnectDelay?: number;
-	/** RFC3339 timestamp to get events after (e.g., "2024-01-15T10:30:00Z") */
-	since?: string;
-	/** Event ID to get events after (alternative to since) */
-	afterEventId?: string;
 }
 
 /**
  * Hook that subscribes to server-sent events for the current project.
  * Automatically triggers SWR mutations when session events are received.
+ *
+ * This hook maintains a single persistent connection that survives re-renders.
+ * Callbacks are stored in refs so changing them doesn't cause reconnection.
  */
 export function useProjectEvents(options: UseProjectEventsOptions = {}) {
 	const {
@@ -49,13 +48,24 @@ export function useProjectEvents(options: UseProjectEventsOptions = {}) {
 		onWorkspaceUpdated,
 		autoReconnect = true,
 		reconnectDelay = 3000,
-		since,
-		afterEventId,
 	} = options;
 
 	const eventSourceRef = useRef<EventSource | null>(null);
 	const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 	const isConnectedRef = useRef(false);
+
+	// Store callbacks in refs so they don't cause reconnection when changed
+	const onSessionUpdatedRef = useRef(onSessionUpdated);
+	const onWorkspaceUpdatedRef = useRef(onWorkspaceUpdated);
+
+	// Keep refs up to date
+	useEffect(() => {
+		onSessionUpdatedRef.current = onSessionUpdated;
+	}, [onSessionUpdated]);
+
+	useEffect(() => {
+		onWorkspaceUpdatedRef.current = onWorkspaceUpdated;
+	}, [onWorkspaceUpdated]);
 
 	const connect = useCallback(() => {
 		// Don't connect if already connected
@@ -68,15 +78,7 @@ export function useProjectEvents(options: UseProjectEventsOptions = {}) {
 			eventSourceRef.current.close();
 		}
 
-		// Build URL with query parameters
-		const params = new URLSearchParams();
-		if (afterEventId) {
-			params.set("after", afterEventId);
-		} else if (since) {
-			params.set("since", since);
-		}
-		const queryString = params.toString();
-		const url = `${getApiBase()}/events${queryString ? `?${queryString}` : ""}`;
+		const url = `${getApiBase()}/events`;
 		const eventSource = new EventSource(url);
 		eventSourceRef.current = eventSource;
 
@@ -127,14 +129,11 @@ export function useProjectEvents(options: UseProjectEventsOptions = {}) {
 				);
 
 				// Trigger SWR mutations to refresh session data
-				// Mutate the specific session
 				mutate(`session-${sessionData.sessionId}`);
-
-				// Also mutate workspaces since sessions are nested
 				mutate("workspaces");
 
-				// Call the callback if provided
-				onSessionUpdated?.(sessionData);
+				// Call the callback if provided (using ref to get latest)
+				onSessionUpdatedRef.current?.(sessionData);
 			} catch (err) {
 				console.error("[SSE] Failed to parse session_updated event:", err);
 			}
@@ -156,20 +155,13 @@ export function useProjectEvents(options: UseProjectEventsOptions = {}) {
 				// Trigger SWR mutations to refresh workspace data
 				mutate("workspaces");
 
-				// Call the callback if provided
-				onWorkspaceUpdated?.(workspaceData);
+				// Call the callback if provided (using ref to get latest)
+				onWorkspaceUpdatedRef.current?.(workspaceData);
 			} catch (err) {
 				console.error("[SSE] Failed to parse workspace_updated event:", err);
 			}
 		});
-	}, [
-		autoReconnect,
-		reconnectDelay,
-		onSessionUpdated,
-		onWorkspaceUpdated,
-		since,
-		afterEventId,
-	]);
+	}, [autoReconnect, reconnectDelay]);
 
 	const disconnect = useCallback(() => {
 		// Clear reconnect timeout
@@ -188,6 +180,7 @@ export function useProjectEvents(options: UseProjectEventsOptions = {}) {
 	}, []);
 
 	// Connect on mount, disconnect on unmount
+	// This effect only runs once since connect/disconnect have stable dependencies
 	useEffect(() => {
 		connect();
 

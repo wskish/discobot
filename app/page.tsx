@@ -11,7 +11,6 @@ import {
 	STORAGE_KEYS,
 	usePersistedState,
 } from "@/lib/hooks/use-persisted-state";
-import { useProjectEvents } from "@/lib/hooks/use-project-events";
 
 function LoadingScreen() {
 	return (
@@ -28,13 +27,6 @@ function IDEContent() {
 	);
 
 	const session = useSessionContext();
-
-	// Subscribe to SSE events for real-time session status updates
-	useProjectEvents({
-		onSessionUpdated: (data) => {
-			console.log("Session updated:", data.sessionId, "->", data.status);
-		},
-	});
 
 	// Loading state
 	if (session.workspacesLoading || session.agentsLoading) {
