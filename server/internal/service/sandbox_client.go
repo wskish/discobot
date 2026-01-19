@@ -29,14 +29,12 @@ const (
 // SandboxChatClient handles communication with the agent running in a sandbox.
 type SandboxChatClient struct {
 	provider sandbox.Provider
-	client   *http.Client
 }
 
 // NewSandboxChatClient creates a new sandbox chat client.
 func NewSandboxChatClient(provider sandbox.Provider) *SandboxChatClient {
 	return &SandboxChatClient{
 		provider: provider,
-		client:   &http.Client{},
 	}
 }
 
@@ -113,35 +111,11 @@ type SSELine struct {
 	Done bool
 }
 
-// getSandboxURL returns the base URL for the sandbox's HTTP endpoint.
-func (c *SandboxChatClient) getSandboxURL(ctx context.Context, sessionID string) (string, error) {
-	sb, err := c.provider.Get(ctx, sessionID)
-	if err != nil {
-		return "", fmt.Errorf("failed to get sandbox: %w", err)
-	}
-
-	if sb.Status != sandbox.StatusRunning {
-		return "", fmt.Errorf("sandbox is not running: %s", sb.Status)
-	}
-
-	// Find the chat port (3002)
-	var chatPort *sandbox.AssignedPort
-	for i := range sb.Ports {
-		if sb.Ports[i].ContainerPort == 3002 {
-			chatPort = &sb.Ports[i]
-			break
-		}
-	}
-	if chatPort == nil {
-		return "", fmt.Errorf("sandbox does not expose port 3002")
-	}
-
-	hostIP := chatPort.HostIP
-	if hostIP == "" || hostIP == "0.0.0.0" {
-		hostIP = "127.0.0.1"
-	}
-
-	return fmt.Sprintf("http://%s:%d", hostIP, chatPort.HostPort), nil
+// getHTTPClient returns an HTTP client configured for the sandbox.
+// This uses the provider's HTTPClient which handles transport-level details
+// (TCP for Docker, vsock for vz, mock transport for testing).
+func (c *SandboxChatClient) getHTTPClient(ctx context.Context, sessionID string) (*http.Client, error) {
+	return c.provider.HTTPClient(ctx, sessionID)
 }
 
 // RequestOptions contains optional parameters for sandbox requests.
@@ -184,14 +158,15 @@ func (c *SandboxChatClient) SendMessages(ctx context.Context, sessionID string, 
 
 	// Use retry logic to handle transient connection errors during container startup
 	resp, err := retryWithBackoff(ctx, func() (*http.Response, int, error) {
-		baseURL, err := c.getSandboxURL(ctx, sessionID)
+		client, err := c.getHTTPClient(ctx, sessionID)
 		if err != nil {
 			// Don't retry on sandbox not running - let caller handle reconciliation
 			return nil, 0, err
 		}
 
 		// Create the HTTP request (fresh each attempt since body reader is consumed)
-		req, err := http.NewRequestWithContext(ctx, "POST", baseURL+"/chat", bytes.NewReader(bodyBytes))
+		// URL host is ignored - the client's transport handles routing to the sandbox
+		req, err := http.NewRequestWithContext(ctx, "POST", "http://sandbox/chat", bytes.NewReader(bodyBytes))
 		if err != nil {
 			return nil, 0, fmt.Errorf("failed to create request: %w", err)
 		}
@@ -203,7 +178,7 @@ func (c *SandboxChatClient) SendMessages(ctx context.Context, sessionID string, 
 		}
 
 		// Send the request
-		resp, err := c.client.Do(req)
+		resp, err := client.Do(req)
 		if err != nil {
 			return nil, 0, err
 		}
@@ -233,13 +208,14 @@ func (c *SandboxChatClient) SendMessages(ctx context.Context, sessionID string, 
 func (c *SandboxChatClient) GetStream(ctx context.Context, sessionID string, opts *RequestOptions) (<-chan SSELine, error) {
 	// Use retry logic to handle transient connection errors during container startup
 	resp, err := retryWithBackoff(ctx, func() (*http.Response, int, error) {
-		baseURL, err := c.getSandboxURL(ctx, sessionID)
+		client, err := c.getHTTPClient(ctx, sessionID)
 		if err != nil {
 			// Don't retry on sandbox not running - let caller handle reconciliation
 			return nil, 0, err
 		}
 
-		req, err := http.NewRequestWithContext(ctx, "GET", baseURL+"/chat", nil)
+		// URL host is ignored - the client's transport handles routing to the sandbox
+		req, err := http.NewRequestWithContext(ctx, "GET", "http://sandbox/chat", nil)
 		if err != nil {
 			return nil, 0, fmt.Errorf("failed to create request: %w", err)
 		}
@@ -249,7 +225,7 @@ func (c *SandboxChatClient) GetStream(ctx context.Context, sessionID string, opt
 			return nil, 0, err
 		}
 
-		resp, err := c.client.Do(req)
+		resp, err := client.Do(req)
 		if err != nil {
 			return nil, 0, err
 		}
@@ -323,13 +299,14 @@ func (c *SandboxChatClient) GetStream(ctx context.Context, sessionID string, opt
 func (c *SandboxChatClient) GetMessages(ctx context.Context, sessionID string, opts *RequestOptions) ([]sandboxapi.UIMessage, error) {
 	// Use retry logic to handle transient connection errors during container startup
 	resp, err := retryWithBackoff(ctx, func() (*http.Response, int, error) {
-		baseURL, err := c.getSandboxURL(ctx, sessionID)
+		client, err := c.getHTTPClient(ctx, sessionID)
 		if err != nil {
 			// Don't retry on sandbox not running - let caller handle reconciliation
 			return nil, 0, err
 		}
 
-		req, err := http.NewRequestWithContext(ctx, "GET", baseURL+"/chat", nil)
+		// URL host is ignored - the client's transport handles routing to the sandbox
+		req, err := http.NewRequestWithContext(ctx, "GET", "http://sandbox/chat", nil)
 		if err != nil {
 			return nil, 0, fmt.Errorf("failed to create request: %w", err)
 		}
@@ -338,7 +315,7 @@ func (c *SandboxChatClient) GetMessages(ctx context.Context, sessionID string, o
 			return nil, 0, err
 		}
 
-		resp, err := c.client.Do(req)
+		resp, err := client.Do(req)
 		if err != nil {
 			return nil, 0, err
 		}

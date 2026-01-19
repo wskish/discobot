@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"sync"
 	"time"
@@ -32,6 +31,10 @@ type Provider struct {
 	// Event subscribers for Watch functionality
 	subscribersMu sync.RWMutex
 	subscribers   []*eventSubscriber
+
+	// HTTPHandler is used by HTTPClient to handle requests without network.
+	// If nil, a default handler that returns 202/200 is used.
+	HTTPHandler http.Handler
 
 	// Configurable behaviors for testing
 	CreateFunc    func(ctx context.Context, sessionID string, opts sandbox.CreateOptions) (*sandbox.Sandbox, error)
@@ -309,7 +312,8 @@ func (p *Provider) List(_ context.Context) ([]*sandbox.Sandbox, error) {
 }
 
 // HTTPClient returns an HTTP client configured to communicate with the sandbox.
-// For mock provider, this creates a client that connects to the mock's mapped TCP port.
+// For mock provider, this returns a client that uses the configured HTTPHandler
+// without making real network connections.
 func (p *Provider) HTTPClient(_ context.Context, sessionID string) (*http.Client, error) {
 	p.mu.RLock()
 	s, exists := p.sandboxes[sessionID]
@@ -323,33 +327,15 @@ func (p *Provider) HTTPClient(_ context.Context, sessionID string) (*http.Client
 		return nil, sandbox.ErrNotRunning
 	}
 
-	// Find the HTTP port (3002)
-	var httpPort *sandbox.AssignedPort
-	for i := range s.Ports {
-		if s.Ports[i].ContainerPort == 3002 {
-			httpPort = &s.Ports[i]
-			break
-		}
-	}
-	if httpPort == nil {
-		return nil, fmt.Errorf("sandbox does not expose port 3002")
+	// Use mock transport that calls the handler directly
+	handler := p.HTTPHandler
+	if handler == nil {
+		handler = defaultMockHandler()
 	}
 
-	hostIP := httpPort.HostIP
-	if hostIP == "" || hostIP == "0.0.0.0" {
-		hostIP = "127.0.0.1"
-	}
-
-	// Create a custom transport that always dials to the sandbox's mapped port
-	baseURL := fmt.Sprintf("%s:%d", hostIP, httpPort.HostPort)
-	transport := &http.Transport{
-		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
-			var d net.Dialer
-			return d.DialContext(ctx, "tcp", baseURL)
-		},
-	}
-
-	return &http.Client{Transport: transport}, nil
+	return &http.Client{
+		Transport: &mockRoundTripper{handler: handler},
+	}, nil
 }
 
 // GetSandboxes returns all sandboxes (for test assertions).
@@ -542,4 +528,90 @@ func (p *Provider) CloseWatchers() {
 		close(sub.done)
 	}
 	p.subscribers = nil
+}
+
+// mockRoundTripper implements http.RoundTripper using an http.Handler.
+// This allows HTTPClient to work without real network connections.
+type mockRoundTripper struct {
+	handler http.Handler
+}
+
+func (m *mockRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	// Create a pipe to capture the response
+	pr, pw := io.Pipe()
+
+	// Create a ResponseRecorder-like structure
+	rec := &pipeResponseWriter{
+		header:     make(http.Header),
+		statusCode: http.StatusOK,
+		pipe:       pw,
+	}
+
+	// Call the handler in a goroutine since it may write streaming data
+	go func() {
+		defer pw.Close()
+		m.handler.ServeHTTP(rec, req)
+	}()
+
+	return &http.Response{
+		StatusCode: rec.statusCode,
+		Header:     rec.header,
+		Body:       pr,
+		Request:    req,
+	}, nil
+}
+
+// pipeResponseWriter implements http.ResponseWriter writing to a pipe.
+type pipeResponseWriter struct {
+	header     http.Header
+	statusCode int
+	pipe       *io.PipeWriter
+	wroteHeader bool
+}
+
+func (w *pipeResponseWriter) Header() http.Header {
+	return w.header
+}
+
+func (w *pipeResponseWriter) WriteHeader(code int) {
+	if !w.wroteHeader {
+		w.statusCode = code
+		w.wroteHeader = true
+	}
+}
+
+func (w *pipeResponseWriter) Write(b []byte) (int, error) {
+	if !w.wroteHeader {
+		w.WriteHeader(http.StatusOK)
+	}
+	return w.pipe.Write(b)
+}
+
+// defaultMockHandler returns a handler that responds like a basic sandbox.
+// POST /chat returns 202 Accepted, GET /chat returns 200 with SSE stream.
+func defaultMockHandler() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/chat" {
+			if r.Method == "POST" {
+				w.WriteHeader(http.StatusAccepted)
+				return
+			}
+			if r.Method == "GET" {
+				// Check if requesting SSE stream
+				if r.Header.Get("Accept") == "text/event-stream" {
+					w.Header().Set("Content-Type", "text/event-stream")
+					w.WriteHeader(http.StatusOK)
+					// Send empty response with DONE signal
+					_, _ = fmt.Fprintf(w, "data: [DONE]\n\n")
+					return
+				}
+				// Return empty messages for non-SSE GET
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusOK)
+				_, _ = w.Write([]byte(`{"messages":[]}`))
+				return
+			}
+		}
+		http.NotFound(w, r)
+	})
 }
