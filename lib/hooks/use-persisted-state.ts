@@ -50,4 +50,5 @@ export const STORAGE_KEYS = {
 	DIFF_PANEL_STATE: "octobot:diffPanelState",
 	BOTTOM_PANEL_STATE: "octobot:bottomPanelState",
 	DIFF_PANEL_HEIGHT: "octobot:diffPanelHeight",
+	SELECTED_SESSION_ID: "octobot:selectedSessionId",
 } as const;

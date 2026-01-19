@@ -10,6 +10,10 @@ import type {
 } from "@/lib/api-types";
 import { useAgentTypes } from "@/lib/hooks/use-agent-types";
 import { useAgents } from "@/lib/hooks/use-agents";
+import {
+	usePersistedState,
+	STORAGE_KEYS,
+} from "@/lib/hooks/use-persisted-state";
 import { useWorkspaces } from "@/lib/hooks/use-workspaces";
 
 interface SessionContextValue {
@@ -83,10 +87,10 @@ export function SessionProvider({ children }: SessionProviderProps) {
 
 	const { agentTypes } = useAgentTypes();
 
-	// Selection state
-	const [selectedSessionId, setSelectedSessionId] = React.useState<
+	// Selection state (persisted to localStorage for refresh persistence)
+	const [selectedSessionId, setSelectedSessionId] = usePersistedState<
 		string | null
-	>(null);
+	>(STORAGE_KEYS.SELECTED_SESSION_ID, null);
 	const [selectedAgentId, setSelectedAgentId] = React.useState<string | null>(
 		null,
 	);
