@@ -205,6 +205,40 @@ export function FilePanel({
 	);
 }
 
+/**
+ * Calculates collapsed folder info for single-child directory chains.
+ * E.g., if a folder has only one child which is also a folder, they collapse together.
+ * Returns the display name (e.g., "a/b/c"), the final node after collapsing,
+ * and all intermediate paths that need to be expanded together.
+ */
+function getCollapsedFolderInfo(node: LazyFileNode): {
+	displayName: string;
+	finalNode: LazyFileNode;
+	collapsedPaths: string[];
+} {
+	const collapsedPaths: string[] = [node.path];
+	let current = node;
+	let displayName = node.name;
+
+	// Keep collapsing while the current node is a directory with exactly one child
+	// that is also a directory
+	while (
+		current.type === "directory" &&
+		current.children?.length === 1 &&
+		current.children[0].type === "directory"
+	) {
+		current = current.children[0];
+		collapsedPaths.push(current.path);
+		displayName = `${displayName}/${current.name}`;
+	}
+
+	return {
+		displayName,
+		finalNode: current,
+		collapsedPaths,
+	};
+}
+
 function FileTreeNode({
 	node,
 	depth,
@@ -222,18 +256,36 @@ function FileTreeNode({
 	selectedFilePath: string | null;
 	isPathLoading: (path: string) => boolean;
 }) {
-	const isExpanded = expandedPaths.has(node.path);
 	const isFolder = node.type === "directory";
+
+	// Calculate collapsed folder info for directories
+	const { displayName, finalNode, collapsedPaths } = isFolder
+		? getCollapsedFolderInfo(node)
+		: { displayName: node.name, finalNode: node, collapsedPaths: [] };
+
+	// For folders, check if all paths in the collapsed chain are expanded
+	const isExpanded =
+		isFolder && collapsedPaths.every((p) => expandedPaths.has(p));
 	const isSelected = selectedFilePath === node.path;
-	const isLoading = isPathLoading(node.path);
+	const isLoading = collapsedPaths.some((p) => isPathLoading(p));
 
 	const handleClick = () => {
 		if (isFolder) {
-			toggleExpand(node.path);
+			// Toggle all collapsed paths together
+			for (const path of collapsedPaths) {
+				// Only toggle if needed to sync the expanded state
+				const pathExpanded = expandedPaths.has(path);
+				if (isExpanded ? pathExpanded : !pathExpanded) {
+					toggleExpand(path);
+				}
+			}
 		} else {
 			onFileSelect(node.path);
 		}
 	};
+
+	// Use the final node's children for rendering
+	const childrenToRender = finalNode.children;
 
 	return (
 		<div>
@@ -272,14 +324,14 @@ function FileTreeNode({
 						/>
 					</>
 				)}
-				<span className="truncate">{node.name}</span>
+				<span className="truncate">{displayName}</span>
 				{node.changed && (
 					<span className="ml-auto text-xs text-green-500 font-medium">M</span>
 				)}
 			</button>
-			{isFolder && isExpanded && node.children && (
+			{isFolder && isExpanded && childrenToRender && (
 				<div>
-					{node.children.map((child) => (
+					{childrenToRender.map((child) => (
 						<FileTreeNode
 							key={child.path}
 							node={child}
