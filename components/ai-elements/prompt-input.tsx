@@ -122,6 +122,31 @@ function saveDraft(sessionId: string | null | undefined, value: string): void {
 	}
 }
 
+// Helper to merge new files with existing FileList
+function mergeFiles(existing: FileList | null, newFiles: File[]): FileList {
+	const dt = new DataTransfer();
+	if (existing) {
+		for (const f of existing) {
+			dt.items.add(f);
+		}
+	}
+	for (const f of newFiles) {
+		dt.items.add(f);
+	}
+	return dt.files;
+}
+
+// Filter to only image files for paste/drop
+function filterImageFiles(files: FileList | File[]): File[] {
+	const result: File[] = [];
+	for (const file of files) {
+		if (file.type.startsWith("image/")) {
+			result.push(file);
+		}
+	}
+	return result;
+}
+
 export const Input = React.memo(function Input({
 	onSubmit,
 	status = "ready",
@@ -136,6 +161,7 @@ export const Input = React.memo(function Input({
 	const [history, setHistory] = React.useState<string[]>(() => loadHistory());
 	const [historyIndex, setHistoryIndex] = React.useState(-1);
 	const [isHistoryOpen, setIsHistoryOpen] = React.useState(false);
+	const [isDragging, setIsDragging] = React.useState(false);
 
 	// Track sessionId changes to load correct draft
 	const prevSessionIdRef = React.useRef(sessionId);
@@ -189,6 +215,41 @@ export const Input = React.memo(function Input({
 		}
 	};
 
+	// Drag and drop handlers
+	const handleDragOver = (e: React.DragEvent) => {
+		e.preventDefault();
+		e.stopPropagation();
+		if (status !== "ready") return;
+		setIsDragging(true);
+	};
+
+	const handleDragLeave = (e: React.DragEvent) => {
+		e.preventDefault();
+		e.stopPropagation();
+		// Only set isDragging to false if we're leaving the form entirely
+		const rect = e.currentTarget.getBoundingClientRect();
+		const x = e.clientX;
+		const y = e.clientY;
+		if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) {
+			setIsDragging(false);
+		}
+	};
+
+	const handleDrop = (e: React.DragEvent) => {
+		e.preventDefault();
+		e.stopPropagation();
+		setIsDragging(false);
+		if (status !== "ready") return;
+
+		const droppedFiles = e.dataTransfer?.files;
+		if (droppedFiles && droppedFiles.length > 0) {
+			const imageFiles = filterImageFiles(droppedFiles);
+			if (imageFiles.length > 0) {
+				setFiles(mergeFiles(files, imageFiles));
+			}
+		}
+	};
+
 	return (
 		<PromptInputContext.Provider
 			value={{
@@ -208,8 +269,12 @@ export const Input = React.memo(function Input({
 		>
 			<form
 				onSubmit={handleSubmit}
+				onDragOver={handleDragOver}
+				onDragLeave={handleDragLeave}
+				onDrop={handleDrop}
 				className={cn(
-					"relative flex flex-col gap-2 rounded-lg border border-input bg-background p-2",
+					"relative flex flex-col gap-2 rounded-lg border border-input bg-background p-2 transition-colors",
+					isDragging && "border-primary border-dashed bg-primary/5",
 					className,
 				)}
 				{...props}
@@ -232,11 +297,14 @@ export function PromptInputTextarea({
 	value: propValue,
 	onChange: propOnChange,
 	onKeyDown,
+	onPaste: propOnPaste,
 	...props
 }: PromptInputTextareaProps) {
 	const {
 		input,
 		setInput,
+		files,
+		setFiles,
 		handleSubmit,
 		status,
 		history,
@@ -253,9 +321,46 @@ export function PromptInputTextarea({
 		propOnChange ??
 		((e: React.ChangeEvent<HTMLTextAreaElement>) => setInput(e.target.value));
 
+	// Handle paste to capture images from clipboard
+	const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+		const items = e.clipboardData?.items;
+		if (!items || status !== "ready") {
+			propOnPaste?.(e);
+			return;
+		}
+
+		const imageFiles: File[] = [];
+		for (const item of items) {
+			if (item.type.startsWith("image/")) {
+				const file = item.getAsFile();
+				if (file) {
+					imageFiles.push(file);
+				}
+			}
+		}
+
+		if (imageFiles.length > 0) {
+			// Don't prevent default if there's also text - let text paste through
+			const hasText = Array.from(items).some(
+				(item) => item.kind === "string" && item.type === "text/plain",
+			);
+			if (!hasText) {
+				e.preventDefault();
+			}
+			setFiles(mergeFiles(files, imageFiles));
+		}
+
+		propOnPaste?.(e);
+	};
+
 	const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
 		// Handle Enter to select from history (must come before submit check)
-		if (e.key === "Enter" && !e.shiftKey && isHistoryOpen && historyIndex >= 0) {
+		if (
+			e.key === "Enter" &&
+			!e.shiftKey &&
+			isHistoryOpen &&
+			historyIndex >= 0
+		) {
 			e.preventDefault();
 			const selectedPrompt = history[historyIndex];
 			if (selectedPrompt) {
@@ -329,6 +434,7 @@ export function PromptInputTextarea({
 				value={value}
 				onChange={handleChange}
 				onKeyDown={handleKeyDown}
+				onPaste={handlePaste}
 				disabled={status !== "ready"}
 				className={cn(
 					"min-h-[60px] max-h-[200px] resize-none border-0 p-2 focus-visible:ring-0 focus-visible:ring-offset-0",

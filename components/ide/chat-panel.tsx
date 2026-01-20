@@ -42,6 +42,7 @@ import {
 	PromptInputToolbar,
 	PromptInputTools,
 } from "@/components/ai-elements/prompt-input";
+import { ImageAttachment } from "@/components/ai-elements/image-attachment";
 import { Shimmer } from "@/components/ai-elements/shimmer";
 import {
 	ToolCall,
@@ -332,7 +333,6 @@ export function ChatPanel({ className }: ChatPanelProps) {
 	const [isShimmering, setIsShimmering] = React.useState(false);
 	const [isPlanOpen, setIsPlanOpen] = React.useState(true);
 
-
 	// Fetch session data to check if session exists
 	const { error: sessionError, isLoading: sessionLoading } =
 		useSession(selectedSessionId);
@@ -552,7 +552,12 @@ export function ChatPanel({ className }: ChatPanelProps) {
 				text?: string;
 				files?:
 					| FileList
-					| { type: "file"; filename: string; mediaType: string; url: string }[];
+					| {
+							type: "file";
+							filename: string;
+							mediaType: string;
+							url: string;
+					  }[];
 			},
 			e: React.FormEvent,
 		) => {
@@ -572,7 +577,7 @@ export function ChatPanel({ className }: ChatPanelProps) {
 			const isNewSession = !selectedSessionId && pendingSessionId;
 
 			try {
-				await sendMessage({ text: messageText });
+				await sendMessage({ text: messageText, files: message.files });
 
 				// For new chats, notify parent about the session ID AFTER the POST succeeds
 				// This ensures the session exists on the server before the client tries to use it
@@ -1015,6 +1020,31 @@ export function ChatPanel({ className }: ChatPanelProps) {
 																			<MessageResponse key={`text-${partIdx}`}>
 																				{part.text}
 																			</MessageResponse>
+																		);
+																	}
+																	if (part.type === "file") {
+																		const filePart = part as FileUIPart;
+																		if (filePart.mediaType?.startsWith("image/")) {
+																			return (
+																				<ImageAttachment
+																					// biome-ignore lint/suspicious/noArrayIndexKey: File parts have no unique ID, order is stable
+																					key={`file-${partIdx}`}
+																					src={filePart.url}
+																					filename={filePart.filename}
+																				/>
+																			);
+																		}
+																		// Non-image file attachment
+																		return (
+																			<div
+																				// biome-ignore lint/suspicious/noArrayIndexKey: File parts have no unique ID, order is stable
+																				key={`file-${partIdx}`}
+																				className="flex items-center gap-2 rounded-md border border-border bg-muted/50 px-3 py-2 text-sm"
+																			>
+																				<span className="text-muted-foreground">
+																					📎 {filePart.filename}
+																				</span>
+																			</div>
 																		);
 																	}
 																	if (part.type === "dynamic-tool") {
