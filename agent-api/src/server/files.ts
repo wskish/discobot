@@ -33,9 +33,6 @@ const execAsync = promisify(exec);
 // Maximum file size for read operations (10MB)
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
-// Base workspace directory (read-only original files)
-const BASE_WORKSPACE = "/.workspace";
-
 // Known text file extensions
 const TEXT_EXTENSIONS = new Set([
 	// Code
@@ -461,28 +458,15 @@ async function isGitRepo(dir: string): Promise<boolean> {
 }
 
 /**
- * Check if base workspace exists
- */
-async function hasBaseWorkspace(): Promise<boolean> {
-	try {
-		await access(BASE_WORKSPACE);
-		return true;
-	} catch {
-		return false;
-	}
-}
-
-/**
  * Parse unified diff output into structured response
  */
-function parseDiffOutput(output: string, workspaceRoot: string): DiffResponse {
+function parseDiffOutput(output: string): DiffResponse {
 	const files: FileDiffEntry[] = [];
 	let current: FileDiffEntry | null = null;
 	let patchLines: string[] = [];
 
 	// Patterns for parsing git diff output
-	const diffHeader =
-		/^diff --(?:git a\/(.+) b\/(.+)|no-index (?:a\/)?(.+) (?:b\/)?(.+))$/;
+	const diffHeader = /^diff --git a\/(.+) b\/(.+)$/;
 	const newFileMode = /^new file mode/;
 	const deletedFileMode = /^deleted file mode/;
 	const renameFrom = /^rename from/;
@@ -498,21 +482,8 @@ function parseDiffOutput(output: string, workspaceRoot: string): DiffResponse {
 				files.push(current);
 			}
 
-			// Extract paths - handle both git diff and --no-index formats
-			let oldPath = headerMatch[1] || headerMatch[3] || "";
-			let newPath = headerMatch[2] || headerMatch[4] || "";
-
-			// Clean up paths - remove workspace prefixes for --no-index
-			if (oldPath.startsWith(BASE_WORKSPACE)) {
-				oldPath = oldPath.slice(BASE_WORKSPACE.length + 1);
-			}
-			if (newPath.startsWith(workspaceRoot)) {
-				newPath = newPath.slice(workspaceRoot.length + 1);
-			}
-			// Also handle relative paths that might have workspace prefix
-			if (oldPath.startsWith("/.workspace/")) {
-				oldPath = oldPath.slice("/.workspace/".length);
-			}
+			const oldPath = headerMatch[1];
+			const newPath = headerMatch[2];
 
 			current = {
 				path: newPath || oldPath,
@@ -562,23 +533,9 @@ async function getGitDiff(
 	workspaceRoot: string,
 	singlePath?: string,
 ): Promise<DiffResponse> {
-	const hasBase = await hasBaseWorkspace();
-
-	let command: string;
-	if (hasBase) {
-		// Compare base workspace against current workspace
-		command = `git diff --no-color --no-index "${BASE_WORKSPACE}" "${workspaceRoot}"`;
-		if (singlePath) {
-			const basePath = join(BASE_WORKSPACE, singlePath);
-			const currentPath = join(workspaceRoot, singlePath);
-			command = `git diff --no-color --no-index "${basePath}" "${currentPath}"`;
-		}
-	} else {
-		// No base workspace - diff working tree against HEAD
-		command = "git diff --no-color HEAD";
-		if (singlePath) {
-			command += ` -- "${singlePath}"`;
-		}
+	let command = "git diff --no-color";
+	if (singlePath) {
+		command += ` -- "${singlePath}"`;
 	}
 
 	try {
@@ -586,12 +543,12 @@ async function getGitDiff(
 			cwd: workspaceRoot,
 			maxBuffer: 50 * 1024 * 1024, // 50MB for large diffs
 		});
-		return parseDiffOutput(stdout, workspaceRoot);
+		return parseDiffOutput(stdout);
 	} catch (err: unknown) {
 		// git diff returns exit code 1 when there are differences
 		const execErr = err as { code?: number; stdout?: string };
 		if (execErr.code === 1 && execErr.stdout) {
-			return parseDiffOutput(execErr.stdout, workspaceRoot);
+			return parseDiffOutput(execErr.stdout);
 		}
 		// No differences or other error
 		return {
@@ -630,22 +587,16 @@ export async function getDiff(
 	// Check if it's a git repo
 	const isGit = await isGitRepo(workspaceRoot);
 
-	// Get the diff
+	// Get the diff (only works for git repos)
 	let diff: DiffResponse;
 	if (isGit) {
 		diff = await getGitDiff(workspaceRoot, options.path);
 	} else {
-		// For non-git repos, compare against base workspace if available
-		const hasBase = await hasBaseWorkspace();
-		if (hasBase) {
-			diff = await getGitDiff(workspaceRoot, options.path);
-		} else {
-			// No git and no base workspace - return empty diff
-			diff = {
-				files: [],
-				stats: { filesChanged: 0, additions: 0, deletions: 0 },
-			};
-		}
+		// Not a git repo - return empty diff
+		diff = {
+			files: [],
+			stats: { filesChanged: 0, additions: 0, deletions: 0 },
+		};
 	}
 
 	// Handle single file request

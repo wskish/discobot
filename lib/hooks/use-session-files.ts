@@ -27,8 +27,10 @@ export interface LazyFileNode {
 /**
  * Hook for managing session files with lazy loading.
  * Files are loaded directory-by-directory as folders are expanded.
+ * @param sessionId - The session ID to load files for
+ * @param loadAllFiles - When false, only shows changed files without loading the full tree
  */
-export function useSessionFiles(sessionId: string | null) {
+export function useSessionFiles(sessionId: string | null, loadAllFiles = true) {
 	// Track which directories are expanded (for lazy loading)
 	const [expandedPaths, setExpandedPaths] = useState<Set<string>>(
 		new Set(["."]),
@@ -42,13 +44,13 @@ export function useSessionFiles(sessionId: string | null) {
 	// Track paths that are currently loading
 	const [loadingPaths, setLoadingPaths] = useState<Set<string>>(new Set());
 
-	// Load root directory listing
+	// Load root directory listing - only when loadAllFiles is true
 	const { data: rootData, isLoading: isLoadingRoot } = useSWR(
-		sessionId ? `session-files-${sessionId}-root` : null,
+		sessionId && loadAllFiles ? `session-files-${sessionId}-root` : null,
 		() => (sessionId ? api.listSessionFiles(sessionId, ".") : null),
 	);
 
-	// Load diff status (files that have changed)
+	// Load diff status (files that have changed) - always load
 	const { data: diffData, isLoading: isLoadingDiff } = useSWR(
 		sessionId ? `session-diff-${sessionId}-files` : null,
 		async () => {
@@ -58,11 +60,15 @@ export function useSessionFiles(sessionId: string | null) {
 		},
 	);
 
-	// Convert API response to LazyFileNode tree
+	// Convert API response to LazyFileNode tree, or build from changed files only
 	const rootNodes = useMemo(() => {
-		if (!rootData) return [];
-		return entriesToNodes(rootData.entries, ".", diffData?.files);
-	}, [rootData, diffData?.files]);
+		if (loadAllFiles) {
+			if (!rootData) return [];
+			return entriesToNodes(rootData.entries, ".", diffData?.files);
+		}
+		// Build minimal tree from changed files only
+		return buildTreeFromChangedFiles(diffData?.files || []);
+	}, [rootData, diffData?.files, loadAllFiles]);
 
 	// Build tree from root nodes and cached children
 	const fileTree = useMemo(() => {
@@ -240,4 +246,66 @@ function buildTreeFromCache(
 		...attachChildren(node),
 		changed: changedSet.has(node.path),
 	}));
+}
+
+// Helper: Build a minimal tree structure from just the changed file paths
+function buildTreeFromChangedFiles(changedFiles: string[]): LazyFileNode[] {
+	if (changedFiles.length === 0) return [];
+
+	// Build a nested map structure from file paths
+	interface TreeNode {
+		children: Map<string, TreeNode>;
+		isFile: boolean;
+	}
+
+	const root: TreeNode = { children: new Map(), isFile: false };
+
+	for (const filePath of changedFiles) {
+		const parts = filePath.split("/");
+		let current = root;
+
+		for (let i = 0; i < parts.length; i++) {
+			const part = parts[i];
+			const isLast = i === parts.length - 1;
+
+			if (!current.children.has(part)) {
+				current.children.set(part, {
+					children: new Map(),
+					isFile: isLast,
+				});
+			}
+			current = current.children.get(part)!;
+			if (isLast) {
+				current.isFile = true;
+			}
+		}
+	}
+
+	// Convert the map structure to LazyFileNode array
+	function convertToNodes(node: TreeNode, parentPath: string): LazyFileNode[] {
+		const nodes: LazyFileNode[] = [];
+
+		for (const [name, child] of node.children) {
+			const path = parentPath === "." ? name : `${parentPath}/${name}`;
+			const isDir = !child.isFile || child.children.size > 0;
+
+			nodes.push({
+				name,
+				path,
+				type: isDir ? "directory" : "file",
+				children: isDir ? convertToNodes(child, path) : undefined,
+				changed: child.isFile,
+			});
+		}
+
+		// Sort: directories first, then alphabetically
+		return nodes.sort((a, b) => {
+			if (a.type !== b.type) {
+				return a.type === "directory" ? -1 : 1;
+			}
+			return a.name.localeCompare(b.name);
+		});
+	}
+
+	return convertToNodes(root, ".");
 }

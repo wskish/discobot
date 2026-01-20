@@ -50,7 +50,7 @@ export function FilePanel({
 		expandedPaths,
 		toggleDirectory,
 		isPathLoading,
-	} = useSessionFiles(sessionId);
+	} = useSessionFiles(sessionId, !showChangedOnly);
 
 	// Filter to show only changed files when in "Changed" mode
 	const filterFiles = React.useCallback(
