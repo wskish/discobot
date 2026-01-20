@@ -71,37 +71,24 @@ function IDEContent() {
 		[setRightSidebarWidth],
 	);
 
-	// Track sidebar states before maximize to restore them
-	const sidebarStatesBeforeMaximize = React.useRef<{
-		left: boolean;
-		right: boolean;
-	} | null>(null);
+	// Track left sidebar state before maximize to restore it
+	const leftSidebarBeforeMaximize = React.useRef<boolean | null>(null);
 
 	const handleDiffMaximizeChange = React.useCallback(
 		(isMaximized: boolean) => {
 			if (isMaximized) {
-				// Save current states and close sidebars
-				sidebarStatesBeforeMaximize.current = {
-					left: leftSidebarOpen,
-					right: rightSidebarOpen,
-				};
+				// Save left sidebar state and close it (right sidebar stays untouched)
+				leftSidebarBeforeMaximize.current = leftSidebarOpen;
 				setLeftSidebarOpen(false);
-				setRightSidebarOpen(false);
 			} else {
-				// Restore previous states
-				if (sidebarStatesBeforeMaximize.current) {
-					setLeftSidebarOpen(sidebarStatesBeforeMaximize.current.left);
-					setRightSidebarOpen(sidebarStatesBeforeMaximize.current.right);
-					sidebarStatesBeforeMaximize.current = null;
+				// Restore left sidebar state
+				if (leftSidebarBeforeMaximize.current !== null) {
+					setLeftSidebarOpen(leftSidebarBeforeMaximize.current);
+					leftSidebarBeforeMaximize.current = null;
 				}
 			}
 		},
-		[
-			leftSidebarOpen,
-			rightSidebarOpen,
-			setLeftSidebarOpen,
-			setRightSidebarOpen,
-		],
+		[leftSidebarOpen, setLeftSidebarOpen],
 	);
 
 	const session = useSessionContext();
