@@ -62,12 +62,6 @@ func (h *Handler) DeleteSession(w http.ResponseWriter, r *http.Request) {
 	h.JSON(w, http.StatusOK, map[string]bool{"success": true})
 }
 
-// GetSessionFiles returns files for a session
-func (h *Handler) GetSessionFiles(w http.ResponseWriter, _ *http.Request) {
-	// TODO: Implement - this will use git service to get file diffs
-	h.JSON(w, http.StatusOK, map[string]any{"files": []any{}})
-}
-
 // ListMessages returns messages for a session by querying the container.
 func (h *Handler) ListMessages(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()

@@ -276,27 +276,38 @@ func TestListSessionsByWorkspace_WithData(t *testing.T) {
 	}
 }
 
-func TestGetSessionFiles(t *testing.T) {
+func TestListSessionFiles(t *testing.T) {
 	ts := NewTestServer(t)
 	user := ts.CreateTestUser("test@example.com")
 	project := ts.CreateTestProject(user, "Test Project")
 	workspace := ts.CreateTestWorkspace(project, "/home/user/code")
-	session := ts.CreateTestSession(workspace, "Test Session")
+	agent := ts.CreateTestAgent(project, "Test Agent", "claude-code")
+
+	// Create a session with sandbox (uses mock provider's default handler which supports /files)
+	session := ts.CreateTestSessionWithSandbox(workspace, agent, "Test Session")
 	client := ts.AuthenticatedClient(user)
 
-	// Currently returns empty array (TODO endpoint)
-	resp := client.Get("/api/projects/" + project.ID + "/sessions/" + session.ID + "/files")
+	resp := client.Get("/api/projects/" + project.ID + "/sessions/" + session.ID + "/files?path=.")
 	defer resp.Body.Close()
 
 	AssertStatus(t, resp, http.StatusOK)
 
 	var result struct {
-		Files []interface{} `json:"files"`
+		Path    string `json:"path"`
+		Entries []struct {
+			Name string `json:"name"`
+			Type string `json:"type"`
+			Size int64  `json:"size,omitempty"`
+		} `json:"entries"`
 	}
 	ParseJSON(t, resp, &result)
 
-	if len(result.Files) != 0 {
-		t.Errorf("Expected 0 files (TODO endpoint), got %d", len(result.Files))
+	// Mock returns README.md and src directory
+	if len(result.Entries) != 2 {
+		t.Errorf("Expected 2 entries, got %d", len(result.Entries))
+	}
+	if result.Path != "." {
+		t.Errorf("Expected path '.', got %s", result.Path)
 	}
 }
 
