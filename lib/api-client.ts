@@ -1,5 +1,17 @@
 // API Client for making requests to the backend
 import { getApiBase } from "./api-config";
+
+/** Error thrown when file write fails due to optimistic locking conflict */
+export class FileConflictError extends Error {
+	constructor(
+		message: string,
+		public currentContent: string,
+	) {
+		super(message);
+		this.name = "FileConflictError";
+	}
+}
+
 import type {
 	Agent,
 	AuthProvider,
@@ -182,19 +194,36 @@ class ApiClient {
 	/**
 	 * Write a file to a session's workspace.
 	 * @param sessionId Session ID
-	 * @param data File content and path
+	 * @param data File content and path (include originalContent for optimistic locking)
+	 * @throws {FileConflictError} When originalContent doesn't match current file content
 	 */
 	async writeSessionFile(
 		sessionId: string,
 		data: WriteSessionFileRequest,
 	): Promise<WriteSessionFileResponse> {
-		return this.fetch<WriteSessionFileResponse>(
-			`/sessions/${sessionId}/files/write`,
+		const response = await fetch(
+			`${this.base}/sessions/${sessionId}/files/write`,
 			{
 				method: "PUT",
+				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify(data),
 			},
 		);
+
+		const result = await response.json();
+
+		if (!response.ok) {
+			// Check for conflict error (optimistic locking failure)
+			if (response.status === 409 && result.error === "conflict") {
+				throw new FileConflictError(
+					result.message || "File has been modified",
+					result.currentContent,
+				);
+			}
+			throw new Error(result.error || "Request failed");
+		}
+
+		return result;
 	}
 
 	/**

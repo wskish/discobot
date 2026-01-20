@@ -336,9 +336,7 @@ function SessionNode({
 				onClick={() => onSessionSelect(session)}
 				className="flex items-center gap-1.5 min-w-0 flex-1"
 				title={
-					session.status !== "ready"
-						? getSessionHoverText(session)
-						: undefined
+					session.status !== "ready" ? getSessionHoverText(session) : undefined
 				}
 			>
 				<span className="shrink-0 flex items-center justify-center w-4 h-4">
