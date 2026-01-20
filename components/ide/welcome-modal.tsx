@@ -71,6 +71,7 @@ export function WelcomeModal({
 	const workspaceFormRef = React.useRef<WorkspaceFormRef>(null);
 
 	// Reset state when modal opens and restore last selections from localStorage
+	// biome-ignore lint/correctness/useExhaustiveDependencies: handleSelectAgent is intentionally excluded - it reads stale agent data on every modal open
 	React.useEffect(() => {
 		if (open) {
 			setStep("agent");
@@ -106,7 +107,6 @@ export function WelcomeModal({
 				// Ignore errors reading localStorage
 			}
 		}
-		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [open, agentTypes]);
 
 	const featuredAgents = React.useMemo(

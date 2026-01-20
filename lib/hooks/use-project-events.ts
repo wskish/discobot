@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef } from "react";
 import { mutate } from "swr";
 import { getApiBase } from "../api-config";
-import type { Workspace, Session } from "../api-types";
+import type { Session, Workspace } from "../api-types";
 
 // Event types from the server
 export type ProjectEventType = "session_updated" | "workspace_updated";
@@ -146,8 +146,7 @@ export function useProjectEvents(options: UseProjectEventsOptions = {}) {
 								workspaces: current.workspaces.map((workspace) => ({
 									...workspace,
 									sessions: workspace.sessions.filter(
-										(session: Session) =>
-											session.id !== sessionData.sessionId,
+										(session: Session) => session.id !== sessionData.sessionId,
 									),
 								})),
 							};
@@ -165,8 +164,7 @@ export function useProjectEvents(options: UseProjectEventsOptions = {}) {
 							return {
 								...current,
 								sessions: current.sessions.filter(
-									(session: Session) =>
-										session.id !== sessionData.sessionId,
+									(session: Session) => session.id !== sessionData.sessionId,
 								),
 							};
 						},

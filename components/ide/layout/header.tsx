@@ -14,12 +14,12 @@ import * as React from "react";
 import { CredentialsDialog } from "@/components/ide/credentials-dialog";
 import { IconRenderer } from "@/components/ide/icon-renderer";
 import { OctobotLogo } from "@/components/ide/octobot-logo";
+import { ThemeToggle } from "@/components/ide/theme-toggle";
+import { isTauriEnv, WindowControls } from "@/components/ide/window-controls";
 import {
 	getWorkspaceDisplayPath,
 	WorkspaceIcon,
 } from "@/components/ide/workspace-path";
-import { ThemeToggle } from "@/components/ide/theme-toggle";
-import { isTauriEnv, WindowControls } from "@/components/ide/window-controls";
 import { Button } from "@/components/ui/button";
 import {
 	DropdownMenu,

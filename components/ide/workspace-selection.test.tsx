@@ -10,13 +10,7 @@
 
 import assert from "node:assert";
 import { afterEach, beforeEach, describe, test } from "node:test";
-import {
-	act,
-	cleanup,
-	render,
-	screen,
-	waitFor,
-} from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import * as React from "react";
 import { SWRConfig } from "swr";
 import { DialogProvider } from "../../lib/contexts/dialog-context.js";

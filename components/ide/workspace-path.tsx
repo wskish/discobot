@@ -29,7 +29,10 @@ function getWorkspaceType(path: string): WorkspaceType {
  * Shortens a local path by replacing home directory prefixes with ~
  * Matches patterns like /home/username/... or /Users/username/...
  */
-function shortenHomePath(path: string): { display: string; shortened: boolean } {
+function shortenHomePath(path: string): {
+	display: string;
+	shortened: boolean;
+} {
 	const homeMatch = path.match(/^(\/home\/[^/]+|\/Users\/[^/]+)(\/.*)?$/);
 	if (homeMatch) {
 		const rest = homeMatch[2] || "";
@@ -192,7 +195,10 @@ export function WorkspacePath({
 	const content = (
 		<span className={cn("flex items-center gap-1.5 min-w-0", className)}>
 			{showIcon && (
-				<WorkspaceIcon workspaceType={workspaceType} className={iconClassName} />
+				<WorkspaceIcon
+					workspaceType={workspaceType}
+					className={iconClassName}
+				/>
 			)}
 			<span className="font-mono truncate">{displayPath}</span>
 		</span>

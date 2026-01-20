@@ -135,10 +135,7 @@ export function ImageAttachment({
 						{/* Overlay - fixed behind everything */}
 						{/* biome-ignore lint/a11y/useKeyWithClickEvents: Escape key handled separately */}
 						{/* biome-ignore lint/a11y/noStaticElementInteractions: Overlay backdrop */}
-						<div
-							className="fixed inset-0 bg-black/90"
-							onClick={handleClose}
-						/>
+						<div className="fixed inset-0 bg-black/90" onClick={handleClose} />
 
 						{/* Toolbar - fixed position */}
 						<div className="fixed top-4 right-4 flex items-center gap-2 z-[102]">

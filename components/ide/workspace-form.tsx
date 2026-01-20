@@ -157,7 +157,13 @@ export const WorkspaceForm = React.forwardRef<
 	WorkspaceFormRef,
 	WorkspaceFormProps
 >(function WorkspaceForm(
-	{ onSubmit, onValidationChange, showFormatHints = true, initialValue, className },
+	{
+		onSubmit,
+		onValidationChange,
+		showFormatHints = true,
+		initialValue,
+		className,
+	},
 	ref,
 ) {
 	const [input, setInput] = React.useState(initialValue ?? "");

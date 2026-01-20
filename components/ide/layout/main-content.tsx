@@ -31,7 +31,9 @@ export function MainContent() {
 
 	const [bottomView, setBottomView] = React.useState<BottomView>("chat");
 	const [openFiles, setOpenFiles] = React.useState<FileNode[]>([]);
-	const [activeFilePath, setActiveFilePath] = React.useState<string | null>(null);
+	const [activeFilePath, setActiveFilePath] = React.useState<string | null>(
+		null,
+	);
 
 	// Panel layout hook - now internal to MainContent
 	const panelLayout = usePanelLayout();

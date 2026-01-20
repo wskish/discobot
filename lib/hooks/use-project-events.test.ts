@@ -1,5 +1,5 @@
-import { describe, it, beforeEach, afterEach } from "node:test";
 import assert from "node:assert";
+import { afterEach, beforeEach, describe, it } from "node:test";
 
 // Mock EventSource before importing the hook
 type EventSourceListener = (event: { data: string }) => void;
@@ -75,7 +75,6 @@ describe("useProjectEvents", () => {
 	});
 
 	afterEach(() => {
-		// @ts-expect-error - restoring EventSource
 		globalThis.EventSource = originalEventSource;
 	});
 
@@ -105,7 +104,14 @@ describe("useProjectEvents", () => {
 
 			// Create the mutator function that mirrors the fix
 			const mutator = (
-				current: { workspaces: Array<{ id: string; sessions: Array<{ id: string }> }> } | undefined,
+				current:
+					| {
+							workspaces: Array<{
+								id: string;
+								sessions: Array<{ id: string }>;
+							}>;
+					  }
+					| undefined,
 			) => {
 				if (!current?.workspaces) return current;
 				return {
@@ -124,8 +130,15 @@ describe("useProjectEvents", () => {
 
 			// Assert: Verify the structure is correct and session was removed
 			assert.ok(result, "Result should not be undefined");
-			assert.ok("workspaces" in result, "Result should have workspaces property");
-			assert.strictEqual(result.workspaces.length, 2, "Should still have 2 workspaces");
+			assert.ok(
+				"workspaces" in result,
+				"Result should have workspaces property",
+			);
+			assert.strictEqual(
+				result.workspaces.length,
+				2,
+				"Should still have 2 workspaces",
+			);
 			assert.strictEqual(
 				result.workspaces[0].sessions.length,
 				1,
@@ -145,7 +158,14 @@ describe("useProjectEvents", () => {
 
 		it("should return undefined data unchanged", () => {
 			const mutator = (
-				current: { workspaces: Array<{ id: string; sessions: Array<{ id: string }> }> } | undefined,
+				current:
+					| {
+							workspaces: Array<{
+								id: string;
+								sessions: Array<{ id: string }>;
+							}>;
+					  }
+					| undefined,
 			) => {
 				if (!current?.workspaces) return current;
 				return {
@@ -160,12 +180,23 @@ describe("useProjectEvents", () => {
 			};
 
 			const result = mutator(undefined);
-			assert.strictEqual(result, undefined, "Should return undefined unchanged");
+			assert.strictEqual(
+				result,
+				undefined,
+				"Should return undefined unchanged",
+			);
 		});
 
 		it("should handle empty workspaces array", () => {
 			const mutator = (
-				current: { workspaces: Array<{ id: string; sessions: Array<{ id: string }> }> } | undefined,
+				current:
+					| {
+							workspaces: Array<{
+								id: string;
+								sessions: Array<{ id: string }>;
+							}>;
+					  }
+					| undefined,
 			) => {
 				if (!current?.workspaces) return current;
 				return {
@@ -181,7 +212,11 @@ describe("useProjectEvents", () => {
 
 			const result = mutator({ workspaces: [] });
 			assert.ok(result, "Result should not be undefined");
-			assert.deepStrictEqual(result.workspaces, [], "Should return empty workspaces array");
+			assert.deepStrictEqual(
+				result.workspaces,
+				[],
+				"Should return empty workspaces array",
+			);
 		});
 
 		it("should not crash when calling map on the correct structure (regression test)", () => {

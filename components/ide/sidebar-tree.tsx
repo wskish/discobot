@@ -15,6 +15,10 @@ import {
 } from "lucide-react";
 import * as React from "react";
 import {
+	parseWorkspacePath,
+	WorkspaceIcon,
+} from "@/components/ide/workspace-path";
+import {
 	DropdownMenu,
 	DropdownMenuContent,
 	DropdownMenuItem,
@@ -25,10 +29,6 @@ import { useDialogContext } from "@/lib/contexts/dialog-context";
 import { useSessionContext } from "@/lib/contexts/session-context";
 import { useDeleteSession, useSessions } from "@/lib/hooks/use-sessions";
 import { cn } from "@/lib/utils";
-import {
-	parseWorkspacePath,
-	WorkspaceIcon,
-} from "@/components/ide/workspace-path";
 
 interface SidebarTreeProps {
 	className?: string;

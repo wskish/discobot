@@ -23,6 +23,7 @@ import {
 	ConversationEmptyState,
 	ConversationScrollButton,
 } from "@/components/ai-elements/conversation";
+import { ImageAttachment } from "@/components/ai-elements/image-attachment";
 import {
 	Message,
 	MessageAction,
@@ -42,7 +43,6 @@ import {
 	PromptInputToolbar,
 	PromptInputTools,
 } from "@/components/ai-elements/prompt-input";
-import { ImageAttachment } from "@/components/ai-elements/image-attachment";
 import { Shimmer } from "@/components/ai-elements/shimmer";
 import {
 	ToolCall,
@@ -1024,7 +1024,9 @@ export function ChatPanel({ className }: ChatPanelProps) {
 																	}
 																	if (part.type === "file") {
 																		const filePart = part as FileUIPart;
-																		if (filePart.mediaType?.startsWith("image/")) {
+																		if (
+																			filePart.mediaType?.startsWith("image/")
+																		) {
 																			return (
 																				<ImageAttachment
 																					// biome-ignore lint/suspicious/noArrayIndexKey: File parts have no unique ID, order is stable
