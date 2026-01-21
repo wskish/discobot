@@ -828,6 +828,204 @@ func TestIsGitURL(t *testing.T) {
 	}
 }
 
+func TestApplyPatches(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("applies single commit patch", func(t *testing.T) {
+		baseDir := t.TempDir()
+		provider, _ := NewLocalProvider(baseDir)
+		sourceRepo := createTestRepo(t)
+
+		workDir, _, _ := provider.EnsureWorkspace(ctx, "project1", "ws1", sourceRepo, "")
+
+		// Get initial commit SHA
+		initialCommit := strings.TrimSpace(runGit(t, workDir, "rev-parse", "HEAD"))
+
+		// Create a patch (simulate what agent-api would return)
+		// Create a commit in a separate repo and export it as a patch
+		patchRepo := t.TempDir()
+		runGit(t, patchRepo, "init")
+		runGit(t, patchRepo, "config", "user.email", "patch@example.com")
+		runGit(t, patchRepo, "config", "user.name", "Patch Author")
+
+		// Clone from our workspace to get the same history
+		runGit(t, patchRepo, "fetch", workDir, "HEAD")
+		runGit(t, patchRepo, "reset", "--hard", "FETCH_HEAD")
+
+		// Add a new commit
+		if err := os.WriteFile(filepath.Join(patchRepo, "patched.txt"), []byte("patched content\n"), 0644); err != nil {
+			t.Fatalf("Failed to write file: %v", err)
+		}
+		runGit(t, patchRepo, "add", "patched.txt")
+		runGit(t, patchRepo, "commit", "-m", "Add patched file")
+
+		// Generate format-patch output
+		patches := runGit(t, patchRepo, "format-patch", "--stdout", initialCommit+"..HEAD")
+
+		// Apply the patches
+		finalCommit, err := provider.ApplyPatches(ctx, "ws1", []byte(patches))
+		if err != nil {
+			t.Fatalf("ApplyPatches failed: %v", err)
+		}
+
+		// Verify final commit is different from initial
+		if finalCommit == initialCommit {
+			t.Error("Expected different final commit")
+		}
+
+		// Verify the patched file exists
+		content, err := provider.ReadFile(ctx, "ws1", "", "patched.txt")
+		if err != nil {
+			t.Fatalf("Failed to read patched file: %v", err)
+		}
+		if string(content) != "patched content\n" {
+			t.Errorf("Unexpected content: %s", content)
+		}
+
+		// Verify commit message and author were preserved
+		commits, _ := provider.Log(ctx, "ws1", LogOptions{Limit: 1})
+		if len(commits) == 0 {
+			t.Fatal("Expected at least one commit")
+		}
+		if commits[0].Message != "Add patched file" {
+			t.Errorf("Expected message 'Add patched file', got %s", commits[0].Message)
+		}
+		if commits[0].Author != "Patch Author" {
+			t.Errorf("Expected author 'Patch Author', got %s", commits[0].Author)
+		}
+	})
+
+	t.Run("applies multiple commit patches", func(t *testing.T) {
+		baseDir := t.TempDir()
+		provider, _ := NewLocalProvider(baseDir)
+		sourceRepo := createTestRepo(t)
+
+		workDir, _, _ := provider.EnsureWorkspace(ctx, "project1", "ws1", sourceRepo, "")
+		initialCommit := strings.TrimSpace(runGit(t, workDir, "rev-parse", "HEAD"))
+
+		// Create patches with multiple commits
+		patchRepo := t.TempDir()
+		runGit(t, patchRepo, "init")
+		runGit(t, patchRepo, "config", "user.email", "patch@example.com")
+		runGit(t, patchRepo, "config", "user.name", "Patch Author")
+		runGit(t, patchRepo, "fetch", workDir, "HEAD")
+		runGit(t, patchRepo, "reset", "--hard", "FETCH_HEAD")
+
+		// Add first commit
+		if err := os.WriteFile(filepath.Join(patchRepo, "file1.txt"), []byte("file 1\n"), 0644); err != nil {
+			t.Fatalf("Failed to write file: %v", err)
+		}
+		runGit(t, patchRepo, "add", "file1.txt")
+		runGit(t, patchRepo, "commit", "-m", "Add file 1")
+
+		// Add second commit
+		if err := os.WriteFile(filepath.Join(patchRepo, "file2.txt"), []byte("file 2\n"), 0644); err != nil {
+			t.Fatalf("Failed to write file: %v", err)
+		}
+		runGit(t, patchRepo, "add", "file2.txt")
+		runGit(t, patchRepo, "commit", "-m", "Add file 2")
+
+		// Add third commit
+		if err := os.WriteFile(filepath.Join(patchRepo, "file3.txt"), []byte("file 3\n"), 0644); err != nil {
+			t.Fatalf("Failed to write file: %v", err)
+		}
+		runGit(t, patchRepo, "add", "file3.txt")
+		runGit(t, patchRepo, "commit", "-m", "Add file 3")
+
+		patches := runGit(t, patchRepo, "format-patch", "--stdout", initialCommit+"..HEAD")
+
+		finalCommit, err := provider.ApplyPatches(ctx, "ws1", []byte(patches))
+		if err != nil {
+			t.Fatalf("ApplyPatches failed: %v", err)
+		}
+
+		// Verify all files exist
+		for _, fname := range []string{"file1.txt", "file2.txt", "file3.txt"} {
+			if _, err := provider.ReadFile(ctx, "ws1", "", fname); err != nil {
+				t.Errorf("Expected file %s to exist: %v", fname, err)
+			}
+		}
+
+		// Verify we have 3 new commits (4 total including initial)
+		commits, _ := provider.Log(ctx, "ws1", LogOptions{Limit: 10})
+		if len(commits) != 4 {
+			t.Errorf("Expected 4 commits, got %d", len(commits))
+		}
+
+		_ = finalCommit
+	})
+
+	t.Run("fails for unknown workspace", func(t *testing.T) {
+		baseDir := t.TempDir()
+		provider, _ := NewLocalProvider(baseDir)
+
+		_, err := provider.ApplyPatches(ctx, "nonexistent", []byte("patch content"))
+		if err == nil {
+			t.Error("Expected error for unknown workspace")
+		}
+	})
+
+	t.Run("fails and rolls back on invalid patch", func(t *testing.T) {
+		baseDir := t.TempDir()
+		provider, _ := NewLocalProvider(baseDir)
+		sourceRepo := createTestRepo(t)
+
+		workDir, _, _ := provider.EnsureWorkspace(ctx, "project1", "ws1", sourceRepo, "")
+		initialCommit := strings.TrimSpace(runGit(t, workDir, "rev-parse", "HEAD"))
+
+		// Try to apply invalid patch
+		_, err := provider.ApplyPatches(ctx, "ws1", []byte("invalid patch content"))
+		if err == nil {
+			t.Error("Expected error for invalid patch")
+		}
+
+		// Verify we're back at the initial commit
+		currentCommit := strings.TrimSpace(runGit(t, workDir, "rev-parse", "HEAD"))
+		if currentCommit != initialCommit {
+			t.Errorf("Expected rollback to %s, got %s", initialCommit, currentCommit)
+		}
+	})
+
+	t.Run("preserves commit signatures in patches", func(t *testing.T) {
+		baseDir := t.TempDir()
+		provider, _ := NewLocalProvider(baseDir)
+		sourceRepo := createTestRepo(t)
+
+		workDir, _, _ := provider.EnsureWorkspace(ctx, "project1", "ws1", sourceRepo, "")
+		initialCommit := strings.TrimSpace(runGit(t, workDir, "rev-parse", "HEAD"))
+
+		// Create a patch with specific author info
+		patchRepo := t.TempDir()
+		runGit(t, patchRepo, "init")
+		runGit(t, patchRepo, "config", "user.email", "special@example.com")
+		runGit(t, patchRepo, "config", "user.name", "Special Author")
+		runGit(t, patchRepo, "fetch", workDir, "HEAD")
+		runGit(t, patchRepo, "reset", "--hard", "FETCH_HEAD")
+
+		if err := os.WriteFile(filepath.Join(patchRepo, "signed.txt"), []byte("signed content\n"), 0644); err != nil {
+			t.Fatalf("Failed to write file: %v", err)
+		}
+		runGit(t, patchRepo, "add", "signed.txt")
+		runGit(t, patchRepo, "commit", "-m", "Signed commit")
+
+		patches := runGit(t, patchRepo, "format-patch", "--stdout", initialCommit+"..HEAD")
+
+		_, err := provider.ApplyPatches(ctx, "ws1", []byte(patches))
+		if err != nil {
+			t.Fatalf("ApplyPatches failed: %v", err)
+		}
+
+		// Verify author info was preserved
+		commits, _ := provider.Log(ctx, "ws1", LogOptions{Limit: 1})
+		if commits[0].Author != "Special Author" {
+			t.Errorf("Expected author 'Special Author', got %s", commits[0].Author)
+		}
+		if commits[0].AuthorEmail != "special@example.com" {
+			t.Errorf("Expected email 'special@example.com', got %s", commits[0].AuthorEmail)
+		}
+	})
+}
+
 func TestWorkspaceIsolation(t *testing.T) {
 	ctx := context.Background()
 

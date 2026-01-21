@@ -69,6 +69,11 @@ type Provider interface {
 
 	// RemoveWorkspace removes the workspace working directory.
 	RemoveWorkspace(ctx context.Context, workspaceID string) error
+
+	// ApplyPatches applies mbox-format patches (from git format-patch) to the workspace.
+	// Returns the final commit SHA after all patches are applied.
+	// If application fails, the working tree is reset to the original state.
+	ApplyPatches(ctx context.Context, workspaceID string, patches []byte) (finalCommit string, err error)
 }
 
 // Status represents the git status of a repository.

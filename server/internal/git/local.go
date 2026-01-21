@@ -590,6 +590,41 @@ func (p *LocalProvider) RemoveWorkspace(_ context.Context, workspaceID string) e
 	return os.RemoveAll(info.workDir)
 }
 
+// ApplyPatches applies mbox-format patches (from git format-patch) to the workspace.
+// Returns the final commit SHA after all patches are applied.
+// If application fails, the working tree is reset to the original state.
+func (p *LocalProvider) ApplyPatches(ctx context.Context, workspaceID string, patches []byte) (string, error) {
+	workDir := p.GetWorkDir(ctx, workspaceID)
+	if workDir == "" {
+		return "", fmt.Errorf("%w: workspace %s", ErrNotFound, workspaceID)
+	}
+
+	// Get current HEAD before applying patches (for rollback if needed)
+	originalHead, err := p.runGitOutput(ctx, workDir, "rev-parse", "HEAD")
+	if err != nil {
+		return "", fmt.Errorf("failed to get current HEAD: %w", err)
+	}
+	originalHead = strings.TrimSpace(originalHead)
+
+	// Apply patches using git am
+	// --keep-cr preserves carriage returns (important for cross-platform)
+	// We pipe the patches to stdin
+	if err := p.runGitWithStdin(ctx, workDir, patches, "am", "--keep-cr"); err != nil {
+		// Application failed - abort and reset
+		_ = p.runGit(ctx, workDir, "am", "--abort")
+		_ = p.runGit(ctx, workDir, "reset", "--hard", originalHead)
+		return "", fmt.Errorf("failed to apply patches: %w", err)
+	}
+
+	// Get the final commit SHA
+	finalCommit, err := p.runGitOutput(ctx, workDir, "rev-parse", "HEAD")
+	if err != nil {
+		return "", fmt.Errorf("failed to get final commit: %w", err)
+	}
+
+	return strings.TrimSpace(finalCommit), nil
+}
+
 // --- Internal helpers ---
 
 // runGit runs a git command.
@@ -598,6 +633,25 @@ func (p *LocalProvider) runGit(ctx context.Context, workDir string, args ...stri
 	if workDir != "" {
 		cmd.Dir = workDir
 	}
+
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("git %s: %v: %s", strings.Join(args, " "), err, stderr.String())
+	}
+
+	return nil
+}
+
+// runGitWithStdin runs a git command with stdin input.
+func (p *LocalProvider) runGitWithStdin(ctx context.Context, workDir string, stdin []byte, args ...string) error {
+	cmd := exec.CommandContext(ctx, "git", args...)
+	if workDir != "" {
+		cmd.Dir = workDir
+	}
+
+	cmd.Stdin = bytes.NewReader(stdin)
 
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
