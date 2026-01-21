@@ -51,6 +51,7 @@ jobs:
       - name: Build and push
         uses: depot/build-push-action@v1
         with:
+          project: bbqjs4tj1g
           context: .
           platforms: linux/amd64,linux/arm64
           push: ${{ github.event_name != 'pull_request' }}
