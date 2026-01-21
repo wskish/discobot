@@ -25,6 +25,7 @@ import {
 	DropdownMenuItem,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import type { FileStatus, SessionDiffFileEntry } from "@/lib/api-types";
 import {
 	STORAGE_KEYS,
 	usePersistedState,
@@ -33,7 +34,6 @@ import {
 	type LazyFileNode,
 	useSessionFiles,
 } from "@/lib/hooks/use-session-files";
-import type { FileStatus, SessionDiffFileEntry } from "@/lib/api-types";
 import { cn } from "@/lib/utils";
 
 /**

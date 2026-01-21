@@ -381,19 +381,19 @@ func (s *SessionService) mapSession(sess *model.Session) *Session {
 
 	return &Session{
 		ID:            sess.ID,
-		ProjectID:    sess.ProjectID,
-		Name:         sess.Name,
-		Description:  description,
-		Timestamp:    timestamp,
-		Status:       sess.Status,
+		ProjectID:     sess.ProjectID,
+		Name:          sess.Name,
+		Description:   description,
+		Timestamp:     timestamp,
+		Status:        sess.Status,
 		CommitStatus:  sess.CommitStatus,
 		CommitError:   commitError,
 		BaseCommit:    baseCommit,
 		AppliedCommit: appliedCommit,
-		ErrorMessage: errorMessage,
-		Files:        []FileNode{},
-		WorkspaceID:  sess.WorkspaceID,
-		AgentID:      agentID,
+		ErrorMessage:  errorMessage,
+		Files:         []FileNode{},
+		WorkspaceID:   sess.WorkspaceID,
+		AgentID:       agentID,
 	}
 }
 
@@ -766,22 +766,4 @@ func buildCommitMessage(msgID, text string) (json.RawMessage, error) {
 	}
 
 	return messages, nil
-}
-
-// updateCommitStatusWithEvent updates session commit status and emits an SSE event.
-func (s *SessionService) updateCommitStatusWithEvent(ctx context.Context, projectID, sessionID, commitStatus string) {
-	sess, err := s.store.GetSessionByID(ctx, sessionID)
-	if err != nil {
-		log.Printf("Failed to get session %s for commit status update: %v", sessionID, err)
-		return
-	}
-
-	sess.CommitStatus = commitStatus
-	if err := s.store.UpdateSession(ctx, sess); err != nil {
-		log.Printf("Failed to update session %s commit status to %s: %v", sessionID, commitStatus, err)
-		return
-	}
-
-	// Emit SSE event
-	s.publishCommitStatusChanged(ctx, projectID, sessionID, commitStatus)
 }

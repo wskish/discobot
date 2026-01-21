@@ -666,12 +666,40 @@ function FileContentView({
 								oldFile={{
 									name: `${filePath} (on disk)`,
 									contents: state.conflictContent,
-									lang: language as "typescript" | "javascript" | "go" | "python" | "rust" | "java" | "css" | "html" | "json" | "yaml" | "markdown" | "bash" | "sql" | undefined,
+									lang: language as
+										| "typescript"
+										| "javascript"
+										| "go"
+										| "python"
+										| "rust"
+										| "java"
+										| "css"
+										| "html"
+										| "json"
+										| "yaml"
+										| "markdown"
+										| "bash"
+										| "sql"
+										| undefined,
 								}}
 								newFile={{
 									name: `${filePath} (your changes)`,
 									contents: state.content,
-									lang: language as "typescript" | "javascript" | "go" | "python" | "rust" | "java" | "css" | "html" | "json" | "yaml" | "markdown" | "bash" | "sql" | undefined,
+									lang: language as
+										| "typescript"
+										| "javascript"
+										| "go"
+										| "python"
+										| "rust"
+										| "java"
+										| "css"
+										| "html"
+										| "json"
+										| "yaml"
+										| "markdown"
+										| "bash"
+										| "sql"
+										| undefined,
 								}}
 								options={{
 									theme: {

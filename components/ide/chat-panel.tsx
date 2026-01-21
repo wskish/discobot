@@ -17,6 +17,7 @@ import {
 	Search,
 } from "lucide-react";
 import * as React from "react";
+import { useSWRConfig } from "swr";
 import {
 	Conversation,
 	ConversationContent,
@@ -61,7 +62,6 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useSWRConfig } from "swr";
 import { getApiBase } from "@/lib/api-config";
 import type { Agent, SessionStatus } from "@/lib/api-types";
 import { useDialogContext } from "@/lib/contexts/dialog-context";
@@ -193,42 +193,6 @@ function getStatusDisplay(status: SessionStatus): {
 				icon: <AlertCircle className="h-4 w-4 text-muted-foreground" />,
 				isLoading: false,
 			};
-	}
-}
-
-// Map commit status to human-readable text and icons
-function getCommitStatusDisplay(commitStatus: Session["commitStatus"]): {
-	text: string;
-	icon: React.ReactNode;
-	isLoading: boolean;
-} | null {
-	switch (commitStatus) {
-		case "pending":
-			return {
-				text: "Preparing to commit...",
-				icon: <Loader2 className="h-4 w-4 animate-spin text-blue-500" />,
-				isLoading: true,
-			};
-		case "committing":
-			return {
-				text: "Committing changes...",
-				icon: <Loader2 className="h-4 w-4 animate-spin text-blue-500" />,
-				isLoading: true,
-			};
-		case "completed":
-			return {
-				text: "Changes committed",
-				icon: <CheckCircle className="h-4 w-4 text-blue-500" />,
-				isLoading: false,
-			};
-		case "failed":
-			return {
-				text: "Commit failed",
-				icon: <AlertCircle className="h-4 w-4 text-destructive" />,
-				isLoading: false,
-			};
-		default:
-			return null; // No commit in progress
 	}
 }
 

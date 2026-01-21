@@ -131,7 +131,12 @@ describe("getCommitPatches", () => {
 			await createGitRepo(repoDir);
 
 			// Get the current branch name (could be main or master)
-			const mainBranch = await git(repoDir, "rev-parse", "--abbrev-ref", "HEAD");
+			const mainBranch = await git(
+				repoDir,
+				"rev-parse",
+				"--abbrev-ref",
+				"HEAD",
+			);
 
 			// Create a commit on a branch
 			await git(repoDir, "checkout", "-b", "branch1");
@@ -250,7 +255,7 @@ describe("getCommitPatches", () => {
 
 		it("handles commits from intermediate parent", async () => {
 			const repoDir = join(testDir, "intermediate-parent");
-			const initialCommit = await createGitRepo(repoDir);
+			await createGitRepo(repoDir);
 
 			// Add first commit
 			await writeFile(join(repoDir, "file1.txt"), "File 1\n");
@@ -274,9 +279,18 @@ describe("getCommitPatches", () => {
 			assert.equal(isCommitsError(result), false);
 			if (!isCommitsError(result)) {
 				assert.equal(result.commitCount, 2);
-				assert.ok(!result.patches.includes("Commit 1"), "Should not include commit 1");
-				assert.ok(result.patches.includes("Commit 2"), "Should include commit 2");
-				assert.ok(result.patches.includes("Commit 3"), "Should include commit 3");
+				assert.ok(
+					!result.patches.includes("Commit 1"),
+					"Should not include commit 1",
+				);
+				assert.ok(
+					result.patches.includes("Commit 2"),
+					"Should include commit 2",
+				);
+				assert.ok(
+					result.patches.includes("Commit 3"),
+					"Should include commit 3",
+				);
 			}
 		});
 

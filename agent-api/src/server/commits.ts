@@ -59,20 +59,6 @@ async function commitExists(
 }
 
 /**
- * Get the current HEAD commit SHA
- */
-async function getHeadCommit(workspaceRoot: string): Promise<string | null> {
-	try {
-		const { stdout } = await execAsync("git rev-parse HEAD", {
-			cwd: workspaceRoot,
-		});
-		return stdout.trim();
-	} catch {
-		return null;
-	}
-}
-
-/**
  * Count commits between parent and HEAD
  */
 async function countCommits(

@@ -59,14 +59,11 @@ export function useSessionFiles(sessionId: string | null, loadAllFiles = true) {
 		data: diffData,
 		isLoading: isLoadingDiff,
 		mutate: mutateDiff,
-	} = useSWR(
-		sessionId ? `session-diff-${sessionId}-files` : null,
-		async () => {
-			if (!sessionId) return null;
-			const result = await api.getSessionDiff(sessionId, { format: "files" });
-			return result as SessionDiffFilesResponse;
-		},
-	);
+	} = useSWR(sessionId ? `session-diff-${sessionId}-files` : null, async () => {
+		if (!sessionId) return null;
+		const result = await api.getSessionDiff(sessionId, { format: "files" });
+		return result as SessionDiffFilesResponse;
+	});
 
 	// Build a map of file path to status for quick lookup
 	const diffEntriesMap = useMemo(() => {
@@ -315,9 +312,7 @@ function entriesToNodes(
 		})();
 
 		const isUnderParent =
-			parentPath === "."
-				? true
-				: filePath.startsWith(`${parentPath}/`);
+			parentPath === "." ? true : filePath.startsWith(`${parentPath}/`);
 
 		if (!isUnderParent) continue;
 
@@ -344,7 +339,8 @@ function entriesToNodes(
 			const ghostDirPath =
 				parentPath === "." ? firstPart : `${parentPath}/${firstPart}`;
 
-			if (existingPaths.has(ghostDirPath) || addedPaths.has(ghostDirPath)) continue;
+			if (existingPaths.has(ghostDirPath) || addedPaths.has(ghostDirPath))
+				continue;
 
 			// Create ghost directory for deleted files
 			nodes.push({

@@ -409,7 +409,10 @@ describe("GET /commits endpoint", () => {
 
 		assert.equal(body.commitCount, 1);
 		assert.ok(body.patches.length > 0, "Should have patches");
-		assert.ok(body.patches.includes("Add file"), "Should include commit message");
+		assert.ok(
+			body.patches.includes("Add file"),
+			"Should include commit message",
+		);
 		assert.ok(body.patches.includes("file.txt"), "Should include filename");
 	});
 
