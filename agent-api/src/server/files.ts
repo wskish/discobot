@@ -628,12 +628,21 @@ async function getUntrackedFileDiff(
 
 /**
  * Get diff using git
+ * @param workspaceRoot - The workspace root directory
+ * @param singlePath - Optional single file path to get diff for
+ * @param baseCommit - Optional base commit to diff against. If not provided, diffs working tree against HEAD.
  */
 async function getGitDiff(
 	workspaceRoot: string,
 	singlePath?: string,
+	baseCommit?: string,
 ): Promise<DiffResponse> {
 	let command = "git diff --no-color";
+	// If baseCommit is provided, diff working tree against that commit
+	// Otherwise, diffs working tree against HEAD (default git diff behavior)
+	if (baseCommit) {
+		command += ` ${baseCommit}`;
+	}
 	if (singlePath) {
 		command += ` -- "${singlePath}"`;
 	}
@@ -688,6 +697,8 @@ async function getGitDiff(
 export interface DiffOptions {
 	path?: string;
 	format?: "full" | "files";
+	/** Base commit to diff against. If not provided, diffs against HEAD (working tree changes). */
+	baseCommit?: string;
 }
 
 /**
@@ -717,7 +728,7 @@ export async function getDiff(
 	// Get the diff (only works for git repos)
 	let diff: DiffResponse;
 	if (isGit) {
-		diff = await getGitDiff(workspaceRoot, options.path);
+		diff = await getGitDiff(workspaceRoot, options.path, options.baseCommit);
 	} else {
 		// Not a git repo - return empty diff
 		diff = {

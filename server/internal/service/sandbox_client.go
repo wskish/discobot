@@ -539,9 +539,10 @@ func (c *SandboxChatClient) GetUserInfo(ctx context.Context, sessionID string) (
 // GetDiff retrieves diff information from the sandbox.
 // If path is non-empty, returns a single file diff.
 // If format is "files", returns just file paths.
+// If baseCommit is non-empty, diffs against that commit instead of HEAD.
 // Otherwise returns full diff with patches.
 // Retries with exponential backoff on connection errors and 5xx responses.
-func (c *SandboxChatClient) GetDiff(ctx context.Context, sessionID string, path string, format string) (any, error) {
+func (c *SandboxChatClient) GetDiff(ctx context.Context, sessionID string, path string, format string, baseCommit string) (any, error) {
 	resp, err := retryWithBackoff(ctx, func() (*http.Response, int, error) {
 		client, err := c.getHTTPClient(ctx, sessionID)
 		if err != nil {
@@ -556,6 +557,9 @@ func (c *SandboxChatClient) GetDiff(ctx context.Context, sessionID string, path 
 		}
 		if format != "" {
 			params = append(params, "format="+format)
+		}
+		if baseCommit != "" {
+			params = append(params, "baseCommit="+baseCommit)
 		}
 		if len(params) > 0 {
 			url += "?" + strings.Join(params, "&")

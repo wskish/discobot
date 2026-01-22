@@ -467,10 +467,12 @@ func (c *ChatService) WriteFile(ctx context.Context, projectID, sessionID string
 // If path is non-empty, returns a single file diff.
 // If format is "files", returns just file paths.
 // Otherwise returns full diff with patches.
+// Uses the session's baseCommit if set, otherwise diffs against HEAD.
 // The sandbox is automatically reconciled if not running.
 func (c *ChatService) GetDiff(ctx context.Context, projectID, sessionID, path, format string) (any, error) {
-	// Validate session belongs to project
-	if _, err := c.GetSession(ctx, projectID, sessionID); err != nil {
+	// Validate session belongs to project and get baseCommit
+	sess, err := c.GetSession(ctx, projectID, sessionID)
+	if err != nil {
 		return nil, err
 	}
 
@@ -483,9 +485,15 @@ func (c *ChatService) GetDiff(ctx context.Context, projectID, sessionID, path, f
 		return nil, err
 	}
 
+	// Use session's baseCommit if set, otherwise empty string means diff against HEAD
+	baseCommit := ""
+	if sess.BaseCommit != nil {
+		baseCommit = *sess.BaseCommit
+	}
+
 	// Use reconciliation wrapper for runtime errors
 	return withSandboxReconciliation(ctx, c, projectID, sessionID, func() (any, error) {
-		return c.sandboxClient.GetDiff(ctx, sessionID, path, format)
+		return c.sandboxClient.GetDiff(ctx, sessionID, path, format, baseCommit)
 	})
 }
 

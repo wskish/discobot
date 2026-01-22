@@ -474,14 +474,14 @@ func TestPerformCommit_WorkspaceChangedNoPatches(t *testing.T) {
 
 	// Set up mock handler - first GetCommits returns no patches, second returns patches
 	handler := &trackingHandler{
-		onChat: func(w http.ResponseWriter, r *http.Request) {
+		onChat: func(w http.ResponseWriter, _ *http.Request) {
 			mu.Lock()
 			requestOrder = append(requestOrder, "chat")
 			mu.Unlock()
 			// POST returns 202 Accepted
 			w.WriteHeader(http.StatusAccepted)
 		},
-		onCommits: func(w http.ResponseWriter, r *http.Request) {
+		onCommits: func(w http.ResponseWriter, _ *http.Request) {
 			mu.Lock()
 			count := len(requestOrder)
 			requestOrder = append(requestOrder, "commits")
@@ -598,11 +598,11 @@ func TestPerformCommit_WorkspaceChangedGetCommitsError(t *testing.T) {
 
 	// Set up mock handler - first GetCommits returns error, second returns patches
 	handler := &trackingHandler{
-		onChat: func(w http.ResponseWriter, r *http.Request) {
+		onChat: func(w http.ResponseWriter, _ *http.Request) {
 			// POST returns 202 Accepted
 			w.WriteHeader(http.StatusAccepted)
 		},
-		onCommits: func(w http.ResponseWriter, r *http.Request) {
+		onCommits: func(w http.ResponseWriter, _ *http.Request) {
 			mu.Lock()
 			callCount++
 			currentCall := callCount

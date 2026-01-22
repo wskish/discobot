@@ -801,3 +801,212 @@ describe("Git Diff API - All Change Types", () => {
 		});
 	});
 });
+
+// =============================================================================
+// Git Diff with baseCommit Tests
+// =============================================================================
+
+describe("Git Diff API - baseCommit parameter", () => {
+	const gitTestDir = "/tmp/agent-api-basecommit-test";
+	let app: ReturnType<typeof createApp>["app"];
+	let firstCommitSha: string;
+	let secondCommitSha: string;
+
+	before(async () => {
+		// Clean up any existing test directory
+		await rm(gitTestDir, { recursive: true, force: true });
+
+		// Create test directory
+		await mkdir(gitTestDir, { recursive: true });
+
+		// Initialize git repo
+		await execAsync("git init", { cwd: gitTestDir });
+		await execAsync('git config user.email "test@test.com"', {
+			cwd: gitTestDir,
+		});
+		await execAsync('git config user.name "Test User"', { cwd: gitTestDir });
+
+		// Create initial commit
+		await writeFile(join(gitTestDir, "file1.txt"), "Initial content\n");
+		await writeFile(join(gitTestDir, "file2.txt"), "File 2 content\n");
+		await execAsync("git add .", { cwd: gitTestDir });
+		await execAsync('git commit -m "Initial commit"', { cwd: gitTestDir });
+
+		// Get first commit SHA
+		const { stdout: sha1 } = await execAsync("git rev-parse HEAD", {
+			cwd: gitTestDir,
+		});
+		firstCommitSha = sha1.trim();
+
+		// Make second commit
+		await writeFile(
+			join(gitTestDir, "file1.txt"),
+			"Modified in second commit\n",
+		);
+		await writeFile(
+			join(gitTestDir, "file3.txt"),
+			"New file in second commit\n",
+		);
+		await execAsync("git add .", { cwd: gitTestDir });
+		await execAsync('git commit -m "Second commit"', { cwd: gitTestDir });
+
+		// Get second commit SHA
+		const { stdout: sha2 } = await execAsync("git rev-parse HEAD", {
+			cwd: gitTestDir,
+		});
+		secondCommitSha = sha2.trim();
+
+		// Make uncommitted changes (these will show as working tree changes)
+		await writeFile(
+			join(gitTestDir, "file1.txt"),
+			"Uncommitted working tree changes\n",
+		);
+		await writeFile(join(gitTestDir, "file4.txt"), "New uncommitted file\n");
+
+		// Create app with git test directory
+		const result = createApp({
+			agentCommand: "true",
+			agentArgs: [],
+			agentCwd: gitTestDir,
+			enableLogging: false,
+		});
+		app = result.app;
+	});
+
+	after(async () => {
+		await rm(gitTestDir, { recursive: true, force: true });
+	});
+
+	describe("GET /diff?baseCommit=<sha> - Diff against specific commit", () => {
+		it("diffs against HEAD when no baseCommit is provided", async () => {
+			const res = await app.request("/diff");
+			assert.equal(res.status, 200);
+
+			const body = (await res.json()) as DiffResponse;
+
+			// Should only show uncommitted changes (file1 modified, file4 new)
+			assert.equal(
+				body.stats.filesChanged,
+				2,
+				`Expected 2 changed files (uncommitted changes only), got ${body.stats.filesChanged}. Files: ${body.files.map((f) => `${f.path}:${f.status}`).join(", ")}`,
+			);
+
+			const file1 = body.files.find((f) => f.path === "file1.txt");
+			const file4 = body.files.find((f) => f.path === "file4.txt");
+
+			assert.ok(file1, "Should include file1.txt (modified in working tree)");
+			assert.equal(file1.status, "modified");
+
+			assert.ok(file4, "Should include file4.txt (new untracked)");
+			assert.equal(file4.status, "added");
+
+			// file3 should NOT be included (no changes since HEAD)
+			const file3 = body.files.find((f) => f.path === "file3.txt");
+			assert.ok(!file3, "file3.txt should not appear (unchanged since HEAD)");
+		});
+
+		it("diffs against first commit showing all changes since then", async () => {
+			const res = await app.request(`/diff?baseCommit=${firstCommitSha}`);
+			assert.equal(res.status, 200);
+
+			const body = (await res.json()) as DiffResponse;
+
+			// Should show all changes since first commit:
+			// - file1.txt modified (both second commit and working tree)
+			// - file3.txt added (second commit)
+			// - file4.txt added (working tree, untracked)
+			assert.equal(
+				body.stats.filesChanged,
+				3,
+				`Expected 3 changed files since first commit, got ${body.stats.filesChanged}. Files: ${body.files.map((f) => `${f.path}:${f.status}`).join(", ")}`,
+			);
+
+			const file1 = body.files.find((f) => f.path === "file1.txt");
+			const file3 = body.files.find((f) => f.path === "file3.txt");
+			const file4 = body.files.find((f) => f.path === "file4.txt");
+
+			assert.ok(file1, "Should include file1.txt");
+			assert.equal(file1.status, "modified");
+
+			assert.ok(file3, "Should include file3.txt (added in second commit)");
+			assert.equal(file3.status, "added");
+
+			assert.ok(file4, "Should include file4.txt (new untracked)");
+			assert.equal(file4.status, "added");
+		});
+
+		it("diffs against second commit showing only working tree changes", async () => {
+			const res = await app.request(`/diff?baseCommit=${secondCommitSha}`);
+			assert.equal(res.status, 200);
+
+			const body = (await res.json()) as DiffResponse;
+
+			// Same as HEAD (second commit IS HEAD), should only show uncommitted changes
+			assert.equal(
+				body.stats.filesChanged,
+				2,
+				`Expected 2 changed files since second commit, got ${body.stats.filesChanged}. Files: ${body.files.map((f) => `${f.path}:${f.status}`).join(", ")}`,
+			);
+
+			const file1 = body.files.find((f) => f.path === "file1.txt");
+			const file4 = body.files.find((f) => f.path === "file4.txt");
+
+			assert.ok(file1, "Should include file1.txt (modified in working tree)");
+			assert.ok(file4, "Should include file4.txt (new untracked)");
+		});
+
+		it("works with format=files and baseCommit", async () => {
+			const res = await app.request(
+				`/diff?format=files&baseCommit=${firstCommitSha}`,
+			);
+			assert.equal(res.status, 200);
+
+			const body = (await res.json()) as DiffFilesResponse;
+
+			assert.ok(Array.isArray(body.files), "Should have files array");
+			assert.equal(body.files.length, 3, "Should have 3 changed files");
+
+			// Verify file entries have proper structure
+			for (const file of body.files) {
+				assert.ok(
+					typeof (file as DiffFileEntry).path === "string",
+					"Should have path",
+				);
+				assert.ok(
+					typeof (file as DiffFileEntry).status === "string",
+					"Should have status",
+				);
+			}
+		});
+
+		it("works with single file path and baseCommit", async () => {
+			const res = await app.request(
+				`/diff?path=file3.txt&baseCommit=${firstCommitSha}`,
+			);
+			assert.equal(res.status, 200);
+
+			const body = (await res.json()) as SingleFileDiffResponse;
+
+			// file3.txt was added in second commit, so against first commit it shows as added
+			assert.equal(body.path, "file3.txt");
+			assert.equal(body.status, "added");
+			assert.ok(body.additions > 0, "Should have additions");
+			assert.ok(body.patch.length > 0, "Should have patch content");
+		});
+
+		it("returns unchanged for file not changed since baseCommit", async () => {
+			const res = await app.request(
+				`/diff?path=file2.txt&baseCommit=${firstCommitSha}`,
+			);
+			assert.equal(res.status, 200);
+
+			const body = (await res.json()) as SingleFileDiffResponse;
+
+			// file2.txt hasn't changed since initial commit
+			assert.equal(body.path, "file2.txt");
+			assert.equal(body.status, "unchanged");
+			assert.equal(body.additions, 0);
+			assert.equal(body.deletions, 0);
+		});
+	});
+});
