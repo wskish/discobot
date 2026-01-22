@@ -73,6 +73,12 @@ func run() error {
 		return fmt.Errorf("failed to lookup user %s: %w", runAsUser, err)
 	}
 
+	// Step 0: Setup git safe.directory for all workspace paths (system-wide)
+	// This must happen early so git commands work for all users
+	if err := setupGitSafeDirectories(workspacePath); err != nil {
+		return fmt.Errorf("git safe.directory setup failed: %w", err)
+	}
+
 	// Step 1: Setup base home directory (copy from /home/octobot if needed)
 	if err := setupBaseHome(userInfo); err != nil {
 		return fmt.Errorf("base home setup failed: %w", err)
@@ -108,6 +114,38 @@ func run() error {
 
 	// Step 7: Run the agent API
 	return runAgent(agentBinary, userInfo)
+}
+
+// setupGitSafeDirectories configures git safe.directory for all workspace paths.
+// Uses --system to write to /etc/gitconfig so all users (including octobot) can see it.
+func setupGitSafeDirectories(workspacePath string) error {
+	// Paths that need to be marked as safe for git operations
+	dirs := []string{
+		"/.workspace",                          // Source workspace mount point
+		"/.workspace/.git",                     // Git directory (some operations check .git specifically)
+		workspaceDir,                           // /.data/octobot/workspace
+		stagingDir,                             // /.data/octobot/workspace.staging (used during clone)
+		filepath.Join(mountHome, "workspace"),  // /home/octobot/workspace (after agentfs mount)
+		symlinkPath,                            // /workspace symlink
+	}
+
+	// Add the specific workspacePath if provided and different from /.workspace
+	if workspacePath != "" && workspacePath != "/.workspace" {
+		dirs = append([]string{workspacePath}, dirs...)
+	}
+
+	fmt.Printf("octobot-agent: configuring git safe.directory for workspace paths\n")
+	for _, dir := range dirs {
+		cmd := exec.Command("git", "config", "--system", "--add", "safe.directory", dir)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		if err := cmd.Run(); err != nil {
+			// Log but don't fail - some paths may not exist yet
+			fmt.Printf("octobot-agent: warning: git config safe.directory %s: %v\n", dir, err)
+		}
+	}
+
+	return nil
 }
 
 // setupBaseHome copies /home/octobot to /.data/octobot if it doesn't exist,
@@ -302,14 +340,7 @@ func setupWorkspace(workspacePath, workspaceCommit string, u *userInfo) error {
 		return fmt.Errorf("failed to remove staging directory: %w", err)
 	}
 
-	// Mark the source directory as safe for git
-	safeCmd := exec.Command("git", "config", "--global", "--add", "safe.directory", workspacePath+"/.git")
-	safeCmd.Stdout = os.Stdout
-	safeCmd.Stderr = os.Stderr
-	fmt.Printf("octobot-agent: running: git %v\n", safeCmd.Args)
-	if err := safeCmd.Run(); err != nil {
-		return fmt.Errorf("git config safe.directory failed: %w", err)
-	}
+	// Note: git safe.directory is configured system-wide in setupGitSafeDirectories()
 
 	// Clone to staging directory first
 	cloneArgs := []string{"clone", "--single-branch"}
@@ -328,7 +359,7 @@ func setupWorkspace(workspacePath, workspaceCommit string, u *userInfo) error {
 
 	// If specific commit requested, checkout that commit
 	if workspaceCommit != "" {
-		cmd = exec.Command("git", "-c", "safe.directory="+stagingDir, "-C", stagingDir, "checkout", workspaceCommit)
+		cmd = exec.Command("git", "-C", stagingDir, "checkout", workspaceCommit)
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		if err := cmd.Run(); err != nil {
