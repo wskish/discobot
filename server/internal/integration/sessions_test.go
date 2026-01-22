@@ -639,7 +639,7 @@ waitLoop:
 								for _, p := range parts {
 									if partMap, ok := p.(map[string]interface{}); ok {
 										if text, ok := partMap["text"].(string); ok {
-											expectedMsg := "/commit " + baseCommit
+											expectedMsg := "/octobot-commit " + baseCommit
 											if text == expectedMsg {
 												foundCommitMessage = true
 												break waitLoop
@@ -658,7 +658,7 @@ waitLoop:
 
 	if !foundCommitMessage {
 		messagesMu.Lock()
-		t.Errorf("Expected /commit %s message to be sent to agent, captured messages: %+v", baseCommit, capturedMessages)
+		t.Errorf("Expected /octobot-commit %s message to be sent to agent, captured messages: %+v", baseCommit, capturedMessages)
 		messagesMu.Unlock()
 	}
 }

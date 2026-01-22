@@ -153,6 +153,10 @@ RUN mkdir -p /home/octobot/.npm-global/bin \
         > /etc/profile.d/npm-global.sh \
     && chmod 644 /etc/profile.d/npm-global.sh
 
+# Copy container-specific agent configuration (Claude Code commands, etc.)
+# These are placed in /home/octobot/.claude/ for user-level availability
+COPY --chown=octobot:octobot container-assets/claude /home/octobot/.claude
+
 # Create directory structure per filesystem design
 # /.data      - persistent storage (Docker volume or VZ disk)
 # /.workspace - base workspace (read-only)

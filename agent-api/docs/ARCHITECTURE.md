@@ -47,6 +47,7 @@ The agent service runs inside a Docker container and provides:
 - [ACP Module](./design/acp.md) - Agent Client Protocol client
 - [Store Module](./design/store.md) - Session and message storage
 - [File System Layout](./design/filesystem.md) - Container paths and mount points
+- [Agent Integrations](./design/agent-integrations.md) - Octobot-specific agent integration points
 
 ## Data Flow
 

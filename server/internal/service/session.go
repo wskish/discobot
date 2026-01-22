@@ -72,21 +72,21 @@ type FileNode struct {
 // SessionService handles session operations
 type SessionService struct {
 	store           *store.Store
-	gitProvider     git.Provider
+	gitService      *GitService
 	sandboxProvider sandbox.Provider
 	sandboxClient   *SandboxChatClient
 	eventBroker     *events.Broker
 }
 
 // NewSessionService creates a new session service
-func NewSessionService(s *store.Store, gitProv git.Provider, sandboxProv sandbox.Provider, eventBroker *events.Broker) *SessionService {
+func NewSessionService(s *store.Store, gitSvc *GitService, sandboxProv sandbox.Provider, eventBroker *events.Broker) *SessionService {
 	var client *SandboxChatClient
 	if sandboxProv != nil {
 		client = NewSandboxChatClient(sandboxProv)
 	}
 	return &SessionService{
 		store:           s,
-		gitProvider:     gitProv,
+		gitService:      gitSvc,
 		sandboxProvider: sandboxProv,
 		sandboxClient:   client,
 		eventBroker:     eventBroker,
@@ -447,26 +447,26 @@ func (s *SessionService) initializeSync(
 ) error {
 	sessionID := session.ID
 
-	// Step 1: Ensure workspace (may involve git cloning)
+	// Step 1: Ensure workspace (may involve git cloning for remote, or in-place registration for local)
 	var workspacePath string
 	var workspaceCommit string
 
-	isGit := workspace.SourceType == "git" || git.IsGitURL(workspace.Path)
-
-	if !isGit {
-		// Local workspace - use path directly
-		workspacePath = workspace.Path
-	} else {
-		// Git workspace - clone/update repository
-		s.updateStatusWithEvent(ctx, projectID, sessionID, model.SessionStatusCloning, nil)
+	if s.gitService != nil {
+		isGit := workspace.SourceType == "git" || git.IsGitURL(workspace.Path)
+		if isGit {
+			s.updateStatusWithEvent(ctx, projectID, sessionID, model.SessionStatusCloning, nil)
+		}
 
 		var err error
-		workspacePath, workspaceCommit, err = s.gitProvider.EnsureWorkspace(ctx, projectID, workspace.ID, workspace.Path, "")
+		workspacePath, workspaceCommit, err = s.gitService.EnsureWorkspaceRepo(ctx, workspace.ID)
 		if err != nil {
-			log.Printf("Git clone failed for session %s: %v", sessionID, err)
-			s.updateStatusWithEvent(ctx, projectID, sessionID, model.SessionStatusError, ptrString("git clone failed: "+err.Error()))
-			return fmt.Errorf("git clone failed: %w", err)
+			log.Printf("Git setup failed for session %s: %v", sessionID, err)
+			s.updateStatusWithEvent(ctx, projectID, sessionID, model.SessionStatusError, ptrString("git setup failed: "+err.Error()))
+			return fmt.Errorf("git setup failed: %w", err)
 		}
+	} else {
+		// No git service - use workspace path directly (fallback for testing)
+		workspacePath = workspace.Path
 	}
 
 	// Step 2: Save workspace path and commit on session
@@ -594,7 +594,7 @@ func ptrString(s string) *string {
 // The job is idempotent and handles server restart scenarios.
 //
 // Flow:
-// 1. If pending: send /commit to agent, transition to committing
+// 1. If pending: send /octobot-commit to agent, transition to committing
 // 2. If appliedCommit not set: fetch patches from agent-api, apply to workspace
 // 3. Verify applied commit exists, transition to completed
 func (s *SessionService) PerformCommit(ctx context.Context, projectID, sessionID string) error {
@@ -633,7 +633,7 @@ func (s *SessionService) PerformCommit(ctx context.Context, projectID, sessionID
 		return nil
 	}
 
-	// Step 1: Send /commit to agent (if pending)
+	// Step 1: Send /octobot-commit to agent (if pending)
 	if sess.CommitStatus == model.CommitStatusPending {
 		// Check sandbox client is available
 		if s.sandboxClient == nil {
@@ -641,10 +641,10 @@ func (s *SessionService) PerformCommit(ctx context.Context, projectID, sessionID
 			return nil
 		}
 
-		log.Printf("Session %s: sending /commit %s to agent", sessionID, *sess.BaseCommit)
+		log.Printf("Session %s: sending /octobot-commit %s to agent", sessionID, *sess.BaseCommit)
 
-		// Build the /commit message in UIMessage format
-		commitMessage := fmt.Sprintf("/commit %s", *sess.BaseCommit)
+		// Build the /octobot-commit message in UIMessage format
+		commitMessage := fmt.Sprintf("/octobot-commit %s", *sess.BaseCommit)
 		messages, err := buildCommitMessage(sessionID+"-commit", commitMessage)
 		if err != nil {
 			s.setCommitFailed(ctx, projectID, sess, fmt.Sprintf("Failed to build commit message: %v", err))
@@ -667,7 +667,7 @@ func (s *SessionService) PerformCommit(ctx context.Context, projectID, sessionID
 			// log.Printf("Session %s commit stream: %s", sessionID, line.Data)
 		}
 
-		log.Printf("Session %s: /commit message completed, transitioning to committing", sessionID)
+		log.Printf("Session %s: /octobot-commit message completed, transitioning to committing", sessionID)
 
 		// Transition to committing
 		sess.CommitStatus = model.CommitStatusCommitting
@@ -741,7 +741,7 @@ func (s *SessionService) setCommitFailed(ctx context.Context, projectID string, 
 	s.publishCommitStatusChanged(ctx, projectID, sess.ID, model.CommitStatusFailed)
 }
 
-// buildCommitMessage creates a UIMessage array for the /commit command.
+// buildCommitMessage creates a UIMessage array for the /octobot-commit command.
 // Returns json.RawMessage that can be passed to SendMessages.
 func buildCommitMessage(msgID, text string) (json.RawMessage, error) {
 	// Build the text part
