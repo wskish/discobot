@@ -110,11 +110,17 @@ func run() error {
 	return runAgent(agentBinary, userInfo)
 }
 
-// setupBaseHome copies /home/octobot to /.data/octobot if it doesn't exist
+// setupBaseHome copies /home/octobot to /.data/octobot if it doesn't exist,
+// or syncs new files if it already exists
 func setupBaseHome(u *userInfo) error {
 	// Check if base home already exists
 	if _, err := os.Stat(baseHomeDir); err == nil {
-		fmt.Printf("octobot-agent: base home already exists at %s\n", baseHomeDir)
+		fmt.Printf("octobot-agent: base home already exists at %s, syncing new files\n", baseHomeDir)
+		// Sync any new files from /home/octobot to /.data/octobot
+		// This ensures new files added to the container image get propagated
+		if err := syncNewFiles(mountHome, baseHomeDir, u); err != nil {
+			return fmt.Errorf("failed to sync new files: %w", err)
+		}
 		return nil
 	}
 
@@ -137,6 +143,68 @@ func setupBaseHome(u *userInfo) error {
 
 	fmt.Printf("octobot-agent: base home created successfully\n")
 	return nil
+}
+
+// syncNewFiles copies files from src to dst that don't exist in dst.
+// It does not overwrite existing files to preserve user modifications.
+func syncNewFiles(src, dst string, u *userInfo) error {
+	return filepath.Walk(src, func(srcPath string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		// Calculate relative path and destination path
+		relPath, err := filepath.Rel(src, srcPath)
+		if err != nil {
+			return err
+		}
+		dstPath := filepath.Join(dst, relPath)
+
+		// Check if destination already exists
+		_, dstErr := os.Lstat(dstPath)
+		if dstErr == nil {
+			// Destination exists, skip (don't overwrite)
+			return nil
+		}
+		if !os.IsNotExist(dstErr) {
+			// Some other error
+			return dstErr
+		}
+
+		// Destination doesn't exist, copy it
+		if info.IsDir() {
+			fmt.Printf("octobot-agent: syncing new directory %s\n", relPath)
+			if err := os.MkdirAll(dstPath, info.Mode().Perm()); err != nil {
+				return err
+			}
+			if err := os.Chown(dstPath, u.uid, u.gid); err != nil {
+				return err
+			}
+		} else if info.Mode()&os.ModeSymlink != 0 {
+			// Handle symlinks
+			link, err := os.Readlink(srcPath)
+			if err != nil {
+				return err
+			}
+			fmt.Printf("octobot-agent: syncing new symlink %s\n", relPath)
+			if err := os.Symlink(link, dstPath); err != nil {
+				return err
+			}
+			if err := os.Lchown(dstPath, u.uid, u.gid); err != nil {
+				return err
+			}
+		} else if info.Mode().IsRegular() {
+			fmt.Printf("octobot-agent: syncing new file %s\n", relPath)
+			if err := copyFile(srcPath, dstPath); err != nil {
+				return err
+			}
+			if err := os.Chown(dstPath, u.uid, u.gid); err != nil {
+				return err
+			}
+		}
+
+		return nil
+	})
 }
 
 // copyDir recursively copies a directory preserving permissions
