@@ -36,7 +36,8 @@ type ChatService struct {
 func NewChatService(s *store.Store, sessionService *SessionService, credentialService *CredentialService, jobEnqueuer SessionInitEnqueuer, eventBroker *events.Broker, sandboxProvider sandbox.Provider) *ChatService {
 	var client *SandboxChatClient
 	if sandboxProvider != nil {
-		client = NewSandboxChatClient(sandboxProvider)
+		fetcher := makeCredentialFetcher(s, credentialService)
+		client = NewSandboxChatClient(sandboxProvider, fetcher)
 	}
 	return &ChatService{
 		store:             s,
@@ -293,11 +294,10 @@ func (c *ChatService) SendToSandbox(ctx context.Context, projectID, sessionID st
 		return nil, err
 	}
 
-	opts := c.getCredentialOpts(ctx, projectID)
-
 	// Use reconciliation wrapper for runtime errors (e.g., container deleted but DB says running)
+	// Credentials are automatically fetched by sandboxClient
 	return withSandboxReconciliation(ctx, c, projectID, sessionID, func() (<-chan SSELine, error) {
-		return c.sandboxClient.SendMessages(ctx, sessionID, messages, opts)
+		return c.sandboxClient.SendMessages(ctx, sessionID, messages, nil)
 	})
 }
 
@@ -314,27 +314,6 @@ func isSandboxUnavailableError(err error) bool {
 		strings.Contains(errStr, "sandbox is not running") ||
 		strings.Contains(errStr, "container not found") ||
 		strings.Contains(errStr, "No such container")
-}
-
-// getCredentialOpts fetches credentials for a project and returns RequestOptions.
-// Returns nil if credentials are not available or an error occurs.
-func (c *ChatService) getCredentialOpts(ctx context.Context, projectID string) *RequestOptions {
-	if c.credentialService == nil {
-		return nil
-	}
-
-	creds, err := c.credentialService.GetAllDecrypted(ctx, projectID)
-	if err != nil {
-		// Log but don't fail - credentials are optional
-		fmt.Printf("Warning: failed to fetch credentials for project %s: %v\n", projectID, err)
-		return nil
-	}
-
-	if len(creds) == 0 {
-		return nil
-	}
-
-	return &RequestOptions{Credentials: creds}
 }
 
 // GetStream returns a channel of SSE events for an in-progress completion.
@@ -356,11 +335,10 @@ func (c *ChatService) GetStream(ctx context.Context, projectID, sessionID string
 		return nil, err
 	}
 
-	opts := c.getCredentialOpts(ctx, projectID)
-
 	// Use reconciliation wrapper for runtime errors
+	// Credentials are automatically fetched by sandboxClient
 	return withSandboxReconciliation(ctx, c, projectID, sessionID, func() (<-chan SSELine, error) {
-		return c.sandboxClient.GetStream(ctx, sessionID, opts)
+		return c.sandboxClient.GetStream(ctx, sessionID, nil)
 	})
 }
 
@@ -382,11 +360,10 @@ func (c *ChatService) GetMessages(ctx context.Context, projectID, sessionID stri
 		return nil, err
 	}
 
-	opts := c.getCredentialOpts(ctx, projectID)
-
 	// Use reconciliation wrapper for runtime errors
+	// Credentials are automatically fetched by sandboxClient
 	return withSandboxReconciliation(ctx, c, projectID, sessionID, func() ([]sandboxapi.UIMessage, error) {
-		return c.sandboxClient.GetMessages(ctx, sessionID, opts)
+		return c.sandboxClient.GetMessages(ctx, sessionID, nil)
 	})
 }
 

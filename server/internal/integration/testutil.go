@@ -140,7 +140,7 @@ func NewTestServer(t *testing.T) *TestServer {
 	workspaceSvc := service.NewWorkspaceService(s, gitProvider, eventBroker)
 
 	gitSvc := service.NewGitService(s, gitProvider)
-	sessionSvc := service.NewSessionService(s, gitSvc, mockSandbox, eventBroker)
+	sessionSvc := service.NewSessionService(s, gitSvc, nil, mockSandbox, eventBroker)
 
 	disp := dispatcher.NewService(s, cfg)
 	disp.RegisterExecutor(jobs.NewWorkspaceInitExecutor(workspaceSvc))
@@ -365,7 +365,7 @@ func NewTestServerNoAuth(t *testing.T) *TestServer {
 	workspaceSvc := service.NewWorkspaceService(s, gitProvider, eventBroker)
 
 	gitSvc := service.NewGitService(s, gitProvider)
-	sessionSvc := service.NewSessionService(s, gitSvc, mockSandbox, eventBroker)
+	sessionSvc := service.NewSessionService(s, gitSvc, nil, mockSandbox, eventBroker)
 
 	disp := dispatcher.NewService(s, cfg)
 	disp.RegisterExecutor(jobs.NewWorkspaceInitExecutor(workspaceSvc))

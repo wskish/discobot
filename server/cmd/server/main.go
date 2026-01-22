@@ -168,7 +168,11 @@ func main() {
 		// Register session init, delete, and commit executors if sandbox provider is available
 		if sandboxProvider != nil {
 			gitSvc := service.NewGitService(s, gitProvider)
-			sessionSvc := service.NewSessionService(s, gitSvc, sandboxProvider, eventBroker)
+			credSvc, err := service.NewCredentialService(s, cfg)
+			if err != nil {
+				log.Fatalf("Failed to create credential service for dispatcher: %v", err)
+			}
+			sessionSvc := service.NewSessionService(s, gitSvc, credSvc, sandboxProvider, eventBroker)
 			disp.RegisterExecutor(jobs.NewSessionInitExecutor(sessionSvc))
 			disp.RegisterExecutor(jobs.NewSessionDeleteExecutor(sessionSvc))
 			disp.RegisterExecutor(jobs.NewSessionCommitExecutor(sessionSvc))

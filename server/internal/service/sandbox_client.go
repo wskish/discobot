@@ -15,6 +15,7 @@ import (
 
 	"github.com/obot-platform/octobot/server/internal/sandbox"
 	"github.com/obot-platform/octobot/server/internal/sandbox/sandboxapi"
+	"github.com/obot-platform/octobot/server/internal/store"
 )
 
 // Retry configuration for sandbox requests.
@@ -26,15 +27,37 @@ const (
 	retryMultiplier   = 2.0                   // Double each time
 )
 
+// CredentialFetcher is a function that retrieves credentials for a session.
+// It looks up the session to get the project ID, then fetches decrypted credentials.
+type CredentialFetcher func(ctx context.Context, sessionID string) ([]CredentialEnvVar, error)
+
+// makeCredentialFetcher creates a CredentialFetcher that looks up credentials for a session.
+// Returns nil if credSvc is nil (credentials will not be fetched).
+func makeCredentialFetcher(s *store.Store, credSvc *CredentialService) CredentialFetcher {
+	if credSvc == nil {
+		return nil
+	}
+	return func(ctx context.Context, sessionID string) ([]CredentialEnvVar, error) {
+		sess, err := s.GetSessionByID(ctx, sessionID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get session: %w", err)
+		}
+		return credSvc.GetAllDecrypted(ctx, sess.ProjectID)
+	}
+}
+
 // SandboxChatClient handles communication with the agent running in a sandbox.
 type SandboxChatClient struct {
-	provider sandbox.Provider
+	provider          sandbox.Provider
+	credentialFetcher CredentialFetcher
 }
 
 // NewSandboxChatClient creates a new sandbox chat client.
-func NewSandboxChatClient(provider sandbox.Provider) *SandboxChatClient {
+// The fetcher parameter is optional - if nil, credentials will not be automatically fetched.
+func NewSandboxChatClient(provider sandbox.Provider, fetcher CredentialFetcher) *SandboxChatClient {
 	return &SandboxChatClient{
-		provider: provider,
+		provider:          provider,
+		credentialFetcher: fetcher,
 	}
 }
 
@@ -125,11 +148,13 @@ func (c *SandboxChatClient) getHTTPClient(ctx context.Context, sessionID string)
 
 // RequestOptions contains optional parameters for sandbox requests.
 type RequestOptions struct {
-	// Credentials to pass to the sandbox via header (envVar -> value mappings)
-	Credentials []CredentialEnvVar
+	// SkipCredentials opts out of automatic credential fetching.
+	// By default, credentials are fetched and sent with requests.
+	SkipCredentials bool
 }
 
 // applyRequestAuth sets Authorization and credentials headers on a request.
+// Credentials are automatically fetched unless SkipCredentials is set.
 func (c *SandboxChatClient) applyRequestAuth(ctx context.Context, req *http.Request, sessionID string, opts *RequestOptions) error {
 	// Add Authorization header with Bearer token
 	secret, err := c.provider.GetSecret(ctx, sessionID)
@@ -137,13 +162,20 @@ func (c *SandboxChatClient) applyRequestAuth(ctx context.Context, req *http.Requ
 		req.Header.Set("Authorization", "Bearer "+secret)
 	}
 
-	// Add credentials header if provided
-	if opts != nil && len(opts.Credentials) > 0 {
-		credJSON, err := json.Marshal(opts.Credentials)
+	// Auto-fetch credentials if fetcher is set and not skipped
+	skipCreds := opts != nil && opts.SkipCredentials
+	if c.credentialFetcher != nil && !skipCreds {
+		creds, err := c.credentialFetcher(ctx, sessionID)
 		if err != nil {
-			return fmt.Errorf("failed to marshal credentials: %w", err)
+			// Log warning but don't fail - credentials are optional
+			fmt.Printf("Warning: failed to fetch credentials for session %s: %v\n", sessionID, err)
+		} else if len(creds) > 0 {
+			credJSON, err := json.Marshal(creds)
+			if err != nil {
+				return fmt.Errorf("failed to marshal credentials: %w", err)
+			}
+			req.Header.Set("X-Octobot-Credentials", string(credJSON))
 		}
-		req.Header.Set("X-Octobot-Credentials", string(credJSON))
 	}
 
 	return nil

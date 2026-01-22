@@ -152,7 +152,8 @@ func (s *SandboxService) Attach(ctx context.Context, sessionID string, rows, col
 // GetUserInfo retrieves the default user info from the sandbox.
 // Returns username, UID, and GID for terminal sessions.
 func (s *SandboxService) GetUserInfo(ctx context.Context, sessionID string) (username string, uid, gid int, err error) {
-	client := NewSandboxChatClient(s.provider)
+	// Create ad-hoc client without credential fetcher - user info doesn't need credentials
+	client := NewSandboxChatClient(s.provider, nil)
 	userInfo, err := client.GetUserInfo(ctx, sessionID)
 	if err != nil {
 		return "", 0, 0, err

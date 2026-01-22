@@ -129,7 +129,7 @@ func TestSandboxChatClient_SendMessages_Returns202ThenStreams(t *testing.T) {
 
 	// Create client with mock provider
 	provider := &mockSandboxProvider{handler: handler}
-	client := NewSandboxChatClient(provider)
+	client := NewSandboxChatClient(provider, nil)
 
 	// Send messages
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -182,7 +182,7 @@ func TestSandboxChatClient_SendMessages_Non202Error(t *testing.T) {
 	})
 
 	provider := &mockSandboxProvider{handler: handler}
-	client := NewSandboxChatClient(provider)
+	client := NewSandboxChatClient(provider, nil)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -215,7 +215,7 @@ func TestSandboxChatClient_SendMessages_409Conflict(t *testing.T) {
 	})
 
 	provider := &mockSandboxProvider{handler: handler}
-	client := NewSandboxChatClient(provider)
+	client := NewSandboxChatClient(provider, nil)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -243,7 +243,7 @@ func TestSandboxChatClient_GetStream_NoContent(t *testing.T) {
 	})
 
 	provider := &mockSandboxProvider{handler: handler}
-	client := NewSandboxChatClient(provider)
+	client := NewSandboxChatClient(provider, nil)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -286,19 +286,22 @@ func TestSandboxChatClient_SendMessages_WithCredentials(t *testing.T) {
 	})
 
 	provider := &mockSandboxProvider{handler: handler}
-	client := NewSandboxChatClient(provider)
+
+	// Create client with credential fetcher that returns test credentials
+	fetcher := func(ctx context.Context, sessionID string) ([]CredentialEnvVar, error) {
+		return []CredentialEnvVar{
+			{EnvVar: "API_KEY", Value: "secret123"},
+		}, nil
+	}
+	client := NewSandboxChatClient(provider, fetcher)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	messages := json.RawMessage(`[{"role":"user","content":"hello"}]`)
-	opts := &RequestOptions{
-		Credentials: []CredentialEnvVar{
-			{EnvVar: "API_KEY", Value: "secret123"},
-		},
-	}
 
-	ch, err := client.SendMessages(ctx, "test-session", messages, opts)
+	// Credentials are automatically fetched by the client
+	ch, err := client.SendMessages(ctx, "test-session", messages, nil)
 	if err != nil {
 		t.Fatalf("SendMessages failed: %v", err)
 	}
@@ -339,7 +342,7 @@ func TestSandboxChatClient_SendMessages_WithAuthorization(t *testing.T) {
 	})
 
 	provider := &mockSandboxProvider{handler: handler, secret: "my-secret-token"}
-	client := NewSandboxChatClient(provider)
+	client := NewSandboxChatClient(provider, nil)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -373,7 +376,7 @@ func TestSandboxChatClient_SendMessages_RetriesOnEOF(t *testing.T) {
 	provider := &mockSandboxProviderWithTransport{
 		transport: failingTransport,
 	}
-	client := NewSandboxChatClient(provider)
+	client := NewSandboxChatClient(provider, nil)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -575,7 +578,7 @@ func TestSandboxChatClient_GetDiff_ReturnsCorrectResponseType(t *testing.T) {
 			})
 
 			provider := &mockSandboxProvider{handler: handler}
-			client := NewSandboxChatClient(provider)
+			client := NewSandboxChatClient(provider, nil)
 
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()

@@ -71,25 +71,28 @@ type FileNode struct {
 
 // SessionService handles session operations
 type SessionService struct {
-	store           *store.Store
-	gitService      *GitService
-	sandboxProvider sandbox.Provider
-	sandboxClient   *SandboxChatClient
-	eventBroker     *events.Broker
+	store             *store.Store
+	gitService        *GitService
+	credentialService *CredentialService
+	sandboxProvider   sandbox.Provider
+	sandboxClient     *SandboxChatClient
+	eventBroker       *events.Broker
 }
 
 // NewSessionService creates a new session service
-func NewSessionService(s *store.Store, gitSvc *GitService, sandboxProv sandbox.Provider, eventBroker *events.Broker) *SessionService {
+func NewSessionService(s *store.Store, gitSvc *GitService, credSvc *CredentialService, sandboxProv sandbox.Provider, eventBroker *events.Broker) *SessionService {
 	var client *SandboxChatClient
 	if sandboxProv != nil {
-		client = NewSandboxChatClient(sandboxProv)
+		fetcher := makeCredentialFetcher(s, credSvc)
+		client = NewSandboxChatClient(sandboxProv, fetcher)
 	}
 	return &SessionService{
-		store:           s,
-		gitService:      gitSvc,
-		sandboxProvider: sandboxProv,
-		sandboxClient:   client,
-		eventBroker:     eventBroker,
+		store:             s,
+		gitService:        gitSvc,
+		credentialService: credSvc,
+		sandboxProvider:   sandboxProv,
+		sandboxClient:     client,
+		eventBroker:       eventBroker,
 	}
 }
 
