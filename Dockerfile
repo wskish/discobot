@@ -177,7 +177,9 @@ RUN chmod +x /opt/octobot/bin/*
 
 # Add octobot binaries and npm global bin to PATH
 # Also set NPM_CONFIG_PREFIX for non-login shell contexts
+# Set PNPM_HOME to use persistent storage for pnpm cache/store
 ENV NPM_CONFIG_PREFIX="/home/octobot/.npm-global"
+ENV PNPM_HOME="/.data/pnpm"
 ENV PATH="/home/octobot/.npm-global/bin:/opt/octobot/bin:${PATH}"
 
 WORKDIR /workspace
