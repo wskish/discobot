@@ -42,20 +42,22 @@ func ValidateSessionID(sessionID string) error {
 
 // Session represents a chat session (for API responses)
 type Session struct {
-	ID            string     `json:"id"`
-	ProjectID     string     `json:"projectId"`
-	Name          string     `json:"name"`
-	Description   string     `json:"description"`
-	Timestamp     string     `json:"timestamp"`
-	Status        string     `json:"status"`
-	CommitStatus  string     `json:"commitStatus,omitempty"`
-	CommitError   string     `json:"commitError,omitempty"`
-	BaseCommit    string     `json:"baseCommit,omitempty"`
-	AppliedCommit string     `json:"appliedCommit,omitempty"`
-	ErrorMessage  string     `json:"errorMessage,omitempty"`
-	Files         []FileNode `json:"files"`
-	WorkspaceID   string     `json:"workspaceId,omitempty"`
-	AgentID       string     `json:"agentId,omitempty"`
+	ID              string     `json:"id"`
+	ProjectID       string     `json:"projectId"`
+	Name            string     `json:"name"`
+	Description     string     `json:"description"`
+	Timestamp       string     `json:"timestamp"`
+	Status          string     `json:"status"`
+	CommitStatus    string     `json:"commitStatus,omitempty"`
+	CommitError     string     `json:"commitError,omitempty"`
+	BaseCommit      string     `json:"baseCommit,omitempty"`
+	AppliedCommit   string     `json:"appliedCommit,omitempty"`
+	ErrorMessage    string     `json:"errorMessage,omitempty"`
+	Files           []FileNode `json:"files"`
+	WorkspaceID     string     `json:"workspaceId,omitempty"`
+	AgentID         string     `json:"agentId,omitempty"`
+	WorkspacePath   string     `json:"workspacePath,omitempty"`
+	WorkspaceCommit string     `json:"workspaceCommit,omitempty"`
 }
 
 // FileNode represents a file in a session
@@ -377,26 +379,38 @@ func (s *SessionService) mapSession(sess *model.Session) *Session {
 		appliedCommit = *sess.AppliedCommit
 	}
 
+	workspacePath := ""
+	if sess.WorkspacePath != nil {
+		workspacePath = *sess.WorkspacePath
+	}
+
+	workspaceCommit := ""
+	if sess.WorkspaceCommit != nil {
+		workspaceCommit = *sess.WorkspaceCommit
+	}
+
 	timestamp := sess.UpdatedAt.Format(time.RFC3339)
 	if sess.UpdatedAt.IsZero() {
 		timestamp = time.Now().Format(time.RFC3339)
 	}
 
 	return &Session{
-		ID:            sess.ID,
-		ProjectID:     sess.ProjectID,
-		Name:          sess.Name,
-		Description:   description,
-		Timestamp:     timestamp,
-		Status:        sess.Status,
-		CommitStatus:  sess.CommitStatus,
-		CommitError:   commitError,
-		BaseCommit:    baseCommit,
-		AppliedCommit: appliedCommit,
-		ErrorMessage:  errorMessage,
-		Files:         []FileNode{},
-		WorkspaceID:   sess.WorkspaceID,
-		AgentID:       agentID,
+		ID:              sess.ID,
+		ProjectID:       sess.ProjectID,
+		Name:            sess.Name,
+		Description:     description,
+		Timestamp:       timestamp,
+		Status:          sess.Status,
+		CommitStatus:    sess.CommitStatus,
+		CommitError:     commitError,
+		BaseCommit:      baseCommit,
+		AppliedCommit:   appliedCommit,
+		ErrorMessage:    errorMessage,
+		Files:           []FileNode{},
+		WorkspaceID:     sess.WorkspaceID,
+		AgentID:         agentID,
+		WorkspacePath:   workspacePath,
+		WorkspaceCommit: workspaceCommit,
 	}
 }
 
@@ -450,9 +464,9 @@ func (s *SessionService) initializeSync(
 ) error {
 	sessionID := session.ID
 
-	// Step 1: Ensure workspace (may involve git cloning for remote, or in-place registration for local)
+	// Step 1: Ensure workspace is available (always needed, even on reconcile)
 	var workspacePath string
-	var workspaceCommit string
+	var currentCommit string
 
 	if s.gitService != nil {
 		isGit := workspace.SourceType == "git" || git.IsGitURL(workspace.Path)
@@ -461,7 +475,7 @@ func (s *SessionService) initializeSync(
 		}
 
 		var err error
-		workspacePath, workspaceCommit, err = s.gitService.EnsureWorkspaceRepo(ctx, workspace.ID)
+		workspacePath, currentCommit, err = s.gitService.EnsureWorkspaceRepo(ctx, workspace.ID)
 		if err != nil {
 			log.Printf("Git setup failed for session %s: %v", sessionID, err)
 			s.updateStatusWithEvent(ctx, projectID, sessionID, model.SessionStatusError, ptrString("git setup failed: "+err.Error()))
@@ -472,11 +486,22 @@ func (s *SessionService) initializeSync(
 		workspacePath = workspace.Path
 	}
 
-	// Step 2: Save workspace path and commit on session
-	if err := s.store.UpdateSessionWorkspace(ctx, sessionID, workspacePath, workspaceCommit); err != nil {
-		log.Printf("Failed to update session workspace info for %s: %v", sessionID, err)
-		s.updateStatusWithEvent(ctx, projectID, sessionID, model.SessionStatusError, ptrString("failed to save workspace info: "+err.Error()))
-		return fmt.Errorf("failed to save workspace info: %w", err)
+	// Step 2: Determine which commit to use for the sandbox
+	// On first initialization, save the workspace info and use the current commit.
+	// On reconcile (values already set), use the stored commit to maintain consistency.
+	var workspaceCommit string
+	if session.WorkspacePath != "" {
+		// Already initialized - use existing values (reconcile case)
+		workspacePath = session.WorkspacePath
+		workspaceCommit = session.WorkspaceCommit
+	} else {
+		// First initialization - save workspace path and commit
+		workspaceCommit = currentCommit
+		if err := s.store.UpdateSessionWorkspace(ctx, sessionID, workspacePath, workspaceCommit); err != nil {
+			log.Printf("Failed to update session workspace info for %s: %v", sessionID, err)
+			s.updateStatusWithEvent(ctx, projectID, sessionID, model.SessionStatusError, ptrString("failed to save workspace info: "+err.Error()))
+			return fmt.Errorf("failed to save workspace info: %w", err)
+		}
 	}
 
 	// Step 3: Create or get existing sandbox (idempotent)
