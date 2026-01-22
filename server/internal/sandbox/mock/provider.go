@@ -540,18 +540,27 @@ func (m *mockRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) 
 	// Create a pipe to capture the response
 	pr, pw := io.Pipe()
 
+	// Channel to signal when headers are ready
+	headerReady := make(chan struct{})
+
 	// Create a ResponseRecorder-like structure
 	rec := &pipeResponseWriter{
-		header:     make(http.Header),
-		statusCode: http.StatusOK,
-		pipe:       pw,
+		header:      make(http.Header),
+		statusCode:  http.StatusOK,
+		pipe:        pw,
+		headerReady: headerReady,
 	}
 
 	// Call the handler in a goroutine since it may write streaming data
 	go func() {
 		defer pw.Close()
 		m.handler.ServeHTTP(rec, req)
+		// Ensure headerReady is closed even if handler didn't write anything
+		rec.ensureHeaderReady()
 	}()
+
+	// Wait for headers to be ready before returning response
+	<-headerReady
 
 	return &http.Response{
 		StatusCode: rec.statusCode,
@@ -567,6 +576,7 @@ type pipeResponseWriter struct {
 	statusCode  int
 	pipe        *io.PipeWriter
 	wroteHeader bool
+	headerReady chan struct{}
 }
 
 func (w *pipeResponseWriter) Header() http.Header {
@@ -577,14 +587,19 @@ func (w *pipeResponseWriter) WriteHeader(code int) {
 	if !w.wroteHeader {
 		w.statusCode = code
 		w.wroteHeader = true
+		close(w.headerReady)
 	}
 }
 
 func (w *pipeResponseWriter) Write(b []byte) (int, error) {
+	w.ensureHeaderReady()
+	return w.pipe.Write(b)
+}
+
+func (w *pipeResponseWriter) ensureHeaderReady() {
 	if !w.wroteHeader {
 		w.WriteHeader(http.StatusOK)
 	}
-	return w.pipe.Write(b)
 }
 
 // defaultMockHandler returns a handler that responds like a basic sandbox.

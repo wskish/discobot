@@ -594,13 +594,10 @@ func ptrString(s string) *string {
 // The job is idempotent and handles server restart scenarios.
 //
 // Flow:
-// 0. If workspace commit changed, update baseCommit and check for existing patches
-//   - If patches exist, skip to step 2 (apply them)
-//   - If no patches, continue with step 1
-//
-// 1. If pending: send /octobot-commit to agent, transition to committing
-// 2. If appliedCommit not set: fetch patches from agent-api, apply to workspace
-// 3. Verify applied commit exists, transition to completed
+// 1. If workspace commit changed, update baseCommit and check for existing patches
+// 2. If pending: send /octobot-commit to agent, transition to committing
+// 3. If appliedCommit not set: fetch patches from agent-api, apply to workspace
+// 4. Transition to completed
 func (s *SessionService) PerformCommit(ctx context.Context, projectID, sessionID string) error {
 	// Get session to check current state
 	sess, err := s.store.GetSessionByID(ctx, sessionID)
@@ -626,154 +623,174 @@ func (s *SessionService) PerformCommit(ctx context.Context, projectID, sessionID
 		return nil
 	}
 
-	// Check if workspace commit has changed - if so, update baseCommit and check for existing patches
+	// Step 1: Handle workspace commit changes
+	if err := s.syncBaseCommit(ctx, projectID, sess); err != nil {
+		return err
+	}
+	// syncBaseCommit may have applied patches and set appliedCommit, check for failure
+	if sess.CommitStatus == model.CommitStatusFailed {
+		return nil
+	}
+
+	// Step 2: Send /octobot-commit to agent (if pending)
+	if sess.CommitStatus == model.CommitStatusPending {
+		if err := s.sendCommitPrompt(ctx, projectID, sess); err != nil {
+			return err
+		}
+		if sess.CommitStatus == model.CommitStatusFailed {
+			return nil
+		}
+	}
+
+	// Step 3: Fetch and apply patches (if not yet done)
+	if sess.AppliedCommit == nil || *sess.AppliedCommit == "" {
+		if err := s.fetchAndApplyPatches(ctx, projectID, sess); err != nil {
+			return err
+		}
+		if sess.CommitStatus == model.CommitStatusFailed {
+			return nil
+		}
+	}
+
+	// Step 4: Complete
+	log.Printf("Session %s: commit completed with applied commit %s", sess.ID, *sess.AppliedCommit)
+	sess.CommitStatus = model.CommitStatusCompleted
+	sess.CommitError = nil
+	if err := s.store.UpdateSession(ctx, sess); err != nil {
+		return fmt.Errorf("failed to update session commit status: %w", err)
+	}
+	s.publishCommitStatusChanged(ctx, projectID, sess.ID, model.CommitStatusCompleted)
+
+	log.Printf("Session %s committed successfully", sess.ID)
+	return nil
+}
+
+// syncBaseCommit checks if the workspace commit has changed and updates baseCommit.
+// If patches are already available from the agent, it applies them directly.
+func (s *SessionService) syncBaseCommit(ctx context.Context, projectID string, sess *model.Session) error {
 	gitStatus, err := s.gitService.Status(ctx, sess.WorkspaceID)
 	if err != nil {
 		s.setCommitFailed(ctx, projectID, sess, fmt.Sprintf("Failed to get workspace status: %v", err))
 		return nil
 	}
 
-	// If workspace commit changed, update baseCommit and optimistically check for patches
-	if gitStatus.Commit != *sess.BaseCommit {
-		log.Printf("Session %s: workspace commit changed from %s to %s, updating baseCommit", sessionID, *sess.BaseCommit, gitStatus.Commit)
-		sess.BaseCommit = ptrString(gitStatus.Commit)
-		if err := s.store.UpdateSession(ctx, sess); err != nil {
-			return fmt.Errorf("failed to update session baseCommit: %w", err)
-		}
+	// No change - nothing to do
+	if gitStatus.Commit == *sess.BaseCommit {
+		return nil
+	}
 
-		// Optimistically check if agent already has patches available for the new baseCommit
-		if s.sandboxClient != nil && sess.CommitStatus == model.CommitStatusPending {
-			log.Printf("Session %s: checking if agent has existing patches for commit %s", sessionID, gitStatus.Commit)
-			commitsResp, err := s.sandboxClient.GetCommits(ctx, sessionID, gitStatus.Commit)
-			if err == nil && commitsResp.CommitCount > 0 {
-				// Agent has patches ready - skip to committing state and apply them
-				log.Printf("Session %s: agent has %d existing commits, skipping prompt and applying patches", sessionID, commitsResp.CommitCount)
-				sess.CommitStatus = model.CommitStatusCommitting
-				if err := s.store.UpdateSession(ctx, sess); err != nil {
-					return fmt.Errorf("failed to update session status: %w", err)
-				}
-				s.publishCommitStatusChanged(ctx, projectID, sessionID, model.CommitStatusCommitting)
+	log.Printf("Session %s: workspace commit changed from %s to %s, updating baseCommit", sess.ID, *sess.BaseCommit, gitStatus.Commit)
+	sess.BaseCommit = ptrString(gitStatus.Commit)
+	if err := s.store.UpdateSession(ctx, sess); err != nil {
+		return fmt.Errorf("failed to update session baseCommit: %w", err)
+	}
 
-				// Apply patches directly
-				finalCommit, err := s.gitService.ApplyPatches(ctx, sess.WorkspaceID, []byte(commitsResp.Patches))
-				if err != nil {
-					s.setCommitFailed(ctx, projectID, sess, fmt.Sprintf("Failed to apply patches to workspace: %v", err))
-					return nil
-				}
+	// Optimistically check if agent already has patches for the new baseCommit
+	if s.sandboxClient == nil || sess.CommitStatus != model.CommitStatusPending {
+		return nil
+	}
 
-				sess.AppliedCommit = ptrString(finalCommit)
-				if err := s.store.UpdateSession(ctx, sess); err != nil {
-					return fmt.Errorf("failed to update session applied commit: %w", err)
-				}
-				s.publishCommitStatusChanged(ctx, projectID, sessionID, model.CommitStatusCommitting)
-				log.Printf("Session %s: patches applied, final commit=%s", sessionID, finalCommit)
+	log.Printf("Session %s: checking if agent has existing patches for commit %s", sess.ID, gitStatus.Commit)
+	commitsResp, err := s.sandboxClient.GetCommits(ctx, sess.ID, gitStatus.Commit)
+	if err != nil {
+		log.Printf("Session %s: no existing patches available (error: %v), continuing with prompt", sess.ID, err)
+		return nil
+	}
+	if commitsResp.CommitCount == 0 {
+		log.Printf("Session %s: no existing patches available (commit count: 0), continuing with prompt", sess.ID)
+		return nil
+	}
 
-				// Jump to completion
-				goto complete
-			}
-			// No patches available (error or CommitCount == 0) - continue with normal flow
-			if err != nil {
-				log.Printf("Session %s: no existing patches available (error: %v), continuing with prompt", sessionID, err)
-			} else {
-				log.Printf("Session %s: no existing patches available (commit count: 0), continuing with prompt", sessionID)
-			}
+	// Agent has patches ready - apply them directly
+	log.Printf("Session %s: agent has %d existing commits, skipping prompt and applying patches", sess.ID, commitsResp.CommitCount)
+	return s.applyPatches(ctx, projectID, sess, commitsResp.Patches, commitsResp.CommitCount)
+}
+
+// sendCommitPrompt sends the /octobot-commit command to the agent.
+func (s *SessionService) sendCommitPrompt(ctx context.Context, projectID string, sess *model.Session) error {
+	if s.sandboxClient == nil {
+		s.setCommitFailed(ctx, projectID, sess, "Sandbox client not available")
+		return nil
+	}
+
+	log.Printf("Session %s: sending /octobot-commit %s to agent", sess.ID, *sess.BaseCommit)
+
+	commitMessage := fmt.Sprintf("/octobot-commit %s", *sess.BaseCommit)
+	messages, err := buildCommitMessage(sess.ID+"-commit", commitMessage)
+	if err != nil {
+		s.setCommitFailed(ctx, projectID, sess, fmt.Sprintf("Failed to build commit message: %v", err))
+		return nil
+	}
+
+	streamCh, err := s.sandboxClient.SendMessages(ctx, sess.ID, messages, nil)
+	if err != nil {
+		s.setCommitFailed(ctx, projectID, sess, fmt.Sprintf("Failed to send commit message to agent: %v", err))
+		return nil
+	}
+
+	// Drain the stream until complete
+	for line := range streamCh {
+		if line.Done {
+			break
 		}
 	}
 
-	// Step 1: Send /octobot-commit to agent (if pending)
-	if sess.CommitStatus == model.CommitStatusPending {
-		// Check sandbox client is available
-		if s.sandboxClient == nil {
-			s.setCommitFailed(ctx, projectID, sess, "Sandbox client not available")
-			return nil
-		}
+	log.Printf("Session %s: /octobot-commit message completed, transitioning to committing", sess.ID)
 
-		log.Printf("Session %s: sending /octobot-commit %s to agent", sessionID, *sess.BaseCommit)
+	sess.CommitStatus = model.CommitStatusCommitting
+	if err := s.store.UpdateSession(ctx, sess); err != nil {
+		return fmt.Errorf("failed to update session status: %w", err)
+	}
+	s.publishCommitStatusChanged(ctx, projectID, sess.ID, model.CommitStatusCommitting)
+	return nil
+}
 
-		// Build the /octobot-commit message in UIMessage format
-		commitMessage := fmt.Sprintf("/octobot-commit %s", *sess.BaseCommit)
-		messages, err := buildCommitMessage(sessionID+"-commit", commitMessage)
-		if err != nil {
-			s.setCommitFailed(ctx, projectID, sess, fmt.Sprintf("Failed to build commit message: %v", err))
-			return nil
-		}
+// fetchAndApplyPatches fetches patches from the agent and applies them to the workspace.
+func (s *SessionService) fetchAndApplyPatches(ctx context.Context, projectID string, sess *model.Session) error {
+	if s.sandboxClient == nil {
+		s.setCommitFailed(ctx, projectID, sess, "Sandbox client not available")
+		return nil
+	}
 
-		// Send the message to the agent and get SSE stream
-		streamCh, err := s.sandboxClient.SendMessages(ctx, sessionID, messages, nil)
-		if err != nil {
-			s.setCommitFailed(ctx, projectID, sess, fmt.Sprintf("Failed to send commit message to agent: %v", err))
-			return nil
-		}
+	log.Printf("Session %s: fetching commits from agent-api (parent=%s)", sess.ID, *sess.BaseCommit)
+	commitsResp, err := s.sandboxClient.GetCommits(ctx, sess.ID, *sess.BaseCommit)
+	if err != nil {
+		s.setCommitFailed(ctx, projectID, sess, fmt.Sprintf("Failed to get commits from agent: %v", err))
+		return nil
+	}
 
-		// Drain the stream until complete (we don't need the response content)
-		for line := range streamCh {
-			if line.Done {
-				break
-			}
-			// Optionally log progress for debugging
-			// log.Printf("Session %s commit stream: %s", sessionID, line.Data)
-		}
+	if commitsResp.CommitCount == 0 {
+		s.setCommitFailed(ctx, projectID, sess, "No commits found in agent sandbox")
+		return nil
+	}
 
-		log.Printf("Session %s: /octobot-commit message completed, transitioning to committing", sessionID)
+	log.Printf("Session %s: received %d commits from agent, applying patches to workspace", sess.ID, commitsResp.CommitCount)
+	return s.applyPatches(ctx, projectID, sess, commitsResp.Patches, commitsResp.CommitCount)
+}
 
-		// Transition to committing
+// applyPatches applies the given patches to the workspace and updates the session.
+func (s *SessionService) applyPatches(ctx context.Context, projectID string, sess *model.Session, patches string, commitCount int) error {
+	// Transition to committing if not already
+	if sess.CommitStatus != model.CommitStatusCommitting {
 		sess.CommitStatus = model.CommitStatusCommitting
 		if err := s.store.UpdateSession(ctx, sess); err != nil {
 			return fmt.Errorf("failed to update session status: %w", err)
 		}
-		s.publishCommitStatusChanged(ctx, projectID, sessionID, model.CommitStatusCommitting)
+		s.publishCommitStatusChanged(ctx, projectID, sess.ID, model.CommitStatusCommitting)
 	}
 
-	// Step 2: Fetch and apply patches (if not yet done)
-	if sess.AppliedCommit == nil || *sess.AppliedCommit == "" {
-		// Check sandbox client is available
-		if s.sandboxClient == nil {
-			s.setCommitFailed(ctx, projectID, sess, "Sandbox client not available")
-			return nil
-		}
-
-		// Call agent-api GET /commits?parent={baseCommit} to get format-patch output
-		log.Printf("Session %s: fetching commits from agent-api (parent=%s)", sessionID, *sess.BaseCommit)
-		commitsResp, err := s.sandboxClient.GetCommits(ctx, sessionID, *sess.BaseCommit)
-		if err != nil {
-			s.setCommitFailed(ctx, projectID, sess, fmt.Sprintf("Failed to get commits from agent: %v", err))
-			return nil
-		}
-
-		if commitsResp.CommitCount == 0 {
-			s.setCommitFailed(ctx, projectID, sess, "No commits found in agent sandbox")
-			return nil
-		}
-
-		log.Printf("Session %s: received %d commits from agent, applying patches to workspace", sessionID, commitsResp.CommitCount)
-
-		// Apply patches to workspace with git am
-		finalCommit, err := s.gitService.ApplyPatches(ctx, sess.WorkspaceID, []byte(commitsResp.Patches))
-		if err != nil {
-			s.setCommitFailed(ctx, projectID, sess, fmt.Sprintf("Failed to apply patches to workspace: %v", err))
-			return nil
-		}
-
-		sess.AppliedCommit = ptrString(finalCommit)
-		if err := s.store.UpdateSession(ctx, sess); err != nil {
-			return fmt.Errorf("failed to update session applied commit: %w", err)
-		}
-		s.publishCommitStatusChanged(ctx, projectID, sessionID, model.CommitStatusCommitting)
-		log.Printf("Session %s: patches applied, final commit=%s", sessionID, finalCommit)
+	finalCommit, err := s.gitService.ApplyPatches(ctx, sess.WorkspaceID, []byte(patches))
+	if err != nil {
+		s.setCommitFailed(ctx, projectID, sess, fmt.Sprintf("Failed to apply patches to workspace: %v", err))
+		return nil
 	}
 
-complete:
-	// Step 3: Verify and complete
-	log.Printf("Session %s: commit completed with applied commit %s", sessionID, *sess.AppliedCommit)
-
-	sess.CommitStatus = model.CommitStatusCompleted
-	sess.CommitError = nil
+	sess.AppliedCommit = ptrString(finalCommit)
 	if err := s.store.UpdateSession(ctx, sess); err != nil {
-		return fmt.Errorf("failed to update session commit status: %w", err)
+		return fmt.Errorf("failed to update session applied commit: %w", err)
 	}
-	s.publishCommitStatusChanged(ctx, projectID, sessionID, model.CommitStatusCompleted)
-
-	log.Printf("Session %s committed successfully", sessionID)
+	s.publishCommitStatusChanged(ctx, projectID, sess.ID, model.CommitStatusCommitting)
+	log.Printf("Session %s: %d patches applied, final commit=%s", sess.ID, commitCount, finalCommit)
 	return nil
 }
 
