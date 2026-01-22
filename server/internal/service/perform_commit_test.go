@@ -275,8 +275,10 @@ func (h *mockHandler) getCommitsRequestCount() int {
 	return len(h.commitsRequests)
 }
 
-// TestPerformCommit_WorkspaceUnchanged tests the normal flow when workspace commit hasn't changed.
-func TestPerformCommit_WorkspaceUnchanged(t *testing.T) {
+// TestPerformCommit_WorkspaceUnchangedNoExistingPatches tests the normal flow when
+// workspace commit hasn't changed and the agent doesn't have patches ready yet.
+// This tests the fallback path: optimistic check finds nothing -> send prompt -> fetch patches.
+func TestPerformCommit_WorkspaceUnchangedNoExistingPatches(t *testing.T) {
 	env := newTestEnv(t)
 	defer env.cleanup()
 
@@ -285,10 +287,30 @@ func TestPerformCommit_WorkspaceUnchanged(t *testing.T) {
 	workspace, initialCommit := env.createTestWorkspace(t, project.ID)
 	session := env.createTestSession(t, project.ID, workspace.ID, agent.ID, initialCommit)
 
-	// Set up mock handler with patches response
-	handler := newMockHandler()
-	handler.commitsResponse = &sandboxapi.CommitsResponse{
-		Patches: `From abc123 Mon Sep 17 00:00:00 2001
+	callCount := 0
+	var mu sync.Mutex
+
+	// Set up mock handler - first GetCommits returns no patches, second returns patches
+	handler := &trackingHandler{
+		onChat: func(w http.ResponseWriter, _ *http.Request) {
+			// POST returns 202 Accepted
+			w.WriteHeader(http.StatusAccepted)
+		},
+		onCommits: func(w http.ResponseWriter, _ *http.Request) {
+			mu.Lock()
+			callCount++
+			currentCall := callCount
+			mu.Unlock()
+
+			w.Header().Set("Content-Type", "application/json")
+
+			// First call (optimistic check) - return no patches
+			// Second call (after prompt) - return patches
+			if currentCall == 1 {
+				_ = json.NewEncoder(w).Encode(sandboxapi.CommitsResponse{CommitCount: 0})
+			} else {
+				_ = json.NewEncoder(w).Encode(sandboxapi.CommitsResponse{
+					Patches: `From abc123 Mon Sep 17 00:00:00 2001
 From: Test <test@example.com>
 Date: Mon, 1 Jan 2024 00:00:00 +0000
 Subject: Test commit
@@ -306,7 +328,10 @@ index 0000000..abc123
 +test content
 --
 `,
-		CommitCount: 1,
+					CommitCount: 1,
+				})
+			}
+		},
 	}
 	env.mockSandbox.HTTPHandler = handler
 
@@ -328,14 +353,12 @@ index 0000000..abc123
 		t.Fatalf("PerformCommit failed: %v", err)
 	}
 
-	// Verify: should have sent /octobot-commit (step 2)
-	if handler.getChatRequestCount() != 1 {
-		t.Errorf("Expected 1 chat request (commit prompt), got %d", handler.getChatRequestCount())
-	}
-
-	// Verify: should have called GetCommits (step 3)
-	if handler.getCommitsRequestCount() != 1 {
-		t.Errorf("Expected 1 commits request, got %d", handler.getCommitsRequestCount())
+	// Verify: should have called GetCommits twice (optimistic check + after prompt)
+	mu.Lock()
+	finalCount := callCount
+	mu.Unlock()
+	if finalCount != 2 {
+		t.Errorf("Expected 2 commits requests (optimistic check + fetch), got %d", finalCount)
 	}
 
 	// Verify session status
@@ -765,6 +788,95 @@ func TestPerformCommit_NotPendingOrCommitting(t *testing.T) {
 	// Verify no requests were made
 	if handler.getChatRequestCount() != 0 {
 		t.Errorf("Expected 0 chat requests, got %d", handler.getChatRequestCount())
+	}
+}
+
+// TestPerformCommit_WorkspaceUnchangedWithExistingPatches tests that the optimistic
+// patch check runs even when workspace commit hasn't changed, allowing us to skip
+// the /octobot-commit prompt if the agent already has patches ready.
+func TestPerformCommit_WorkspaceUnchangedWithExistingPatches(t *testing.T) {
+	env := newTestEnv(t)
+	defer env.cleanup()
+
+	project := env.createTestProject(t)
+	agent := env.createTestAgent(t, project.ID)
+	workspace, initialCommit := env.createTestWorkspace(t, project.ID)
+
+	// Create session with baseCommit equal to workspace commit (no change scenario)
+	session := env.createTestSession(t, project.ID, workspace.ID, agent.ID, initialCommit)
+
+	// Set up mock handler with patches already available
+	// This simulates the agent having already created commits
+	handler := newMockHandler()
+	handler.commitsResponse = &sandboxapi.CommitsResponse{
+		Patches: `From abc123 Mon Sep 17 00:00:00 2001
+From: Agent <agent@example.com>
+Date: Mon, 1 Jan 2024 00:00:00 +0000
+Subject: Pre-existing agent work
+
+---
+ preexisting.txt | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/preexisting.txt b/preexisting.txt
+new file mode 100644
+index 0000000..abc123
+--- /dev/null
++++ b/preexisting.txt
+@@ -0,0 +1 @@
++pre-existing work from agent
+--
+`,
+		CommitCount: 1,
+	}
+	env.mockSandbox.HTTPHandler = handler
+
+	// Create and start sandbox
+	_, err := env.mockSandbox.Create(context.Background(), session.ID, sandbox.CreateOptions{})
+	if err != nil {
+		t.Fatalf("Failed to create sandbox: %v", err)
+	}
+	if err := env.mockSandbox.Start(context.Background(), session.ID); err != nil {
+		t.Fatalf("Failed to start sandbox: %v", err)
+	}
+
+	// Create session service
+	sessionSvc := NewSessionService(env.store, env.gitService, env.mockSandbox, env.eventBroker)
+
+	// Run PerformCommit
+	err = sessionSvc.PerformCommit(context.Background(), project.ID, session.ID)
+	if err != nil {
+		t.Fatalf("PerformCommit failed: %v", err)
+	}
+
+	// KEY ASSERTION: should NOT have sent /octobot-commit because optimistic check
+	// found existing patches and applied them directly
+	if handler.getChatRequestCount() != 0 {
+		t.Errorf("Expected 0 chat requests (optimistic path should skip prompt), got %d", handler.getChatRequestCount())
+	}
+
+	// Verify: should have called GetCommits once (the optimistic check)
+	if handler.getCommitsRequestCount() != 1 {
+		t.Errorf("Expected 1 commits request (optimistic check), got %d", handler.getCommitsRequestCount())
+	}
+
+	// Verify session completed successfully
+	updatedSession, err := env.store.GetSessionByID(context.Background(), session.ID)
+	if err != nil {
+		t.Fatalf("Failed to get session: %v", err)
+	}
+
+	// BaseCommit should remain unchanged
+	if updatedSession.BaseCommit == nil || *updatedSession.BaseCommit != initialCommit {
+		t.Errorf("Expected baseCommit to remain %s, got %v", initialCommit, updatedSession.BaseCommit)
+	}
+
+	if updatedSession.CommitStatus != model.CommitStatusCompleted {
+		t.Errorf("Expected commit status %s, got %s", model.CommitStatusCompleted, updatedSession.CommitStatus)
+	}
+
+	if updatedSession.AppliedCommit == nil || *updatedSession.AppliedCommit == "" {
+		t.Error("Expected appliedCommit to be set")
 	}
 }
 

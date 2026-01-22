@@ -632,6 +632,18 @@ func (s *SessionService) PerformCommit(ctx context.Context, projectID, sessionID
 		return nil
 	}
 
+	// Step 1.5: Optimistically check if agent already has patches ready
+	// This runs regardless of whether baseCommit changed, in case the agent
+	// already created patches that we can apply without sending /octobot-commit
+	if sess.CommitStatus == model.CommitStatusPending && (sess.AppliedCommit == nil || *sess.AppliedCommit == "") {
+		if err := s.tryApplyExistingPatches(ctx, projectID, sess); err != nil {
+			return err
+		}
+		if sess.CommitStatus == model.CommitStatusFailed {
+			return nil
+		}
+	}
+
 	// Step 2: Send /octobot-commit to agent (if pending)
 	if sess.CommitStatus == model.CommitStatusPending {
 		if err := s.sendCommitPrompt(ctx, projectID, sess); err != nil {
@@ -685,13 +697,18 @@ func (s *SessionService) syncBaseCommit(ctx context.Context, projectID string, s
 		return fmt.Errorf("failed to update session baseCommit: %w", err)
 	}
 
-	// Optimistically check if agent already has patches for the new baseCommit
-	if s.sandboxClient == nil || sess.CommitStatus != model.CommitStatusPending {
+	return nil
+}
+
+// tryApplyExistingPatches checks if the agent already has patches ready and applies them.
+// This is called optimistically before sending /octobot-commit in case patches are already available.
+func (s *SessionService) tryApplyExistingPatches(ctx context.Context, projectID string, sess *model.Session) error {
+	if s.sandboxClient == nil {
 		return nil
 	}
 
-	log.Printf("Session %s: checking if agent has existing patches for commit %s", sess.ID, gitStatus.Commit)
-	commitsResp, err := s.sandboxClient.GetCommits(ctx, sess.ID, gitStatus.Commit)
+	log.Printf("Session %s: checking if agent has existing patches for commit %s", sess.ID, *sess.BaseCommit)
+	commitsResp, err := s.sandboxClient.GetCommits(ctx, sess.ID, *sess.BaseCommit)
 	if err != nil {
 		log.Printf("Session %s: no existing patches available (error: %v), continuing with prompt", sess.ID, err)
 		return nil
