@@ -15,8 +15,11 @@ RUN apk add --no-cache \
 
 WORKDIR /build
 
-# Clone agentfs from upstream tursodatabase (main branch)
-RUN git clone --depth 1 https://github.com/tursodatabase/agentfs.git
+# Clone agentfs from upstream tursodatabase (PR #271)
+RUN git clone https://github.com/tursodatabase/agentfs.git \
+    && cd agentfs \
+    && git fetch origin pull/271/head:pr-271 \
+    && git checkout pr-271
 
 WORKDIR /build/agentfs/cli
 
