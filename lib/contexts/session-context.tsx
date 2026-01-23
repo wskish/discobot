@@ -11,10 +11,6 @@ import type {
 } from "@/lib/api-types";
 import { useAgentTypes } from "@/lib/hooks/use-agent-types";
 import { useAgents } from "@/lib/hooks/use-agents";
-import {
-	STORAGE_KEYS,
-	usePersistedState,
-} from "@/lib/hooks/use-persisted-state";
 import { useProjectEvents } from "@/lib/hooks/use-project-events";
 import { useWorkspaces } from "@/lib/hooks/use-workspaces";
 
@@ -94,10 +90,10 @@ export function SessionProvider({ children }: SessionProviderProps) {
 
 	const { agentTypes } = useAgentTypes();
 
-	// Selection state (persisted to sessionStorage for per-tab refresh persistence)
-	const [selectedSessionId, setSelectedSessionId] = usePersistedState<
+	// Selection state (not persisted - always starts at home screen on refresh)
+	const [selectedSessionId, setSelectedSessionId] = React.useState<
 		string | null
-	>(STORAGE_KEYS.SELECTED_SESSION_ID, null, "session");
+	>(null);
 	const [selectedAgentId, setSelectedAgentId] = React.useState<string | null>(
 		null,
 	);
