@@ -6,6 +6,7 @@ import (
 )
 
 func TestListProjects_Unauthenticated(t *testing.T) {
+	t.Parallel()
 	ts := NewTestServer(t)
 
 	resp, err := http.Get(ts.Server.URL + "/api/projects")
@@ -18,6 +19,7 @@ func TestListProjects_Unauthenticated(t *testing.T) {
 }
 
 func TestListProjects_Empty(t *testing.T) {
+	t.Parallel()
 	ts := NewTestServer(t)
 	user := ts.CreateTestUser("test@example.com")
 	client := ts.AuthenticatedClient(user)
@@ -36,6 +38,7 @@ func TestListProjects_Empty(t *testing.T) {
 }
 
 func TestCreateProject(t *testing.T) {
+	t.Parallel()
 	ts := NewTestServer(t)
 	user := ts.CreateTestUser("test@example.com")
 	client := ts.AuthenticatedClient(user)
@@ -59,6 +62,7 @@ func TestCreateProject(t *testing.T) {
 }
 
 func TestCreateProject_MissingName(t *testing.T) {
+	t.Parallel()
 	ts := NewTestServer(t)
 	user := ts.CreateTestUser("test@example.com")
 	client := ts.AuthenticatedClient(user)
@@ -70,6 +74,7 @@ func TestCreateProject_MissingName(t *testing.T) {
 }
 
 func TestGetProject(t *testing.T) {
+	t.Parallel()
 	ts := NewTestServer(t)
 	user := ts.CreateTestUser("test@example.com")
 	project := ts.CreateTestProject(user, "Test Project")
@@ -89,6 +94,7 @@ func TestGetProject(t *testing.T) {
 }
 
 func TestGetProject_NotMember(t *testing.T) {
+	t.Parallel()
 	ts := NewTestServer(t)
 	owner := ts.CreateTestUser("owner@example.com")
 	other := ts.CreateTestUser("other@example.com")
@@ -102,6 +108,7 @@ func TestGetProject_NotMember(t *testing.T) {
 }
 
 func TestUpdateProject(t *testing.T) {
+	t.Parallel()
 	ts := NewTestServer(t)
 	user := ts.CreateTestUser("test@example.com")
 	project := ts.CreateTestProject(user, "Test Project")
@@ -123,6 +130,7 @@ func TestUpdateProject(t *testing.T) {
 }
 
 func TestDeleteProject(t *testing.T) {
+	t.Parallel()
 	ts := NewTestServer(t)
 	user := ts.CreateTestUser("test@example.com")
 	project := ts.CreateTestProject(user, "Test Project")
@@ -141,6 +149,7 @@ func TestDeleteProject(t *testing.T) {
 }
 
 func TestListProjectMembers(t *testing.T) {
+	t.Parallel()
 	ts := NewTestServer(t)
 	user := ts.CreateTestUser("test@example.com")
 	project := ts.CreateTestProject(user, "Test Project")
@@ -160,6 +169,7 @@ func TestListProjectMembers(t *testing.T) {
 }
 
 func TestCreateInvitation(t *testing.T) {
+	t.Parallel()
 	ts := NewTestServer(t)
 	user := ts.CreateTestUser("test@example.com")
 	project := ts.CreateTestProject(user, "Test Project")

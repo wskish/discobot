@@ -6,6 +6,7 @@ import (
 )
 
 func TestHealthEndpoint(t *testing.T) {
+	t.Parallel()
 	ts := NewTestServer(t)
 
 	resp, err := http.Get(ts.Server.URL + "/health")

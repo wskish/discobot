@@ -8,6 +8,7 @@ import (
 )
 
 func TestAuthMe_Unauthenticated(t *testing.T) {
+	t.Parallel()
 	ts := NewTestServer(t)
 
 	resp, err := http.Get(ts.Server.URL + "/auth/me")
@@ -20,6 +21,7 @@ func TestAuthMe_Unauthenticated(t *testing.T) {
 }
 
 func TestAuthMe_Authenticated(t *testing.T) {
+	t.Parallel()
 	ts := NewTestServer(t)
 	user := ts.CreateTestUser("test@example.com")
 	client := ts.AuthenticatedClient(user)
@@ -38,6 +40,7 @@ func TestAuthMe_Authenticated(t *testing.T) {
 }
 
 func TestAuthLogout(t *testing.T) {
+	t.Parallel()
 	ts := NewTestServer(t)
 	user := ts.CreateTestUser("test@example.com")
 	client := ts.AuthenticatedClient(user)
@@ -56,6 +59,7 @@ func TestAuthLogout(t *testing.T) {
 }
 
 func TestAuthLogin_UnsupportedProvider(t *testing.T) {
+	t.Parallel()
 	ts := NewTestServer(t)
 
 	client := ts.Client()
@@ -70,6 +74,7 @@ func TestAuthLogin_UnsupportedProvider(t *testing.T) {
 }
 
 func TestNoAuthMode_AuthMe(t *testing.T) {
+	t.Parallel()
 	ts := NewTestServerNoAuth(t)
 
 	// In no-auth mode, /auth/me should return the anonymous user
@@ -93,6 +98,7 @@ func TestNoAuthMode_AuthMe(t *testing.T) {
 }
 
 func TestNoAuthMode_APIAccess(t *testing.T) {
+	t.Parallel()
 	ts := NewTestServerNoAuth(t)
 
 	// In no-auth mode, API should be accessible without authentication

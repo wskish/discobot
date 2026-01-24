@@ -6,6 +6,7 @@ import (
 )
 
 func TestGetAgentTypes(t *testing.T) {
+	t.Parallel()
 	ts := NewTestServer(t)
 	user := ts.CreateTestUser("test@example.com")
 	project := ts.CreateTestProject(user, "Test Project")
@@ -39,6 +40,7 @@ func TestGetAgentTypes(t *testing.T) {
 }
 
 func TestListAgents_Empty(t *testing.T) {
+	t.Parallel()
 	ts := NewTestServer(t)
 	user := ts.CreateTestUser("test@example.com")
 	project := ts.CreateTestProject(user, "Test Project")
@@ -60,6 +62,7 @@ func TestListAgents_Empty(t *testing.T) {
 }
 
 func TestCreateAgent(t *testing.T) {
+	t.Parallel()
 	ts := NewTestServer(t)
 	user := ts.CreateTestUser("test@example.com")
 	project := ts.CreateTestProject(user, "Test Project")
@@ -86,6 +89,7 @@ func TestCreateAgent(t *testing.T) {
 }
 
 func TestCreateAgent_WithSystemPrompt(t *testing.T) {
+	t.Parallel()
 	ts := NewTestServer(t)
 	user := ts.CreateTestUser("test@example.com")
 	project := ts.CreateTestProject(user, "Test Project")
@@ -109,6 +113,7 @@ func TestCreateAgent_WithSystemPrompt(t *testing.T) {
 }
 
 func TestCreateAgent_MissingName(t *testing.T) {
+	t.Parallel()
 	ts := NewTestServer(t)
 	user := ts.CreateTestUser("test@example.com")
 	project := ts.CreateTestProject(user, "Test Project")
@@ -123,6 +128,7 @@ func TestCreateAgent_MissingName(t *testing.T) {
 }
 
 func TestCreateAgent_MissingType(t *testing.T) {
+	t.Parallel()
 	ts := NewTestServer(t)
 	user := ts.CreateTestUser("test@example.com")
 	project := ts.CreateTestProject(user, "Test Project")
@@ -137,6 +143,7 @@ func TestCreateAgent_MissingType(t *testing.T) {
 }
 
 func TestGetAgent(t *testing.T) {
+	t.Parallel()
 	ts := NewTestServer(t)
 	user := ts.CreateTestUser("test@example.com")
 	project := ts.CreateTestProject(user, "Test Project")
@@ -160,6 +167,7 @@ func TestGetAgent(t *testing.T) {
 }
 
 func TestUpdateAgent(t *testing.T) {
+	t.Parallel()
 	ts := NewTestServer(t)
 	user := ts.CreateTestUser("test@example.com")
 	project := ts.CreateTestProject(user, "Test Project")
@@ -186,6 +194,7 @@ func TestUpdateAgent(t *testing.T) {
 }
 
 func TestDeleteAgent(t *testing.T) {
+	t.Parallel()
 	ts := NewTestServer(t)
 	user := ts.CreateTestUser("test@example.com")
 	project := ts.CreateTestProject(user, "Test Project")
@@ -205,6 +214,7 @@ func TestDeleteAgent(t *testing.T) {
 }
 
 func TestSetDefaultAgent(t *testing.T) {
+	t.Parallel()
 	ts := NewTestServer(t)
 	user := ts.CreateTestUser("test@example.com")
 	project := ts.CreateTestProject(user, "Test Project")
@@ -227,6 +237,7 @@ func TestSetDefaultAgent(t *testing.T) {
 }
 
 func TestSetDefaultAgent_MissingAgentId(t *testing.T) {
+	t.Parallel()
 	ts := NewTestServer(t)
 	user := ts.CreateTestUser("test@example.com")
 	project := ts.CreateTestProject(user, "Test Project")
@@ -239,6 +250,7 @@ func TestSetDefaultAgent_MissingAgentId(t *testing.T) {
 }
 
 func TestListAgents_WithData(t *testing.T) {
+	t.Parallel()
 	ts := NewTestServer(t)
 	user := ts.CreateTestUser("test@example.com")
 	project := ts.CreateTestProject(user, "Test Project")

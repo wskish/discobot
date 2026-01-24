@@ -16,6 +16,7 @@ import (
 )
 
 func TestSSHServer_Integration_ConnectToSession(t *testing.T) {
+	SkipIfShort(t) // SSH integration test
 	provider := mock.NewProvider()
 	ctx := context.Background()
 
@@ -69,6 +70,7 @@ func TestSSHServer_Integration_ConnectToSession(t *testing.T) {
 }
 
 func TestSSHServer_Integration_RejectUnknownSession(t *testing.T) {
+	SkipIfShort(t) // SSH integration test
 	provider := mock.NewProvider()
 
 	// Create SSH server (no sandboxes created)
@@ -105,6 +107,7 @@ func TestSSHServer_Integration_RejectUnknownSession(t *testing.T) {
 }
 
 func TestSSHServer_Integration_RejectStoppedSandbox(t *testing.T) {
+	SkipIfShort(t) // SSH integration test
 	provider := mock.NewProvider()
 	ctx := context.Background()
 
@@ -144,6 +147,7 @@ func TestSSHServer_Integration_RejectStoppedSandbox(t *testing.T) {
 }
 
 func TestSSHServer_Integration_MultipleConnections(t *testing.T) {
+	SkipIfShort(t) // SSH integration test
 	provider := mock.NewProvider()
 	ctx := context.Background()
 
@@ -198,6 +202,7 @@ func TestSSHServer_Integration_MultipleConnections(t *testing.T) {
 }
 
 func TestSSHServer_Integration_HostKeyPersistence(t *testing.T) {
+	SkipIfShort(t) // SSH integration test
 	provider := mock.NewProvider()
 	tmpDir := t.TempDir()
 	keyPath := tmpDir + "/ssh_host_key"
@@ -324,6 +329,7 @@ func (p *testPTY) Exit() {
 }
 
 func TestSSHServer_Integration_SessionTerminatesOnProcessExit(t *testing.T) {
+	SkipIfShort(t) // SSH integration test
 	provider := mock.NewProvider()
 	ctx := context.Background()
 
@@ -419,6 +425,7 @@ func TestSSHServer_Integration_SessionTerminatesOnProcessExit(t *testing.T) {
 }
 
 func TestSSHServer_Integration_SessionTerminatesOnExecExit(t *testing.T) {
+	SkipIfShort(t) // SSH integration test
 	provider := mock.NewProvider()
 	ctx := context.Background()
 
@@ -645,6 +652,7 @@ func (s *testStream) GetInput() []byte {
 }
 
 func TestSSHServer_Integration_PortForwarding(t *testing.T) {
+	SkipIfShort(t) // SSH integration test
 	provider := mock.NewProvider()
 	ctx := context.Background()
 
@@ -740,6 +748,7 @@ func TestSSHServer_Integration_PortForwarding(t *testing.T) {
 }
 
 func TestSSHServer_Integration_SFTP(t *testing.T) {
+	SkipIfShort(t) // SSH integration test
 	provider := mock.NewProvider()
 	ctx := context.Background()
 
@@ -818,6 +827,7 @@ func TestSSHServer_Integration_SFTP(t *testing.T) {
 }
 
 func TestSSHServer_Integration_UserInfoFetcher(t *testing.T) {
+	SkipIfShort(t) // SSH integration test
 	provider := mock.NewProvider()
 	ctx := context.Background()
 

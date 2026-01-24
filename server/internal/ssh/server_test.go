@@ -91,6 +91,7 @@ func TestNew_LoadsExistingHostKey(t *testing.T) {
 }
 
 func TestServer_AcceptsConnection(t *testing.T) {
+	t.Parallel()
 	provider := mock.NewProvider()
 
 	// Create and start a sandbox
@@ -106,6 +107,7 @@ func TestServer_AcceptsConnection(t *testing.T) {
 
 	srv, err := New(&Config{
 		Address:         "127.0.0.1:0",
+		HostKeyPath:     getSharedTestKeyPath(), // Use pre-generated key
 		SandboxProvider: provider,
 	})
 	if err != nil {
@@ -142,10 +144,12 @@ func TestServer_AcceptsConnection(t *testing.T) {
 }
 
 func TestServer_RejectsUnknownSession(t *testing.T) {
+	t.Parallel()
 	provider := mock.NewProvider()
 
 	srv, err := New(&Config{
 		Address:         "127.0.0.1:0",
+		HostKeyPath:     getSharedTestKeyPath(), // Use pre-generated key
 		SandboxProvider: provider,
 	})
 	if err != nil {
@@ -175,6 +179,7 @@ func TestServer_RejectsUnknownSession(t *testing.T) {
 }
 
 func TestServer_RejectsStoppedSandbox(t *testing.T) {
+	t.Parallel()
 	provider := mock.NewProvider()
 
 	ctx := context.Background()
@@ -188,6 +193,7 @@ func TestServer_RejectsStoppedSandbox(t *testing.T) {
 
 	srv, err := New(&Config{
 		Address:         "127.0.0.1:0",
+		HostKeyPath:     getSharedTestKeyPath(), // Use pre-generated key
 		SandboxProvider: provider,
 	})
 	if err != nil {
@@ -214,6 +220,7 @@ func TestServer_RejectsStoppedSandbox(t *testing.T) {
 }
 
 func TestParsePTYRequest(t *testing.T) {
+	t.Parallel()
 	// Build a PTY request payload
 	// Format: string term, uint32 cols, uint32 rows, uint32 width, uint32 height, string modes
 	term := "xterm-256color"
@@ -249,6 +256,7 @@ func TestParsePTYRequest(t *testing.T) {
 }
 
 func TestParseEnvRequest(t *testing.T) {
+	t.Parallel()
 	// Build an env request payload
 	// Format: string name, string value
 	name := "TERM"
@@ -274,6 +282,7 @@ func TestParseEnvRequest(t *testing.T) {
 }
 
 func TestParseExecRequest(t *testing.T) {
+	t.Parallel()
 	command := "ls -la /workspace"
 	payload := make([]byte, 0)
 

@@ -12,6 +12,7 @@ import (
 )
 
 func TestListSessionsByWorkspace_Empty(t *testing.T) {
+	t.Parallel()
 	ts := NewTestServer(t)
 	user := ts.CreateTestUser("test@example.com")
 	project := ts.CreateTestProject(user, "Test Project")
@@ -34,6 +35,7 @@ func TestListSessionsByWorkspace_Empty(t *testing.T) {
 }
 
 func TestCreateSession_ViaChat(t *testing.T) {
+	t.Parallel()
 	ts := NewTestServer(t)
 	user := ts.CreateTestUser("test@example.com")
 	project := ts.CreateTestProject(user, "Test Project")
@@ -84,6 +86,7 @@ func TestCreateSession_ViaChat(t *testing.T) {
 }
 
 func TestCreateSession_ViaChatWithAgent(t *testing.T) {
+	t.Parallel()
 	ts := NewTestServer(t)
 	user := ts.CreateTestUser("test@example.com")
 	project := ts.CreateTestProject(user, "Test Project")
@@ -132,6 +135,7 @@ func TestCreateSession_ViaChatWithAgent(t *testing.T) {
 }
 
 func TestCreateSession_NameFromLongPrompt(t *testing.T) {
+	t.Parallel()
 	ts := NewTestServer(t)
 	user := ts.CreateTestUser("test@example.com")
 	project := ts.CreateTestProject(user, "Test Project")
@@ -181,6 +185,7 @@ func TestCreateSession_NameFromLongPrompt(t *testing.T) {
 }
 
 func TestGetSession(t *testing.T) {
+	t.Parallel()
 	ts := NewTestServer(t)
 	user := ts.CreateTestUser("test@example.com")
 	project := ts.CreateTestProject(user, "Test Project")
@@ -205,6 +210,7 @@ func TestGetSession(t *testing.T) {
 }
 
 func TestUpdateSession(t *testing.T) {
+	t.Parallel()
 	ts := NewTestServer(t)
 	user := ts.CreateTestUser("test@example.com")
 	project := ts.CreateTestProject(user, "Test Project")
@@ -232,6 +238,7 @@ func TestUpdateSession(t *testing.T) {
 }
 
 func TestDeleteSession(t *testing.T) {
+	t.Parallel()
 	ts := NewTestServer(t)
 	user := ts.CreateTestUser("test@example.com")
 	project := ts.CreateTestProject(user, "Test Project")
@@ -257,6 +264,7 @@ func TestDeleteSession(t *testing.T) {
 }
 
 func TestListSessionsByWorkspace_WithData(t *testing.T) {
+	t.Parallel()
 	ts := NewTestServer(t)
 	user := ts.CreateTestUser("test@example.com")
 	project := ts.CreateTestProject(user, "Test Project")
@@ -282,6 +290,7 @@ func TestListSessionsByWorkspace_WithData(t *testing.T) {
 }
 
 func TestListSessionFiles(t *testing.T) {
+	t.Parallel()
 	ts := NewTestServer(t)
 	user := ts.CreateTestUser("test@example.com")
 	project := ts.CreateTestProject(user, "Test Project")
@@ -317,6 +326,7 @@ func TestListSessionFiles(t *testing.T) {
 }
 
 func TestListMessages(t *testing.T) {
+	t.Parallel()
 	ts := NewTestServer(t)
 	user := ts.CreateTestUser("test@example.com")
 	project := ts.CreateTestProject(user, "Test Project")
@@ -361,6 +371,7 @@ func TestListMessages(t *testing.T) {
 // ============================================================================
 
 func TestCommitSession_NoWorkspaceCommit(t *testing.T) {
+	t.Parallel()
 	ts := NewTestServer(t)
 	user := ts.CreateTestUser("test@example.com")
 	project := ts.CreateTestProject(user, "Test Project")
@@ -392,6 +403,7 @@ func TestCommitSession_NoWorkspaceCommit(t *testing.T) {
 }
 
 func TestCommitSession_NotFound(t *testing.T) {
+	t.Parallel()
 	ts := NewTestServer(t)
 	user := ts.CreateTestUser("test@example.com")
 	project := ts.CreateTestProject(user, "Test Project")
@@ -405,6 +417,7 @@ func TestCommitSession_NotFound(t *testing.T) {
 }
 
 func TestCommitSession_AlreadyInProgress(t *testing.T) {
+	t.Parallel()
 	ts := NewTestServer(t)
 	user := ts.CreateTestUser("test@example.com")
 	project := ts.CreateTestProject(user, "Test Project")
@@ -428,6 +441,7 @@ func TestCommitSession_AlreadyInProgress(t *testing.T) {
 }
 
 func TestGetSession_IncludesCommitStatus(t *testing.T) {
+	t.Parallel()
 	ts := NewTestServer(t)
 	user := ts.CreateTestUser("test@example.com")
 	project := ts.CreateTestProject(user, "Test Project")
@@ -462,6 +476,7 @@ func TestGetSession_IncludesCommitStatus(t *testing.T) {
 }
 
 func TestGetSession_IncludesCommitError(t *testing.T) {
+	t.Parallel()
 	ts := NewTestServer(t)
 	user := ts.CreateTestUser("test@example.com")
 	project := ts.CreateTestProject(user, "Test Project")
@@ -496,6 +511,7 @@ func TestGetSession_IncludesCommitError(t *testing.T) {
 }
 
 func TestListSessions_IncludesCommitStatus(t *testing.T) {
+	t.Parallel()
 	ts := NewTestServer(t)
 	user := ts.CreateTestUser("test@example.com")
 	project := ts.CreateTestProject(user, "Test Project")
@@ -513,7 +529,8 @@ func TestListSessions_IncludesCommitStatus(t *testing.T) {
 	}
 
 	// List sessions and verify commit status is included
-	resp := client.Get("/api/projects/" + project.ID + "/workspaces/" + workspace.ID + "/sessions")
+	// Use includeClosed=true since commitStatus "completed" means the session is closed
+	resp := client.Get("/api/projects/" + project.ID + "/workspaces/" + workspace.ID + "/sessions?includeClosed=true")
 	defer resp.Body.Close()
 
 	AssertStatus(t, resp, http.StatusOK)
@@ -536,6 +553,7 @@ func TestListSessions_IncludesCommitStatus(t *testing.T) {
 }
 
 func TestCommitSession_SendsCommitMessageToAgent(t *testing.T) {
+	t.Parallel()
 	ts := NewTestServer(t)
 	user := ts.CreateTestUser("test@example.com")
 	project := ts.CreateTestProject(user, "Test Project")

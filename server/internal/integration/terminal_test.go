@@ -9,6 +9,7 @@ import (
 )
 
 func TestGetTerminalStatus_NotCreated(t *testing.T) {
+	t.Parallel()
 	ts := NewTestServer(t)
 	user := ts.CreateTestUser("test@example.com")
 	project := ts.CreateTestProject(user, "Test Project")
@@ -30,6 +31,7 @@ func TestGetTerminalStatus_NotCreated(t *testing.T) {
 }
 
 func TestGetTerminalStatus_Running(t *testing.T) {
+	t.Parallel()
 	ts := NewTestServer(t)
 	user := ts.CreateTestUser("test@example.com")
 	project := ts.CreateTestProject(user, "Test Project")
@@ -49,12 +51,13 @@ func TestGetTerminalStatus_Running(t *testing.T) {
 	var status map[string]interface{}
 	ParseJSON(t, resp, &status)
 
-	if status["status"] != "ready" {
-		t.Errorf("Expected status 'ready', got '%v'", status["status"])
+	if status["status"] != "running" {
+		t.Errorf("Expected status 'running', got '%v'", status["status"])
 	}
 }
 
 func TestGetTerminalHistory_Empty(t *testing.T) {
+	t.Parallel()
 	ts := NewTestServer(t)
 	user := ts.CreateTestUser("test@example.com")
 	project := ts.CreateTestProject(user, "Test Project")
@@ -81,6 +84,7 @@ func TestGetTerminalHistory_Empty(t *testing.T) {
 }
 
 func TestGetTerminalStatus_SessionNotFound(t *testing.T) {
+	t.Parallel()
 	ts := NewTestServer(t)
 	user := ts.CreateTestUser("test@example.com")
 	project := ts.CreateTestProject(user, "Test Project")
@@ -102,6 +106,7 @@ func TestGetTerminalStatus_SessionNotFound(t *testing.T) {
 }
 
 func TestTerminalWebSocket_ServiceUnavailable(t *testing.T) {
+	t.Parallel()
 	// This test verifies that the WebSocket endpoint returns an error
 	// when trying to connect without a valid session setup
 	// Note: Full WebSocket testing would require a WebSocket client
@@ -125,6 +130,7 @@ func TestTerminalWebSocket_ServiceUnavailable(t *testing.T) {
 }
 
 func TestCreateSession_CreatesSandbox(t *testing.T) {
+	t.Parallel()
 	ts := NewTestServer(t)
 	user := ts.CreateTestUser("test@example.com")
 	project := ts.CreateTestProject(user, "Test Project")

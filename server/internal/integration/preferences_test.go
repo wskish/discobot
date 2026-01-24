@@ -6,6 +6,7 @@ import (
 )
 
 func TestListPreferences_Empty(t *testing.T) {
+	t.Parallel()
 	ts := NewTestServer(t)
 	user := ts.CreateTestUser("test@example.com")
 	client := ts.AuthenticatedClient(user)
@@ -26,6 +27,7 @@ func TestListPreferences_Empty(t *testing.T) {
 }
 
 func TestSetPreference(t *testing.T) {
+	t.Parallel()
 	ts := NewTestServer(t)
 	user := ts.CreateTestUser("test@example.com")
 	client := ts.AuthenticatedClient(user)
@@ -49,6 +51,7 @@ func TestSetPreference(t *testing.T) {
 }
 
 func TestGetPreference(t *testing.T) {
+	t.Parallel()
 	ts := NewTestServer(t)
 	user := ts.CreateTestUser("test@example.com")
 	client := ts.AuthenticatedClient(user)
@@ -78,6 +81,7 @@ func TestGetPreference(t *testing.T) {
 }
 
 func TestGetPreference_NotFound(t *testing.T) {
+	t.Parallel()
 	ts := NewTestServer(t)
 	user := ts.CreateTestUser("test@example.com")
 	client := ts.AuthenticatedClient(user)
@@ -89,6 +93,7 @@ func TestGetPreference_NotFound(t *testing.T) {
 }
 
 func TestUpdatePreference(t *testing.T) {
+	t.Parallel()
 	ts := NewTestServer(t)
 	user := ts.CreateTestUser("test@example.com")
 	client := ts.AuthenticatedClient(user)
@@ -117,6 +122,7 @@ func TestUpdatePreference(t *testing.T) {
 }
 
 func TestDeletePreference(t *testing.T) {
+	t.Parallel()
 	ts := NewTestServer(t)
 	user := ts.CreateTestUser("test@example.com")
 	client := ts.AuthenticatedClient(user)
@@ -142,6 +148,7 @@ func TestDeletePreference(t *testing.T) {
 }
 
 func TestDeletePreference_NotFound(t *testing.T) {
+	t.Parallel()
 	ts := NewTestServer(t)
 	user := ts.CreateTestUser("test@example.com")
 	client := ts.AuthenticatedClient(user)
@@ -153,6 +160,7 @@ func TestDeletePreference_NotFound(t *testing.T) {
 }
 
 func TestSetMultiplePreferences(t *testing.T) {
+	t.Parallel()
 	ts := NewTestServer(t)
 	user := ts.CreateTestUser("test@example.com")
 	client := ts.AuthenticatedClient(user)
@@ -179,6 +187,7 @@ func TestSetMultiplePreferences(t *testing.T) {
 }
 
 func TestListPreferences_WithData(t *testing.T) {
+	t.Parallel()
 	ts := NewTestServer(t)
 	user := ts.CreateTestUser("test@example.com")
 	client := ts.AuthenticatedClient(user)
@@ -204,6 +213,7 @@ func TestListPreferences_WithData(t *testing.T) {
 }
 
 func TestPreferences_UserIsolation(t *testing.T) {
+	t.Parallel()
 	ts := NewTestServer(t)
 	user1 := ts.CreateTestUser("user1@example.com")
 	user2 := ts.CreateTestUser("user2@example.com")
@@ -242,6 +252,7 @@ func TestPreferences_UserIsolation(t *testing.T) {
 }
 
 func TestPreferences_Unauthenticated(t *testing.T) {
+	t.Parallel()
 	ts := NewTestServer(t)
 
 	// Try to access without auth
@@ -256,6 +267,7 @@ func TestPreferences_Unauthenticated(t *testing.T) {
 }
 
 func TestPreferences_SpecialCharactersInKey(t *testing.T) {
+	t.Parallel()
 	ts := NewTestServer(t)
 	user := ts.CreateTestUser("test@example.com")
 	client := ts.AuthenticatedClient(user)
@@ -277,6 +289,7 @@ func TestPreferences_SpecialCharactersInKey(t *testing.T) {
 }
 
 func TestPreferences_EmptyValue(t *testing.T) {
+	t.Parallel()
 	ts := NewTestServer(t)
 	user := ts.CreateTestUser("test@example.com")
 	client := ts.AuthenticatedClient(user)
@@ -298,6 +311,7 @@ func TestPreferences_EmptyValue(t *testing.T) {
 }
 
 func TestPreferences_LargeValue(t *testing.T) {
+	t.Parallel()
 	ts := NewTestServer(t)
 	user := ts.CreateTestUser("test@example.com")
 	client := ts.AuthenticatedClient(user)

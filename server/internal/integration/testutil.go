@@ -59,6 +59,7 @@ func NewTestServer(t *testing.T) *TestServer {
 	// Determine DSN based on test configuration
 	var dsn string
 	var driver string
+	var skipMigrate bool
 
 	if PostgresEnabled() {
 		// Use PostgreSQL container
@@ -72,8 +73,18 @@ func NewTestServer(t *testing.T) *TestServer {
 		} else {
 			driver = "sqlite"
 		}
+	} else if templatePath := GetTemplateDBPath(); templatePath != "" {
+		// Use pre-migrated template database (copy it for this test)
+		// This is much faster than running AutoMigrate for each test
+		testDBPath := fmt.Sprintf("%s/test.db", t.TempDir())
+		if err := copyFile(templatePath, testDBPath); err != nil {
+			t.Fatalf("Failed to copy template database: %v", err)
+		}
+		dsn = "sqlite3://" + testDBPath
+		driver = "sqlite"
+		skipMigrate = true // Already migrated
 	} else {
-		// Default to file-based SQLite in temp directory
+		// Fallback: file-based SQLite in temp directory with migration
 		// (in-memory SQLite creates separate databases per connection,
 		// which doesn't work well with the dispatcher using separate goroutines)
 		dsn = fmt.Sprintf("sqlite3://%s/test.db", t.TempDir())
@@ -97,8 +108,10 @@ func NewTestServer(t *testing.T) *TestServer {
 		t.Fatalf("Failed to create database: %v", err)
 	}
 
-	if err := db.Migrate(); err != nil {
-		t.Fatalf("Failed to run migrations: %v", err)
+	if !skipMigrate {
+		if err := db.Migrate(); err != nil {
+			t.Fatalf("Failed to run migrations: %v", err)
+		}
 	}
 
 	// For PostgreSQL, clean tables before each test to ensure isolation
@@ -315,10 +328,26 @@ func NewTestServerNoAuth(t *testing.T) *TestServer {
 
 	workspaceDir := t.TempDir()
 	dbDir := t.TempDir()
+
+	var dsn string
+	var skipMigrate bool
+
+	if templatePath := GetTemplateDBPath(); templatePath != "" {
+		// Use pre-migrated template database (copy it for this test)
+		testDBPath := fmt.Sprintf("%s/test.db", dbDir)
+		if err := copyFile(templatePath, testDBPath); err != nil {
+			t.Fatalf("Failed to copy template database: %v", err)
+		}
+		dsn = "sqlite3://" + testDBPath
+		skipMigrate = true
+	} else {
+		dsn = fmt.Sprintf("sqlite3://%s/test.db", dbDir)
+	}
+
 	cfg := &config.Config{
 		Port:           8080,
 		CORSOrigins:    []string{"*"},
-		DatabaseDSN:    fmt.Sprintf("sqlite3://%s/test.db", dbDir),
+		DatabaseDSN:    dsn,
 		DatabaseDriver: "sqlite",
 		AuthEnabled:    false, // Disable auth - use anonymous user
 		SessionSecret:  []byte("test-session-secret-32-bytes-long!!"),
@@ -331,8 +360,10 @@ func NewTestServerNoAuth(t *testing.T) *TestServer {
 		t.Fatalf("Failed to create database: %v", err)
 	}
 
-	if err := db.Migrate(); err != nil {
-		t.Fatalf("Failed to run migrations: %v", err)
+	if !skipMigrate {
+		if err := db.Migrate(); err != nil {
+			t.Fatalf("Failed to run migrations: %v", err)
+		}
 	}
 
 	// Seed the anonymous user and default project
@@ -782,6 +813,24 @@ func AssertStatus(t *testing.T, resp *http.Response, expected int) {
 
 func strPtr(s string) *string {
 	return &s
+}
+
+// copyFile copies a file from src to dst
+func copyFile(src, dst string) error {
+	sourceFile, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer sourceFile.Close()
+
+	destFile, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer destFile.Close()
+
+	_, err = io.Copy(destFile, sourceFile)
+	return err
 }
 
 // cleanTables truncates all tables for test isolation (PostgreSQL only)

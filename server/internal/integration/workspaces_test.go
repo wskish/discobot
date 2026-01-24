@@ -47,6 +47,7 @@ func runWorkspaceGit(t *testing.T, dir string, args ...string) string {
 }
 
 func TestListWorkspaces_Empty(t *testing.T) {
+	t.Parallel()
 	ts := NewTestServer(t)
 	user := ts.CreateTestUser("test@example.com")
 	project := ts.CreateTestProject(user, "Test Project")
@@ -68,6 +69,7 @@ func TestListWorkspaces_Empty(t *testing.T) {
 }
 
 func TestCreateWorkspace(t *testing.T) {
+	t.Parallel()
 	ts := NewTestServer(t)
 	user := ts.CreateTestUser("test@example.com")
 	project := ts.CreateTestProject(user, "Test Project")
@@ -97,6 +99,7 @@ func TestCreateWorkspace(t *testing.T) {
 }
 
 func TestCreateWorkspace_MissingPath(t *testing.T) {
+	t.Parallel()
 	ts := NewTestServer(t)
 	user := ts.CreateTestUser("test@example.com")
 	project := ts.CreateTestProject(user, "Test Project")
@@ -109,6 +112,7 @@ func TestCreateWorkspace_MissingPath(t *testing.T) {
 }
 
 func TestCreateWorkspace_DefaultSourceType(t *testing.T) {
+	t.Parallel()
 	ts := NewTestServer(t)
 	user := ts.CreateTestUser("test@example.com")
 	project := ts.CreateTestProject(user, "Test Project")
@@ -130,6 +134,7 @@ func TestCreateWorkspace_DefaultSourceType(t *testing.T) {
 }
 
 func TestGetWorkspace(t *testing.T) {
+	t.Parallel()
 	ts := NewTestServer(t)
 	user := ts.CreateTestUser("test@example.com")
 	project := ts.CreateTestProject(user, "Test Project")
@@ -150,6 +155,7 @@ func TestGetWorkspace(t *testing.T) {
 }
 
 func TestUpdateWorkspace(t *testing.T) {
+	t.Parallel()
 	ts := NewTestServer(t)
 	user := ts.CreateTestUser("test@example.com")
 	project := ts.CreateTestProject(user, "Test Project")
@@ -172,6 +178,7 @@ func TestUpdateWorkspace(t *testing.T) {
 }
 
 func TestDeleteWorkspace(t *testing.T) {
+	t.Parallel()
 	ts := NewTestServer(t)
 	user := ts.CreateTestUser("test@example.com")
 	project := ts.CreateTestProject(user, "Test Project")
@@ -191,6 +198,7 @@ func TestDeleteWorkspace(t *testing.T) {
 }
 
 func TestListWorkspaces_WithData(t *testing.T) {
+	t.Parallel()
 	ts := NewTestServer(t)
 	user := ts.CreateTestUser("test@example.com")
 	project := ts.CreateTestProject(user, "Test Project")
@@ -214,6 +222,7 @@ func TestListWorkspaces_WithData(t *testing.T) {
 }
 
 func TestCreateWorkspace_TildeExpansion(t *testing.T) {
+	t.Parallel()
 	ts := NewTestServer(t)
 	user := ts.CreateTestUser("test@example.com")
 	project := ts.CreateTestProject(user, "Test Project")
@@ -248,6 +257,7 @@ func TestCreateWorkspace_TildeExpansion(t *testing.T) {
 }
 
 func TestUpdateWorkspace_TildeExpansion(t *testing.T) {
+	t.Parallel()
 	ts := NewTestServer(t)
 	user := ts.CreateTestUser("test@example.com")
 	project := ts.CreateTestProject(user, "Test Project")
@@ -282,6 +292,7 @@ func TestUpdateWorkspace_TildeExpansion(t *testing.T) {
 }
 
 func TestWorkspaceInitialization_Local(t *testing.T) {
+	t.Parallel()
 	ts := NewTestServer(t)
 	user := ts.CreateTestUser("test@example.com")
 	project := ts.CreateTestProject(user, "Test Project")

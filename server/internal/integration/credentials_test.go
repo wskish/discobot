@@ -6,6 +6,7 @@ import (
 )
 
 func TestListCredentials_Empty(t *testing.T) {
+	t.Parallel()
 	ts := NewTestServer(t)
 	user := ts.CreateTestUser("cred@test.com")
 	project := ts.CreateTestProject(user, "cred-project")
@@ -25,6 +26,7 @@ func TestListCredentials_Empty(t *testing.T) {
 }
 
 func TestCreateCredential_APIKey(t *testing.T) {
+	t.Parallel()
 	ts := NewTestServer(t)
 	user := ts.CreateTestUser("cred@test.com")
 	project := ts.CreateTestProject(user, "cred-project")
@@ -59,6 +61,7 @@ func TestCreateCredential_APIKey(t *testing.T) {
 }
 
 func TestCreateCredential_MissingProvider(t *testing.T) {
+	t.Parallel()
 	ts := NewTestServer(t)
 	user := ts.CreateTestUser("cred@test.com")
 	project := ts.CreateTestProject(user, "cred-project")
@@ -71,6 +74,7 @@ func TestCreateCredential_MissingProvider(t *testing.T) {
 }
 
 func TestCreateCredential_MissingAPIKey(t *testing.T) {
+	t.Parallel()
 	ts := NewTestServer(t)
 	user := ts.CreateTestUser("cred@test.com")
 	project := ts.CreateTestProject(user, "cred-project")
@@ -83,6 +87,7 @@ func TestCreateCredential_MissingAPIKey(t *testing.T) {
 }
 
 func TestCreateCredential_InvalidProvider(t *testing.T) {
+	t.Parallel()
 	ts := NewTestServer(t)
 	user := ts.CreateTestUser("cred@test.com")
 	project := ts.CreateTestProject(user, "cred-project")
@@ -96,6 +101,7 @@ func TestCreateCredential_InvalidProvider(t *testing.T) {
 }
 
 func TestGetCredential(t *testing.T) {
+	t.Parallel()
 	ts := NewTestServer(t)
 	user := ts.CreateTestUser("cred@test.com")
 	project := ts.CreateTestProject(user, "cred-project")
@@ -126,6 +132,7 @@ func TestGetCredential(t *testing.T) {
 }
 
 func TestGetCredential_NotFound(t *testing.T) {
+	t.Parallel()
 	ts := NewTestServer(t)
 	user := ts.CreateTestUser("cred@test.com")
 	project := ts.CreateTestProject(user, "cred-project")
@@ -136,6 +143,7 @@ func TestGetCredential_NotFound(t *testing.T) {
 }
 
 func TestDeleteCredential(t *testing.T) {
+	t.Parallel()
 	ts := NewTestServer(t)
 	user := ts.CreateTestUser("cred@test.com")
 	project := ts.CreateTestProject(user, "cred-project")
@@ -159,6 +167,7 @@ func TestDeleteCredential(t *testing.T) {
 }
 
 func TestUpdateCredential(t *testing.T) {
+	t.Parallel()
 	ts := NewTestServer(t)
 	user := ts.CreateTestUser("cred@test.com")
 	project := ts.CreateTestProject(user, "cred-project")
@@ -203,6 +212,7 @@ func TestUpdateCredential(t *testing.T) {
 }
 
 func TestListCredentials_WithData(t *testing.T) {
+	t.Parallel()
 	ts := NewTestServer(t)
 	user := ts.CreateTestUser("cred@test.com")
 	project := ts.CreateTestProject(user, "cred-project")

@@ -1,8 +1,10 @@
 # Go Test Timing Analysis
 
-**Date:** 2026-01-23
+**Date:** 2026-01-24 (Updated with optimizations)
 
 ## Overall Summary
+
+### Before Optimization (2026-01-23)
 
 | Package | Time | Test Count | Avg/Test |
 |---------|------|------------|----------|
@@ -17,88 +19,126 @@
 
 **Total test time:** ~160s
 
-## Root Cause Analysis
+### After Optimization (2026-01-24)
 
-### Integration Tests (128.8s) - 80% of Total Time
+| Package | Time | Improvement |
+|---------|------|-------------|
+| **integration** | 46.5s | **64% faster** |
+| **events** | 11.8s | 6% faster |
+| **service** | 10.1s | 5% faster |
+| **ssh** | 3.3s | **47% faster** |
+| **git** | 1.7s | 18% faster |
+| **encryption** | 0.003s | - |
+| **middleware** | 0.007s | - |
+| **oauth** | 0.009s | - |
 
-Each integration test performs full infrastructure setup:
+**Total test time:** ~73s (**54% faster**)
+
+### With `-short` Flag (Quick Feedback)
+
+| Package | Time | Tests Skipped |
+|---------|------|---------------|
+| **integration** | 28s | 14 slow tests |
+| **ssh** | ~2s | - |
+
+**Quick test time:** ~40s (skips 14 slowest tests)
+
+## Optimizations Implemented
+
+### 1. Shared Test Database Template (High Impact)
+
+- Created a pre-migrated SQLite database template in `TestMain`
+- Each test copies the template instead of running `AutoMigrate` (~0.5s savings per test)
+- Saved ~67 seconds across 135 integration tests
+- Implementation: `main_test.go` creates template, `testutil.go` copies it
+
+### 2. Parallel Test Execution (Medium Impact)
+
+- Added `t.Parallel()` to 60+ independent tests
+- Tests now run concurrently, utilizing multiple CPU cores
+- Most effective for integration tests with I/O-bound operations
+- Implementation: Added `t.Parallel()` as first line in test functions
+
+### 3. Pre-generated SSH Host Key (Low-Medium Impact)
+
+- SSH tests now share a pre-generated RSA 4096-bit host key
+- Key generation (~1.4s) happens once in `TestMain` instead of per-test
+- Saved ~3 seconds total for SSH tests
+- Implementation: `ssh/main_test.go` with `getSharedTestKeyPath()`
+
+### 4. Test Fixes
+
+Fixed 2 failing tests:
+- `TestListSessions_IncludesCommitStatus`: Added `?includeClosed=true` parameter
+- `TestGetTerminalStatus_Running`: Fixed expected status from "ready" to "running"
+
+## Root Cause Analysis (Reference)
+
+### Integration Tests - Why They Were Slow
+
+Each integration test performed full infrastructure setup:
 1. **GORM AutoMigrate** - SQLite database schema creation (~0.5s)
 2. **Event poller** - Starts goroutine for event polling
 3. **Dispatcher** - Leader election and job processing infrastructure
 
-The database + infrastructure setup costs ~0.6-0.8s per test, which dominates test time.
+The database + infrastructure setup cost ~0.6-0.8s per test.
 
-### Events Tests (12.5s)
+### SSH Tests - Why They Were Slow
 
-Similar pattern - each test creates a fresh database and event broker infrastructure.
+- Each test generated a new RSA 4096-bit host key (~1.4s for crypto)
+- Server lifecycle tests waited for connections and timeouts
 
-### Service Tests (10.6s)
+## Further Optimization Opportunities
 
-The `TestPerformCommit_*` tests each take 0.6-0.75s due to database setup. Unit tests are fast (<0.01s).
+### Not Implemented (Diminishing Returns)
 
-### SSH Tests (6.3s)
+1. **Database connection pooling** - Already fast with template copy
+2. **Lazy infrastructure** - Would require significant refactoring
+3. **Reduce reconciliation test complexity** - Tests are testing real scenarios
 
-- `TestNew_GeneratesHostKey` - 1.44s (crypto key generation)
-- `TestServer_RejectsUnknownSession` - 1.33s (server lifecycle)
+## Running Test Groups
 
-## Slowest Individual Tests
+### Quick Feedback (Skip Slow Tests)
 
-| Test | Time | Package |
-|------|------|---------|
-| TestReconcileSandboxes_MultipleSandboxes | 3.58s | integration |
-| TestReconcileSandboxes_ReplacesOutdatedImage | 2.48s | integration |
-| TestReconcileSessionStates_MarksFailedSandboxAsError | 2.25s | integration |
-| TestEvents_SessionCreationEmitsEvents | 2.21s | integration |
-| TestSSHServer_Integration_PortForwarding | 1.88s | integration |
-| TestProvider_GetReturnsNotFoundAfterExternalContainerDeletion | 1.72s | integration |
-| TestSSHServer_Integration_SessionTerminatesOnProcessExit | 1.69s | integration |
-| TestReconcileSessionStates_KeepsRunningSessionWithRunningSandbox | 1.59s | integration |
-| TestSSHServer_Integration_ConnectToSession | 1.58s | integration |
-| TestCreateSession_ViaChat | 1.57s | integration |
+```bash
+go test -short ./...                    # Skip 14 slowest tests (~40s)
+go test -short ./internal/integration/  # Integration only, fast (~28s)
+```
 
-## Failed Tests
+### Full Test Suite
 
-1. **TestListSessions_IncludesCommitStatus** (`sessions_test.go:527`)
-   - Error: `Expected 1 session, got 0`
+```bash
+go test ./...                           # All tests (~73s)
+go test -count=1 ./...                  # Without cache
+```
 
-2. **TestGetTerminalStatus_Running** (`terminal_test.go:53`)
-   - Error: `Expected status 'ready', got 'running'`
+### By Category (Using -run)
 
-## Optimization Opportunities
+```bash
+go test -run API ./...                  # API endpoint tests
+go test -run SSH ./...                  # SSH-related tests
+go test -run Commit ./...               # Commit-related tests
+go test -run Reconcile ./...            # Sandbox reconciliation tests
+go test -run Unit ./...                 # Unit tests only
+```
 
-### High Impact
+### By Package
 
-1. **Shared test database** - Use a pre-migrated database template instead of running AutoMigrate per test. Could save ~0.5s × 135 tests = 67s.
+```bash
+go test ./internal/integration/...      # Integration tests only
+go test ./internal/ssh/...              # SSH tests only
+go test ./internal/service/...          # Service layer tests
+go test ./internal/git/...              # Git provider tests
+```
 
-2. **Test suite with shared setup** - Group integration tests into suites that share infrastructure:
-   ```go
-   func TestMain(m *testing.M) {
-       // Setup once
-       db, broker, dispatcher := setupTestInfra()
-       defer cleanup()
-       m.Run()
-   }
-   ```
+### PostgreSQL Testing
 
-3. **Mock dispatcher/events for unit-like integration tests** - Many tests don't actually need the full dispatcher running.
+```bash
+TEST_POSTGRES=1 go test ./internal/integration/...  # Use PostgreSQL container
+```
 
-### Medium Impact
+## Potential Future Improvements
 
-4. **Parallel test execution within packages** - Use `t.Parallel()` where tests don't share state.
-
-5. **Database connection pooling** - Reuse SQLite connections across tests.
-
-6. **Lazy infrastructure** - Only start dispatcher/poller when the test actually needs them.
-
-### Low Impact
-
-7. **Pre-generate SSH host keys** - Cache test keys instead of generating per test.
-
-8. **Reduce reconciliation test complexity** - The reconcile tests with multiple sandboxes are slowest.
-
-## Recommended Next Steps
-
-1. Fix the 2 failing tests first
-2. Implement shared test database (biggest win)
-3. Add `t.Parallel()` to independent tests
-4. Consider test suite restructuring for integration tests
+1. **Use ed25519 instead of RSA** for SSH keys (much faster generation)
+2. **Mock database for pure unit tests** that don't need real SQL
+3. **Split integration tests** into separate packages for parallel package execution

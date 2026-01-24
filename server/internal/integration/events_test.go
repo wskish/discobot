@@ -271,6 +271,7 @@ func TestEvents_EventsPersistedToDatabase(t *testing.T) {
 }
 
 func TestEvents_SessionCreationEmitsEvents(t *testing.T) {
+	SkipIfShort(t) // Slow test: ~2.2s
 	ts := NewTestServer(t)
 	user := ts.CreateTestUser("test@example.com")
 	project := ts.CreateTestProject(user, "Test Project")
