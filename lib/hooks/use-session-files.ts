@@ -29,6 +29,18 @@ export interface LazyFileNode {
 }
 
 /**
+ * Determines if a directory should be auto-expanded.
+ * Auto-expand when there's exactly one child and it's a directory.
+ * @returns The child directory node to expand, or null if no auto-expansion should occur.
+ */
+export function shouldAutoExpand(nodes: LazyFileNode[]): LazyFileNode | null {
+	if (nodes.length === 1 && nodes[0].type === "directory") {
+		return nodes[0];
+	}
+	return null;
+}
+
+/**
  * Hook for managing session files with lazy loading.
  * Files are loaded directory-by-directory as folders are expanded.
  * @param sessionId - The session ID to load files for
@@ -89,7 +101,29 @@ export function useSessionFiles(sessionId: string | null, loadAllFiles = true) {
 		return buildTreeFromCache(rootNodes, childrenCache, diffEntriesMap);
 	}, [rootNodes, childrenCache, diffEntriesMap]);
 
+	// Helper to find a node in the tree by path
+	const findNodeInTree = useCallback(
+		(path: string): LazyFileNode | null => {
+			if (path === ".") return null; // Root doesn't have a node
+
+			const parts = path.split("/");
+			let nodes = fileTree;
+
+			for (let i = 0; i < parts.length; i++) {
+				const part = parts[i];
+				const node = nodes.find((n) => n.name === part);
+				if (!node) return null;
+				if (i === parts.length - 1) return node;
+				if (!node.children) return null;
+				nodes = node.children;
+			}
+			return null;
+		},
+		[fileTree],
+	);
+
 	// Expand a directory (triggers lazy load)
+	// Auto-expands single-child directory chains recursively
 	const expandDirectory = useCallback(
 		async (path: string) => {
 			if (!sessionId) return;
@@ -97,16 +131,66 @@ export function useSessionFiles(sessionId: string | null, loadAllFiles = true) {
 			// Add to expanded set
 			setExpandedPaths((prev) => new Set(prev).add(path));
 
-			// If already loading this path, don't start another fetch
+			// Check if children are already loaded in the tree (pre-built tree mode)
+			// For root path, check if fileTree has content
+			const existingNode = path === "." ? null : findNodeInTree(path);
+			const existingChildren =
+				path === "." ? (fileTree.length > 0 ? fileTree : null) : existingNode?.children;
+
+			if (existingChildren !== undefined && existingChildren !== null) {
+				// Children already loaded - do synchronous auto-expansion
+				let currentChildren = existingChildren;
+				while (true) {
+					const autoExpandNode = shouldAutoExpand(currentChildren);
+					if (autoExpandNode?.children) {
+						setExpandedPaths((prev) => new Set(prev).add(autoExpandNode.path));
+						currentChildren = autoExpandNode.children;
+					} else {
+						break;
+					}
+				}
+				return;
+			}
+
+			// Children not loaded - fetch from API with auto-expansion
 			if (loadingPaths.has(path)) return;
 
-			// Always fetch from API to get fresh directory contents
+			const pathsToLoad: string[] = [path];
 			setLoadingPaths((prev) => new Set(prev).add(path));
 
 			try {
-				const data = await api.listSessionFiles(sessionId, path);
-				const nodes = entriesToNodes(data.entries, path, diffEntriesMap);
-				setChildrenCache((prev) => new Map(prev).set(path, nodes));
+				let currentPath = path;
+				const cacheUpdates = new Map<string, LazyFileNode[]>();
+
+				// Keep expanding while we find single-child directories
+				while (true) {
+					const data = await api.listSessionFiles(sessionId, currentPath);
+					const nodes = entriesToNodes(data.entries, currentPath, diffEntriesMap);
+					cacheUpdates.set(currentPath, nodes);
+
+					// Check if we should auto-expand: exactly one child that's a directory
+					const autoExpandNode = shouldAutoExpand(nodes);
+					if (autoExpandNode) {
+						const childPath = autoExpandNode.path;
+						// Add child to expanded paths and loading paths
+						setExpandedPaths((prev) => new Set(prev).add(childPath));
+						pathsToLoad.push(childPath);
+						setLoadingPaths((prev) => new Set(prev).add(childPath));
+						currentPath = childPath;
+					} else {
+						// Multiple children, a file, or empty - stop auto-expanding
+						break;
+					}
+				}
+
+				// Apply all cache updates at once
+				setChildrenCache((prev) => {
+					const next = new Map(prev);
+					for (const [p, nodes] of cacheUpdates) {
+						next.set(p, nodes);
+					}
+					return next;
+				});
 			} catch {
 				// Directory may not exist (ghost directory for deleted files)
 				// Use empty entries - entriesToNodes will still add deleted files from diff
@@ -115,12 +199,14 @@ export function useSessionFiles(sessionId: string | null, loadAllFiles = true) {
 			} finally {
 				setLoadingPaths((prev) => {
 					const next = new Set(prev);
-					next.delete(path);
+					for (const p of pathsToLoad) {
+						next.delete(p);
+					}
 					return next;
 				});
 			}
 		},
-		[sessionId, loadingPaths, diffEntriesMap],
+		[sessionId, loadingPaths, diffEntriesMap, fileTree, findNodeInTree],
 	);
 
 	// Collapse a directory
@@ -253,7 +339,7 @@ export function useSessionFileContent(
 }
 
 // Helper: Check if a directory has any changed descendants
-function hasChangedDescendant(
+export function hasChangedDescendant(
 	dirPath: string,
 	diffEntriesMap: Map<string, SessionDiffFileEntry>,
 ): boolean {
@@ -265,7 +351,7 @@ function hasChangedDescendant(
 }
 
 // Helper: Convert API file entries to LazyFileNodes
-function entriesToNodes(
+export function entriesToNodes(
 	entries: SessionFileEntry[],
 	parentPath: string,
 	diffEntriesMap: Map<string, SessionDiffFileEntry>,
