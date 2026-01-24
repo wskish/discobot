@@ -11,7 +11,17 @@
 		"core:window:allow-is-maximized",
 		"core:window:allow-start-dragging",
 		"core:event:allow-listen",
-		"opener:default",
+		{
+			"identifier": "opener:allow-open-url",
+			"allow": [
+				{ "url": "vscode://*" },
+				{ "url": "cursor://*" },
+				{ "url": "jetbrains-gateway://*" },
+				{ "url": "zed://*" },
+				{ "url": "https://*" },
+				{ "url": "http://*" }
+			]
+		},
 		"os:default",
 		{
 			"identifier": "shell:allow-spawn",
@@ -22,7 +32,6 @@
 				}
 			]
 		},
-		"shell:allow-kill",
-		"shell:allow-open"
+		"shell:allow-kill"
 	]
 }

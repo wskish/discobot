@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import * as React from "react";
 import { ChatPanel } from "@/components/ide/chat-panel";
+import { IDELauncher } from "@/components/ide/ide-launcher";
 import {
 	PanelControls,
 	type PanelState,
@@ -134,6 +135,7 @@ export function BottomPanel({
 					>
 						Terminal
 					</Button>
+					{selectedSessionId && <IDELauncher sessionId={selectedSessionId} />}
 					{selectedSessionId &&
 						services.map((service) => (
 							<ServiceButton
