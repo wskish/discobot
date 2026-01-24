@@ -49,3 +49,6 @@ next-env.d.ts
 proxy/octobot-proxy
 server/server
 agent/agent
+
+# SSH Key
+server/ssh_host_key
