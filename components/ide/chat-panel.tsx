@@ -765,7 +765,7 @@ export function ChatPanel({ className }: ChatPanelProps) {
 	return (
 		<div
 			className={cn(
-				"flex flex-col h-full bg-background transition-all duration-300 ease-in-out",
+				"relative flex flex-col h-full bg-background transition-all duration-300 ease-in-out",
 				mode === "welcome" && "justify-center",
 				className,
 			)}
@@ -1184,6 +1184,15 @@ export function ChatPanel({ className }: ChatPanelProps) {
 					}
 					lockedMessage="Chat disabled during commit..."
 				/>
+			)}
+
+			{/* Session ID - subtle display in lower right */}
+			{selectedSessionId && mode === "conversation" && (
+				<div className="absolute bottom-2 right-2 select-text">
+					<span className="text-[10px] text-muted-foreground/50 font-mono">
+						{selectedSessionId}
+					</span>
+				</div>
 			)}
 		</div>
 	);
