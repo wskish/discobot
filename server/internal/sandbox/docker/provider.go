@@ -742,6 +742,50 @@ func (p *Provider) Attach(ctx context.Context, sessionID string, opts sandbox.At
 	}, nil
 }
 
+// ExecStream runs a command with bidirectional streaming I/O (no TTY).
+func (p *Provider) ExecStream(ctx context.Context, sessionID string, cmd []string, opts sandbox.ExecStreamOptions) (sandbox.Stream, error) {
+	containerID, err := p.getContainerID(ctx, sessionID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Convert environment to slice
+	env := make([]string, 0, len(opts.Env))
+	for k, v := range opts.Env {
+		env = append(env, fmt.Sprintf("%s=%s", k, v))
+	}
+
+	execConfig := containerTypes.ExecOptions{
+		Cmd:          cmd,
+		AttachStdin:  true,
+		AttachStdout: true,
+		AttachStderr: true,
+		Tty:          false, // No TTY for binary-safe streaming
+		Env:          env,
+		User:         opts.User,
+		WorkingDir:   opts.WorkDir,
+	}
+
+	execCreate, err := p.client.ContainerExecCreate(ctx, containerID, execConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create exec: %w", err)
+	}
+
+	resp, err := p.client.ContainerExecAttach(ctx, execCreate.ID, containerTypes.ExecStartOptions{
+		Tty: false,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to attach exec: %w", err)
+	}
+
+	return &dockerStream{
+		client:    p.client,
+		execID:    execCreate.ID,
+		hijacked:  resp,
+		closeOnce: sync.Once{},
+	}, nil
+}
+
 // List returns all sandboxes managed by octobot.
 func (p *Provider) List(ctx context.Context) ([]*sandbox.Sandbox, error) {
 	// List all containers with our label
@@ -914,6 +958,58 @@ func (p *dockerPTY) Wait(ctx context.Context) (int, error) {
 			return -1, ctx.Err()
 		case <-ticker.C:
 			inspect, err := p.client.ContainerExecInspect(ctx, p.execID)
+			if err != nil {
+				return -1, err
+			}
+			if !inspect.Running {
+				return inspect.ExitCode, nil
+			}
+		}
+	}
+}
+
+// dockerStream implements sandbox.Stream for Docker exec sessions without TTY.
+type dockerStream struct {
+	client    *client.Client
+	execID    string
+	hijacked  types.HijackedResponse
+	closeOnce sync.Once
+}
+
+func (s *dockerStream) Read(b []byte) (int, error) {
+	return s.hijacked.Reader.Read(b)
+}
+
+func (s *dockerStream) Write(b []byte) (int, error) {
+	return s.hijacked.Conn.Write(b)
+}
+
+func (s *dockerStream) CloseWrite() error {
+	// Close the write side of the connection
+	if cw, ok := s.hijacked.Conn.(interface{ CloseWrite() error }); ok {
+		return cw.CloseWrite()
+	}
+	return nil
+}
+
+func (s *dockerStream) Close() error {
+	s.closeOnce.Do(func() {
+		s.hijacked.Close()
+	})
+	return nil
+}
+
+func (s *dockerStream) Wait(ctx context.Context) (int, error) {
+	// Wait for the exec to finish by polling
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return -1, ctx.Err()
+		case <-ticker.C:
+			inspect, err := s.client.ContainerExecInspect(ctx, s.execID)
 			if err != nil {
 				return -1, err
 			}

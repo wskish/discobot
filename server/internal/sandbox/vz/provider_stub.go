@@ -86,6 +86,11 @@ func (p *Provider) Attach(_ context.Context, _ string, _ sandbox.AttachOptions) 
 	return nil, fmt.Errorf("vz sandbox provider is only available on macOS")
 }
 
+// ExecStream returns an error on non-darwin platforms.
+func (p *Provider) ExecStream(_ context.Context, _ string, _ []string, _ sandbox.ExecStreamOptions) (sandbox.Stream, error) {
+	return nil, fmt.Errorf("vz sandbox provider is only available on macOS")
+}
+
 // HTTPClient returns an error on non-darwin platforms.
 func (p *Provider) HTTPClient(_ context.Context, _ string) (*http.Client, error) {
 	return nil, fmt.Errorf("vz sandbox provider is only available on macOS")

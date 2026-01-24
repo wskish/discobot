@@ -37,15 +37,16 @@ type Provider struct {
 	HTTPHandler http.Handler
 
 	// Configurable behaviors for testing
-	CreateFunc    func(ctx context.Context, sessionID string, opts sandbox.CreateOptions) (*sandbox.Sandbox, error)
-	StartFunc     func(ctx context.Context, sessionID string) error
-	StopFunc      func(ctx context.Context, sessionID string, timeout time.Duration) error
-	RemoveFunc    func(ctx context.Context, sessionID string) error
-	GetFunc       func(ctx context.Context, sessionID string) (*sandbox.Sandbox, error)
-	GetSecretFunc func(ctx context.Context, sessionID string) (string, error)
-	ExecFunc      func(ctx context.Context, sessionID string, cmd []string, opts sandbox.ExecOptions) (*sandbox.ExecResult, error)
-	AttachFunc    func(ctx context.Context, sessionID string, opts sandbox.AttachOptions) (sandbox.PTY, error)
-	WatchFunc     func(ctx context.Context) (<-chan sandbox.StateEvent, error)
+	CreateFunc     func(ctx context.Context, sessionID string, opts sandbox.CreateOptions) (*sandbox.Sandbox, error)
+	StartFunc      func(ctx context.Context, sessionID string) error
+	StopFunc       func(ctx context.Context, sessionID string, timeout time.Duration) error
+	RemoveFunc     func(ctx context.Context, sessionID string) error
+	GetFunc        func(ctx context.Context, sessionID string) (*sandbox.Sandbox, error)
+	GetSecretFunc  func(ctx context.Context, sessionID string) (string, error)
+	ExecFunc       func(ctx context.Context, sessionID string, cmd []string, opts sandbox.ExecOptions) (*sandbox.ExecResult, error)
+	AttachFunc     func(ctx context.Context, sessionID string, opts sandbox.AttachOptions) (sandbox.PTY, error)
+	ExecStreamFunc func(ctx context.Context, sessionID string, cmd []string, opts sandbox.ExecStreamOptions) (sandbox.Stream, error)
+	WatchFunc      func(ctx context.Context) (<-chan sandbox.StateEvent, error)
 }
 
 // NewProvider creates a new mock provider with default behavior.
@@ -298,6 +299,27 @@ func (p *Provider) Attach(ctx context.Context, sessionID string, opts sandbox.At
 	return &PTY{}, nil
 }
 
+// ExecStream creates a mock stream for bidirectional I/O.
+func (p *Provider) ExecStream(ctx context.Context, sessionID string, cmd []string, opts sandbox.ExecStreamOptions) (sandbox.Stream, error) {
+	if p.ExecStreamFunc != nil {
+		return p.ExecStreamFunc(ctx, sessionID, cmd, opts)
+	}
+
+	p.mu.RLock()
+	s, exists := p.sandboxes[sessionID]
+	p.mu.RUnlock()
+
+	if !exists {
+		return nil, sandbox.ErrNotFound
+	}
+
+	if s.Status != sandbox.StatusRunning {
+		return nil, sandbox.ErrNotRunning
+	}
+
+	return &Stream{}, nil
+}
+
 // List returns all sandboxes managed by this mock provider.
 func (p *Provider) List(_ context.Context) ([]*sandbox.Sandbox, error) {
 	p.mu.RLock()
@@ -427,6 +449,64 @@ func (p *PTY) Close() error {
 }
 
 func (p *PTY) Wait(_ context.Context) (int, error) {
+	return 0, nil
+}
+
+// Stream is a mock Stream for testing.
+type Stream struct {
+	InputBuffer  []byte
+	OutputBuffer []byte
+	Closed       bool
+	WritesClosed bool
+	mu           sync.Mutex
+}
+
+func (s *Stream) Read(b []byte) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.Closed {
+		return 0, io.EOF
+	}
+
+	if len(s.OutputBuffer) == 0 {
+		return 0, io.EOF
+	}
+
+	n := copy(b, s.OutputBuffer)
+	s.OutputBuffer = s.OutputBuffer[n:]
+	return n, nil
+}
+
+func (s *Stream) Write(b []byte) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.Closed || s.WritesClosed {
+		return 0, io.ErrClosedPipe
+	}
+
+	s.InputBuffer = append(s.InputBuffer, b...)
+	return len(b), nil
+}
+
+func (s *Stream) CloseWrite() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.WritesClosed = true
+	return nil
+}
+
+func (s *Stream) Close() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.Closed = true
+	return nil
+}
+
+func (s *Stream) Wait(_ context.Context) (int, error) {
 	return 0, nil
 }
 

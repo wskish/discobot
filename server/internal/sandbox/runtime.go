@@ -55,6 +55,12 @@ type Provider interface {
 	// The PTY can be used for bidirectional terminal communication.
 	Attach(ctx context.Context, sessionID string, opts AttachOptions) (PTY, error)
 
+	// ExecStream runs a command with bidirectional streaming I/O (no TTY).
+	// Unlike Exec, this doesn't buffer output - it provides direct streaming access.
+	// Unlike Attach, this doesn't allocate a PTY, so binary data is not corrupted.
+	// This is used for SFTP and port forwarding.
+	ExecStream(ctx context.Context, sessionID string, cmd []string, opts ExecStreamOptions) (Stream, error)
+
 	// HTTPClient returns an HTTP client configured to communicate with the sandbox.
 	// The client handles the transport layer (TCP for Docker, vsock for vz, etc.).
 	// The returned client connects to the sandbox's HTTP server (port 3002).
@@ -206,6 +212,38 @@ type PTY interface {
 	Close() error
 
 	// Wait blocks until the PTY command exits and returns the exit code.
+	// The context can be used to cancel the wait.
+	Wait(ctx context.Context) (int, error)
+}
+
+// ExecStreamOptions configures streaming command execution (no TTY).
+type ExecStreamOptions struct {
+	WorkDir string            // Working directory for command
+	Env     map[string]string // Additional environment variables
+	User    string            // User to run as (empty = default)
+}
+
+// Stream represents a bidirectional stream to a command (no TTY).
+// Unlike PTY, this doesn't allocate a pseudo-terminal, so binary data
+// is not corrupted. This is used for SFTP and port forwarding.
+type Stream interface {
+	// Read reads output from the command.
+	// Implements io.Reader.
+	Read(p []byte) (n int, err error)
+
+	// Write sends input to the command's stdin.
+	// Implements io.Writer.
+	Write(p []byte) (n int, err error)
+
+	// CloseWrite signals EOF to the command's stdin.
+	// The stream can still be read after calling this.
+	CloseWrite() error
+
+	// Close terminates the stream and the command.
+	// Implements io.Closer.
+	Close() error
+
+	// Wait blocks until the command exits and returns the exit code.
 	// The context can be used to cancel the wait.
 	Wait(ctx context.Context) (int, error)
 }

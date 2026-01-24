@@ -157,6 +157,29 @@ func main() {
 		}()
 	}
 
+	// Start SSH server for VS Code Remote SSH and other SSH-based workflows
+	var sshServer *ssh.Server
+	if sandboxProvider != nil && cfg.SSHEnabled {
+		// Create sandbox service for UserInfoFetcher
+		sshSandboxSvc := service.NewSandboxService(s, sandboxProvider, cfg)
+		sshServer, err = ssh.New(&ssh.Config{
+			Address:         fmt.Sprintf(":%d", cfg.SSHPort),
+			HostKeyPath:     cfg.SSHHostKeyPath,
+			SandboxProvider: sandboxProvider,
+			UserInfoFetcher: sshSandboxSvc,
+		})
+		if err != nil {
+			log.Printf("Warning: Failed to create SSH server: %v", err)
+		} else {
+			go func() {
+				if err := sshServer.Start(); err != nil {
+					log.Printf("SSH server stopped: %v", err)
+				}
+			}()
+			log.Printf("SSH server started on port %d", cfg.SSHPort)
+		}
+	}
+
 	// Initialize and start job dispatcher
 	var disp *dispatcher.Service
 	if cfg.DispatcherEnabled {
@@ -1060,6 +1083,13 @@ func main() {
 	// Stop sandbox watcher
 	if sandboxWatcherCancel != nil {
 		sandboxWatcherCancel()
+	}
+
+	// Stop SSH server
+	if sshServer != nil {
+		if err := sshServer.Stop(); err != nil {
+			log.Printf("Warning: failed to stop SSH server: %v", err)
+		}
 	}
 
 	// Stop dispatcher first (finish in-flight jobs)

@@ -945,6 +945,53 @@ func (p *Provider) Attach(ctx context.Context, sessionID string, opts sandbox.At
 	}, nil
 }
 
+// ExecStream runs a command with bidirectional streaming I/O (no TTY).
+func (p *Provider) ExecStream(ctx context.Context, sessionID string, cmd []string, opts sandbox.ExecStreamOptions) (sandbox.Stream, error) {
+	p.vmInstancesMu.RLock()
+	instance, exists := p.vmInstances[sessionID]
+	p.vmInstancesMu.RUnlock()
+
+	if !exists {
+		return nil, sandbox.ErrNotFound
+	}
+
+	instance.mu.RLock()
+	if instance.status != sandbox.StatusRunning {
+		instance.mu.RUnlock()
+		return nil, sandbox.ErrNotRunning
+	}
+	socketDevice := instance.socketDevice
+	instance.mu.RUnlock()
+
+	if socketDevice == nil {
+		return nil, fmt.Errorf("vsock not available")
+	}
+
+	// Connect to guest agent via vsock for streaming exec
+	conn, err := socketDevice.Connect(uint32(vsockPort + 2)) // Use different port for stream
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to guest agent: %v", err)
+	}
+
+	// Send stream exec request (similar to PTY but with Tty=false)
+	request := ptyRequest{
+		Cmd:  cmd,
+		Env:  opts.Env,
+		Rows: 0, // No terminal dimensions for stream
+		Cols: 0,
+	}
+
+	if err := writePTYRequest(conn, &request); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("failed to send stream request: %v", err)
+	}
+
+	return &vzStream{
+		conn:      conn,
+		closeOnce: sync.Once{},
+	}, nil
+}
+
 // Close closes the provider and cleans up resources.
 func (p *Provider) Close() error {
 	p.vmInstancesMu.Lock()
@@ -1021,6 +1068,55 @@ func (p *vzPTY) Wait(ctx context.Context) (int, error) {
 			return -1, ctx.Err()
 		default:
 			_, err := p.conn.Read(buf)
+			if err != nil {
+				if err == io.EOF {
+					return 0, nil
+				}
+				return -1, err
+			}
+		}
+	}
+}
+
+// vzStream implements sandbox.Stream for vz VM sessions without TTY.
+type vzStream struct {
+	conn      io.ReadWriteCloser
+	closeOnce sync.Once
+}
+
+func (s *vzStream) Read(b []byte) (int, error) {
+	return s.conn.Read(b)
+}
+
+func (s *vzStream) Write(b []byte) (int, error) {
+	return s.conn.Write(b)
+}
+
+func (s *vzStream) CloseWrite() error {
+	// Try to close write side if supported
+	if cw, ok := s.conn.(interface{ CloseWrite() error }); ok {
+		return cw.CloseWrite()
+	}
+	return nil
+}
+
+func (s *vzStream) Close() error {
+	var err error
+	s.closeOnce.Do(func() {
+		err = s.conn.Close()
+	})
+	return err
+}
+
+func (s *vzStream) Wait(ctx context.Context) (int, error) {
+	// Wait for the connection to close
+	buf := make([]byte, 1)
+	for {
+		select {
+		case <-ctx.Done():
+			return -1, ctx.Err()
+		default:
+			_, err := s.conn.Read(buf)
 			if err != nil {
 				if err == io.EOF {
 					return 0, nil

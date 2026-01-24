@@ -46,6 +46,11 @@ type Config struct {
 	VZInitrdPath   string // Path to initial ramdisk (optional)
 	VZBaseDiskPath string // Path to base disk image to clone (optional)
 
+	// SSH server settings
+	SSHEnabled     bool   // Enable SSH server (default: true)
+	SSHPort        int    // SSH server port (default: 3333)
+	SSHHostKeyPath string // Path to SSH host key file (default: ./ssh_host_key)
+
 	// Job Dispatcher settings
 	DispatcherEnabled            bool          // Enable job dispatcher (default: true)
 	DispatcherPollInterval       time.Duration // How often to poll for jobs (default: 1s)
@@ -134,6 +139,11 @@ func Load() (*Config, error) {
 	cfg.VZKernelPath = getEnv("VZ_KERNEL_PATH", "")
 	cfg.VZInitrdPath = getEnv("VZ_INITRD_PATH", "")
 	cfg.VZBaseDiskPath = getEnv("VZ_BASE_DISK_PATH", "")
+
+	// SSH server settings
+	cfg.SSHEnabled = getEnvBool("SSH_ENABLED", true)
+	cfg.SSHPort = getEnvInt("SSH_PORT", 3333)
+	cfg.SSHHostKeyPath = getEnv("SSH_HOST_KEY_PATH", "./ssh_host_key")
 
 	// Job Dispatcher settings
 	cfg.DispatcherEnabled = getEnvBool("DISPATCHER_ENABLED", true)
