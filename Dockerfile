@@ -122,9 +122,13 @@ FROM ubuntu:24.04 AS runtime
 # fuse3 is needed for agentfs FUSE filesystem
 # nodejs is needed for claude-code-acp
 # pnpm is needed for package management
+# docker.io is needed for running docker commands (connects to DinD daemon)
+# docker-buildx is needed for multi-arch builds and advanced build features
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \
+    docker-buildx \
+    docker.io \
     fuse3 \
     git \
     socat \
@@ -139,10 +143,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     # Enable user_allow_other in fuse.conf (required for --allow-root mount option)
     && echo 'user_allow_other' >> /etc/fuse.conf
 
-# Create octobot user (handle case where UID 1000 already exists)
-RUN useradd -m -s /bin/bash -u 1000 octobot 2>/dev/null \
-    || (userdel -r $(getent passwd 1000 | cut -d: -f1) 2>/dev/null; useradd -m -s /bin/bash -u 1000 octobot) \
-    || useradd -m -s /bin/bash octobot
+# Create octobot user (UID 1000)
+# Handle case where UID 1000 might already be taken by another user
+RUN (useradd -m -s /bin/bash -u 1000 octobot 2>/dev/null \
+        || (userdel -r $(getent passwd 1000 | cut -d: -f1) 2>/dev/null; useradd -m -s /bin/bash -u 1000 octobot) \
+        || useradd -m -s /bin/bash octobot)
 
 # Configure npm global directory in /home/octobot/.npm-global
 # This allows npm install -g to work without root for the octobot user

@@ -40,6 +40,10 @@ type Config struct {
 	DockerHost    string // Docker socket/host (default: unix:///var/run/docker.sock)
 	DockerNetwork string // Docker network to attach containers to
 
+	// DinD (Docker-in-Docker) settings
+	DinDEnabled bool   // Enable DinD daemon per project (default: true)
+	DinDImage   string // DinD image to use (default: docker:dind)
+
 	// VZ-specific settings (macOS Virtualization.framework)
 	VZDataDir      string // Directory for VM data (default: ./vz)
 	VZKernelPath   string // Path to Linux kernel (vmlinuz)
@@ -133,6 +137,10 @@ func Load() (*Config, error) {
 	// Empty default lets the Docker SDK auto-detect (works on Linux, macOS, and Windows)
 	cfg.DockerHost = getEnv("DOCKER_HOST", "")
 	cfg.DockerNetwork = getEnv("DOCKER_NETWORK", "")
+
+	// DinD (Docker-in-Docker) settings
+	cfg.DinDEnabled = getEnvBool("DIND_ENABLED", true)
+	cfg.DinDImage = getEnv("DIND_IMAGE", "docker:dind")
 
 	// VZ-specific settings (macOS Virtualization.framework)
 	cfg.VZDataDir = getEnv("VZ_DATA_DIR", "./vz")
