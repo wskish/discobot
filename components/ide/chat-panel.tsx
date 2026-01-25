@@ -366,9 +366,6 @@ export function ChatPanel({ className }: ChatPanelProps) {
 		};
 	}, [localSelectedWorkspaceId, localSelectedAgentId, selectedSessionId]);
 
-	// Track if we should check for an active stream on next fetch
-	const shouldCheckStreamRef = React.useRef(false);
-
 	// Create transport with custom fetch that always uses latest selection values
 	const transport = React.useMemo(
 		() =>
@@ -377,24 +374,6 @@ export function ChatPanel({ className }: ChatPanelProps) {
 				// Use custom fetch to inject latest workspace/agent IDs from ref
 				fetch: async (url, options) => {
 					const { sessionId, workspaceId, agentId } = selectionRef.current;
-
-					// Check if we should try to reconnect to an existing stream
-					// This happens when reload() is called after detecting an active stream
-					if (sessionId && shouldCheckStreamRef.current && options?.method === "POST") {
-						shouldCheckStreamRef.current = false;
-						// Try to connect to the stream endpoint instead
-						const streamUrl = api.getChatStreamUrl(sessionId);
-						const streamResponse = await fetch(streamUrl, {
-							headers: { Accept: "text/event-stream" },
-						});
-
-						if (streamResponse.ok && streamResponse.status !== 204) {
-							// Active stream found, return it
-							console.log("[ChatPanel] Reconnecting to active stream");
-							return streamResponse;
-						}
-						// Otherwise fall through to normal POST
-					}
 
 					// Only modify body for new sessions (no existing session)
 					if (!sessionId && options?.body) {
@@ -425,7 +404,6 @@ export function ChatPanel({ className }: ChatPanelProps) {
 		sendMessage,
 		status: chatStatus,
 		error: chatError,
-		reload,
 	} = useChat({
 		transport,
 		// Use the effective chat ID (existing session or pending)
@@ -434,6 +412,8 @@ export function ChatPanel({ className }: ChatPanelProps) {
 		messages: existingMessages.length > 0 ? existingMessages : undefined,
 		// Handle stream errors
 		onError: handleChatError,
+		// Automatically try to resume any in-progress stream on mount
+		resume: true,
 	});
 
 	// Sync existingMessages to useChat state when they load or when chatId changes
@@ -459,64 +439,6 @@ export function ChatPanel({ className }: ChatPanelProps) {
 			prevSyncRef.current = { chatId, messageIds };
 		}
 	}, [existingMessages, setMessages, chatId]);
-
-	// Check for active stream on mount or session change and reconnect if needed
-	const hasCheckedStreamRef = React.useRef<string | null>(null);
-	React.useEffect(() => {
-		// Only check for existing sessions (not pending/new)
-		if (!selectedSessionId || selectedSessionId === hasCheckedStreamRef.current) {
-			return;
-		}
-
-		// Skip if already streaming
-		if (chatStatus === "streaming" || chatStatus === "submitted") {
-			return;
-		}
-
-		hasCheckedStreamRef.current = selectedSessionId;
-
-		// Check if there's an active stream by attempting to connect
-		const streamUrl = api.getChatStreamUrl(selectedSessionId);
-
-		// Use fetch with a quick abort to check if stream exists
-		const controller = new AbortController();
-		const timeoutId = setTimeout(() => controller.abort(), 1000);
-
-		fetch(streamUrl, {
-			headers: { Accept: "text/event-stream" },
-			signal: controller.signal,
-		})
-			.then(async (response) => {
-				clearTimeout(timeoutId);
-
-				if (response.status === 204) {
-					// No active stream
-					return;
-				}
-
-				if (response.ok && response.body) {
-					// Active stream detected - set flag and trigger reload
-					console.log("[ChatPanel] Detected active stream, reconnecting...");
-					shouldCheckStreamRef.current = true;
-					if (reload) {
-						reload();
-					}
-				}
-			})
-			.catch((error) => {
-				clearTimeout(timeoutId);
-				// Ignore abort errors and network errors
-				if (error.name !== "AbortError") {
-					console.warn("[ChatPanel] Error checking for active stream:", error);
-				}
-			});
-
-		// Cleanup
-		return () => {
-			clearTimeout(timeoutId);
-			controller.abort();
-		};
-	}, [selectedSessionId, chatStatus, reload]);
 
 	// Derive loading state from chat status
 	const isLoading = chatStatus === "streaming" || chatStatus === "submitted";

@@ -1,5 +1,5 @@
 // API Client for making requests to the backend
-import { getApiBase } from "./api-config";
+import { getApiBase, getApiRootBase } from "./api-config";
 
 /** Error thrown when file write fails due to optimistic locking conflict */
 export class FileConflictError extends Error {
@@ -53,6 +53,7 @@ import type {
 
 class ApiClient {
 	private base = getApiBase();
+	private rootBase = getApiRootBase();
 
 	private async fetch<T>(path: string, options?: RequestInit): Promise<T> {
 		const response = await fetch(`${this.base}${path}`, {
@@ -80,7 +81,7 @@ class ApiClient {
 
 	// Fetch from root API (not project-scoped)
 	private async fetchRoot<T>(path: string, options?: RequestInit): Promise<T> {
-		const response = await fetch(`/api${path}`, {
+		const response = await fetch(`${this.rootBase}${path}`, {
 			...options,
 			headers: {
 				"Content-Type": "application/json",

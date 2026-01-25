@@ -2,21 +2,23 @@
 export const PROJECT_ID = "local";
 
 /**
- * Get the backend API base URL.
+ * Get the backend API root URL (without project path).
  *
- * Always uses relative URLs - Next.js proxies to the Go backend via rewrites.
+ * - In Tauri: uses relative URLs (Tauri handles routing)
+ * - In browser with *-svc-ui.* hostname: routes to corresponding *-svc-api.* host
+ * - Otherwise: calls Go backend directly on port 3001
  */
-export function getApiBase() {
+export function getApiRootBase() {
 	if (typeof window === "undefined") {
-		// Server-side rendering - use relative URL
-		return `/api/projects/${PROJECT_ID}`;
+		// Server-side rendering - call backend directly
+		return "http://localhost:3001/api";
 	}
 
 	// Check if running in Tauri
 	const isTauri = "__TAURI__" in window;
 	if (isTauri) {
 		// Tauri handles routing to the backend
-		return `/api/projects/${PROJECT_ID}`;
+		return "/api";
 	}
 
 	// Check if hostname matches *-svc-ui.* pattern
@@ -26,17 +28,30 @@ export function getApiBase() {
 		const protocol = window.location.protocol;
 		const port = window.location.port;
 		const apiHost = port ? `${apiHostname}:${port}` : apiHostname;
-		return `${protocol}//${apiHost}/api/projects/${PROJECT_ID}`;
+		return `${protocol}//${apiHost}/api`;
 	}
 
-	// Use relative URLs - Next.js proxies to the Go backend via rewrites
-	return `/api/projects/${PROJECT_ID}`;
+	// Call Go backend directly on port 3001
+	return "http://localhost:3001/api";
+}
+
+/**
+ * Get the backend API base URL (with project path).
+ *
+ * - In Tauri: uses relative URLs (Tauri handles routing)
+ * - In browser with *-svc-ui.* hostname: routes to corresponding *-svc-api.* host
+ * - Otherwise: calls Go backend directly on port 3001
+ */
+export function getApiBase() {
+	return `${getApiRootBase()}/projects/${PROJECT_ID}`;
 }
 
 /**
  * Get the backend WebSocket base URL.
  *
- * Uses current host with ws:// or wss:// protocol.
+ * - In Tauri: uses current host with ws:// or wss:// protocol
+ * - In browser with *-svc-ui.* hostname: routes to corresponding *-svc-api.* host
+ * - Otherwise: connects to Go backend directly on port 3001
  */
 export function getWsBase() {
 	if (typeof window === "undefined") {
@@ -62,7 +77,6 @@ export function getWsBase() {
 		return `${protocol}//${apiHost}/api/projects/${PROJECT_ID}`;
 	}
 
-	// Default: use current host with proper protocol
-	const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-	return `${protocol}//${window.location.host}/api/projects/${PROJECT_ID}`;
+	// Connect to Go backend directly on port 3001
+	return `ws://localhost:3001/api/projects/${PROJECT_ID}`;
 }
