@@ -236,15 +236,26 @@ export function BottomPanel({
 				</div>
 			</div>
 			{panelState !== "minimized" && (
-				<div className="flex-1 overflow-hidden relative">
+				<div
+					className={cn(
+						"flex-1 overflow-hidden relative",
+						!selectedSessionId && "flex items-center justify-center",
+					)}
+				>
 					{/* Chat panel - always mounted */}
 					<div
 						className={cn(
 							"absolute inset-0",
 							view !== "chat" && "invisible pointer-events-none",
+							!selectedSessionId && "static", // Remove absolute positioning for centered layout
 						)}
 					>
-						<ChatPanel key={selectedSessionId} className="h-full" />
+						<ChatPanel
+							className={cn(
+								"h-full",
+								!selectedSessionId && "w-full max-w-none", // Full width when centered
+							)}
+						/>
 					</div>
 					{/* Terminal - lazy mounted, stays mounted once viewed */}
 					{terminalMounted && (

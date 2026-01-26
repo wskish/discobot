@@ -164,6 +164,43 @@ Implementation:
 - Returns cached messages from SWR
 - Container returns stored messages
 
+## Stream Resumption
+
+The chat implements automatic stream resumption for reconnection scenarios:
+
+### How It Works
+
+1. **useChat Configuration**: ChatPanel enables resume mode when a session is selected:
+   ```typescript
+   const { messages, sendMessage, status } = useChat({
+     id: sessionId,
+     resume: !!selectedSessionId,
+   })
+   ```
+
+2. **Client Behavior**: When `resume: true`, the AI SDK automatically calls `/api/chat/stream` with the session ID on mount
+
+3. **Server Response**: The backend checks for active streams:
+   - **Active stream**: Returns 200 and continues streaming from current position
+   - **No active stream**: Returns 204 (No Content), client proceeds normally
+
+4. **Message Loss Prevention**: The server includes a critical fix to prevent message loss during channel checks (see `server/docs/design/handler.md`)
+
+### Component Lifecycle
+
+To prevent unnecessary stream checks, ChatPanel is **never unmounted** during normal operation:
+- Always rendered in `BottomPanel` (not conditionally in `MainContent`)
+- Uses CSS visibility to toggle between chat and terminal views
+- Preserves component state across session switches
+- Only remounts when explicitly reset via `chatResetTrigger`
+
+### Error Handling
+
+The AI SDK includes a patch to handle edge cases:
+- **Patch Location**: `patches/ai@6.0.50.patch`
+- **Fix**: Adds null check before accessing `activeResponse.state` in finally block
+- **Reason**: Prevents crashes when resume finds no stream (204 response)
+
 ## Styling
 
 Chat uses design tokens for theming:

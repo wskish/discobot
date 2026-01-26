@@ -603,6 +603,27 @@ func (ts *TestServer) CreateTestSession(workspace *model.Workspace, name string)
 	return session
 }
 
+// CreateTestSessionWithAgent creates a test session with an agent assigned.
+func (ts *TestServer) CreateTestSessionWithAgent(workspace *model.Workspace, agent *model.Agent, name string) *model.Session {
+	ts.T.Helper()
+
+	workspacePath := workspace.Path
+	session := &model.Session{
+		ProjectID:     workspace.ProjectID,
+		WorkspaceID:   workspace.ID,
+		AgentID:       &agent.ID,
+		Name:          name,
+		Status:        model.SessionStatusReady,
+		WorkspacePath: &workspacePath,
+	}
+
+	if err := ts.Store.CreateSession(context.Background(), session); err != nil {
+		ts.T.Fatalf("Failed to create test session: %v", err)
+	}
+
+	return session
+}
+
 // CreateTestSessionWithMockSandbox creates a test session with a properly configured
 // mock sandbox that points to the provided mock server URL.
 func (ts *TestServer) CreateTestSessionWithMockSandbox(workspace *model.Workspace, agent *model.Agent, name string, mockServerURL string) *model.Session {
@@ -686,6 +707,24 @@ func (ts *TestServer) CreateTestSessionWithSandbox(workspace *model.Workspace, a
 	}
 
 	return session
+}
+
+// CreateAndStartSandbox creates and starts a mock sandbox for the given session.
+// This is useful for tests that need a running sandbox but don't need to configure it.
+func (ts *TestServer) CreateAndStartSandbox(sessionID string) {
+	ts.T.Helper()
+
+	ctx := context.Background()
+	_, err := ts.MockSandbox.Create(ctx, sessionID, sandbox.CreateOptions{
+		SharedSecret: "test-secret",
+	})
+	if err != nil {
+		ts.T.Fatalf("Failed to create mock sandbox: %v", err)
+	}
+
+	if err := ts.MockSandbox.Start(ctx, sessionID); err != nil {
+		ts.T.Fatalf("Failed to start mock sandbox: %v", err)
+	}
 }
 
 // CreateTestAgent creates a test agent

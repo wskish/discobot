@@ -143,9 +143,12 @@ Wrapper for the tabbed diff viewer:
 
 ### BottomPanel
 
-Toggleable content area:
+Toggleable content area with persistent chat component:
 - Chat mode: Shows ChatPanel with AI conversation
 - Terminal mode: Shows TerminalView with xterm.js
+- ChatPanel is always mounted (never unmounted) to preserve component state and prevent re-initialization
+- When no session is selected, the chat panel displays centered with the welcome UI
+- Panel uses absolute positioning for terminal/chat overlays to avoid layout shifts
 
 ## CSS and Styling
 

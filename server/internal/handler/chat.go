@@ -176,16 +176,17 @@ func (h *Handler) ChatStream(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check if channel is already closed (no active completion)
+	// Store the first message if we consume one during this check
+	var firstLine *service.SSELine
 	select {
-	case _, ok := <-sseCh:
+	case line, ok := <-sseCh:
 		if !ok {
 			// Channel closed immediately - no active stream
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}
-		// We consumed a message, need to handle it below after setting headers
-		// This is a bit awkward - ideally GetStream would tell us if there's an active stream
-		// For now, we'll set up SSE and send the message we already received
+		// We consumed a message - store it to send after setting headers
+		firstLine = &line
 	default:
 		// Channel not ready yet - we have a stream, set up SSE
 	}
@@ -203,7 +204,19 @@ func (h *Handler) ChatStream(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Pass through raw SSE lines from sandbox
+	// Send the first message if we consumed one during the check
+	if firstLine != nil {
+		if firstLine.Done {
+			log.Printf("[ChatStream] Received [DONE] signal from sandbox (first line)")
+			_, _ = fmt.Fprintf(w, "data: [DONE]\n\n")
+			flusher.Flush()
+			return
+		}
+		_, _ = fmt.Fprintf(w, "data: %s\n\n", firstLine.Data)
+		flusher.Flush()
+	}
+
+	// Pass through remaining SSE lines from sandbox
 	for line := range sseCh {
 		if line.Done {
 			log.Printf("[ChatStream] Received [DONE] signal from sandbox")

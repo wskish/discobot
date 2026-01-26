@@ -660,8 +660,9 @@ export function ChatPanel({ className }: ChatPanelProps) {
 		messages: existingMessages.length > 0 ? existingMessages : undefined,
 		// Handle stream errors
 		onError: handleChatError,
-		// Only try to resume streams for existing sessions (not new pending sessions)
-		// The SDK's resumeStream fails if called without an existing session/stream state
+		// Enable resume for stream recovery after reconnection
+		// The server returns 204 when no active stream exists, which is handled gracefully
+		// by our patch to the AI SDK
 		resume: !!selectedSessionId,
 	});
 

@@ -1,8 +1,13 @@
 package integration
 
 import (
+	"bufio"
+	"fmt"
+	"io"
 	"net/http"
+	"strings"
 	"testing"
+	"time"
 )
 
 func TestChatStream_SessionNotFound(t *testing.T) {
@@ -89,4 +94,269 @@ func TestChatStream_MissingSessionId(t *testing.T) {
 	defer resp.Body.Close()
 
 	AssertStatus(t, resp, http.StatusBadRequest)
+}
+
+// TestChatStream_ActiveStream_FirstMessageConsumed tests the bug fix for losing
+// the first message when checking if a stream is active. This verifies that
+// the message consumed during the channel check is properly sent to the client.
+func TestChatStream_ActiveStream_FirstMessageConsumed(t *testing.T) {
+	ts := NewTestServer(t)
+	user := ts.CreateTestUser("test@example.com")
+	project := ts.CreateTestProject(user, "Test Project")
+	workspace := ts.CreateTestWorkspace(project, "/home/user/code")
+	agent := ts.CreateTestAgent(project, "Test Agent", "claude-code")
+	client := ts.AuthenticatedClient(user)
+
+	// Create session with agent
+	session := ts.CreateTestSessionWithAgent(workspace, agent, "Test Session")
+
+	// Create a sandbox so the session has a running container
+	ts.CreateAndStartSandbox(session.ID)
+
+	// Configure mock sandbox with a custom HTTP handler that simulates
+	// an active SSE stream with multiple messages
+	messages := []string{
+		`{"type":"text","text":"First message"}`,
+		`{"type":"text","text":"Second message"}`,
+		`{"type":"text","text":"Third message"}`,
+	}
+
+	ts.MockSandbox.HTTPHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Only handle GET /chat for SSE streams
+		if r.Method != "GET" || r.URL.Path != "/chat" {
+			http.NotFound(w, r)
+			return
+		}
+
+		// Check if this is an SSE stream request
+		if r.Header.Get("Accept") == "text/event-stream" {
+			w.Header().Set("Content-Type", "text/event-stream")
+			w.Header().Set("x-vercel-ai-ui-message-stream", "v1")
+			w.WriteHeader(http.StatusOK)
+
+			// Write all messages immediately so they're available when
+			// the handler checks the channel
+			for _, msg := range messages {
+				_, _ = fmt.Fprintf(w, "data: %s\n\n", msg)
+				if f, ok := w.(http.Flusher); ok {
+					f.Flush()
+				}
+			}
+
+			// Send DONE signal
+			_, _ = fmt.Fprintf(w, "data: [DONE]\n\n")
+			if f, ok := w.(http.Flusher); ok {
+				f.Flush()
+			}
+			return
+		}
+
+		// Non-SSE GET returns empty messages
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"messages":[]}`))
+	})
+
+	// Request the stream
+	resp := client.Get("/api/projects/" + project.ID + "/chat/" + session.ID + "/stream")
+	defer resp.Body.Close()
+
+	// Verify we got 200 OK with SSE headers
+	AssertStatus(t, resp, http.StatusOK)
+	if ct := resp.Header.Get("Content-Type"); ct != "text/event-stream" {
+		t.Errorf("Expected Content-Type text/event-stream, got %s", ct)
+	}
+	if stream := resp.Header.Get("x-vercel-ai-ui-message-stream"); stream != "v1" {
+		t.Errorf("Expected x-vercel-ai-ui-message-stream v1, got %s", stream)
+	}
+
+	// Read and verify all SSE messages
+	scanner := bufio.NewScanner(resp.Body)
+	receivedMessages := []string{}
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.HasPrefix(line, "data: ") {
+			data := strings.TrimPrefix(line, "data: ")
+			if data == "[DONE]" {
+				break
+			}
+			receivedMessages = append(receivedMessages, data)
+		}
+	}
+
+	if err := scanner.Err(); err != nil && err != io.EOF {
+		t.Fatalf("Error reading SSE stream: %v", err)
+	}
+
+	// Verify we received all messages including the first one
+	if len(receivedMessages) != len(messages) {
+		t.Errorf("Expected %d messages, got %d", len(messages), len(receivedMessages))
+	}
+
+	// Verify each message was received correctly
+	for i, expected := range messages {
+		if i >= len(receivedMessages) {
+			t.Errorf("Missing message %d: %s", i, expected)
+			continue
+		}
+		if receivedMessages[i] != expected {
+			t.Errorf("Message %d mismatch:\nExpected: %s\nGot: %s", i, expected, receivedMessages[i])
+		}
+	}
+
+	// Most importantly: verify the first message was NOT lost
+	if len(receivedMessages) > 0 && !strings.Contains(receivedMessages[0], "First message") {
+		t.Error("First message was lost during channel check")
+	}
+}
+
+// TestChatStream_ActiveStream_SlowMessages tests that the stream properly
+// handles messages that arrive slowly (not all buffered at once).
+func TestChatStream_ActiveStream_SlowMessages(t *testing.T) {
+	ts := NewTestServer(t)
+	user := ts.CreateTestUser("test@example.com")
+	project := ts.CreateTestProject(user, "Test Project")
+	workspace := ts.CreateTestWorkspace(project, "/home/user/code")
+	agent := ts.CreateTestAgent(project, "Test Agent", "claude-code")
+	client := ts.AuthenticatedClient(user)
+
+	session := ts.CreateTestSessionWithAgent(workspace, agent, "Test Session")
+	ts.CreateAndStartSandbox(session.ID)
+
+	// Configure mock sandbox to send messages with delays
+	ts.MockSandbox.HTTPHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "GET" || r.URL.Path != "/chat" {
+			http.NotFound(w, r)
+			return
+		}
+
+		if r.Header.Get("Accept") == "text/event-stream" {
+			w.Header().Set("Content-Type", "text/event-stream")
+			w.Header().Set("x-vercel-ai-ui-message-stream", "v1")
+			w.WriteHeader(http.StatusOK)
+
+			// Send first message immediately
+			_, _ = fmt.Fprintf(w, "data: %s\n\n", `{"type":"text","text":"Message 1"}`)
+			if f, ok := w.(http.Flusher); ok {
+				f.Flush()
+			}
+
+			// Wait a bit before sending second message
+			time.Sleep(10 * time.Millisecond)
+			_, _ = fmt.Fprintf(w, "data: %s\n\n", `{"type":"text","text":"Message 2"}`)
+			if f, ok := w.(http.Flusher); ok {
+				f.Flush()
+			}
+
+			// Send DONE
+			_, _ = fmt.Fprintf(w, "data: [DONE]\n\n")
+			if f, ok := w.(http.Flusher); ok {
+				f.Flush()
+			}
+			return
+		}
+
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"messages":[]}`))
+	})
+
+	resp := client.Get("/api/projects/" + project.ID + "/chat/" + session.ID + "/stream")
+	defer resp.Body.Close()
+
+	AssertStatus(t, resp, http.StatusOK)
+
+	// Read messages with a reasonable timeout
+	scanner := bufio.NewScanner(resp.Body)
+	receivedMessages := []string{}
+	done := make(chan struct{})
+
+	go func() {
+		defer close(done)
+		for scanner.Scan() {
+			line := scanner.Text()
+			if strings.HasPrefix(line, "data: ") {
+				data := strings.TrimPrefix(line, "data: ")
+				if data == "[DONE]" {
+					break
+				}
+				receivedMessages = append(receivedMessages, data)
+			}
+		}
+	}()
+
+	// Wait for messages or timeout
+	select {
+	case <-done:
+		// Success
+	case <-time.After(5 * time.Second):
+		t.Fatal("Timeout waiting for stream messages")
+	}
+
+	if len(receivedMessages) != 2 {
+		t.Errorf("Expected 2 messages, got %d", len(receivedMessages))
+	}
+
+	if len(receivedMessages) > 0 && !strings.Contains(receivedMessages[0], "Message 1") {
+		t.Error("First message was not received correctly")
+	}
+}
+
+// TestChatStream_ActiveStream_OnlyDone tests edge case where stream
+// immediately sends DONE without any messages.
+func TestChatStream_ActiveStream_OnlyDone(t *testing.T) {
+	ts := NewTestServer(t)
+	user := ts.CreateTestUser("test@example.com")
+	project := ts.CreateTestProject(user, "Test Project")
+	workspace := ts.CreateTestWorkspace(project, "/home/user/code")
+	agent := ts.CreateTestAgent(project, "Test Agent", "claude-code")
+	client := ts.AuthenticatedClient(user)
+
+	session := ts.CreateTestSessionWithAgent(workspace, agent, "Test Session")
+	ts.CreateAndStartSandbox(session.ID)
+
+	// Configure mock sandbox to send only DONE signal
+	ts.MockSandbox.HTTPHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "GET" || r.URL.Path != "/chat" {
+			http.NotFound(w, r)
+			return
+		}
+
+		if r.Header.Get("Accept") == "text/event-stream" {
+			w.Header().Set("Content-Type", "text/event-stream")
+			w.Header().Set("x-vercel-ai-ui-message-stream", "v1")
+			w.WriteHeader(http.StatusOK)
+
+			// Send DONE immediately
+			_, _ = fmt.Fprintf(w, "data: [DONE]\n\n")
+			if f, ok := w.(http.Flusher); ok {
+				f.Flush()
+			}
+			return
+		}
+
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"messages":[]}`))
+	})
+
+	resp := client.Get("/api/projects/" + project.ID + "/chat/" + session.ID + "/stream")
+	defer resp.Body.Close()
+
+	AssertStatus(t, resp, http.StatusOK)
+
+	// Read and verify we get DONE
+	scanner := bufio.NewScanner(resp.Body)
+	gotDone := false
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.HasPrefix(line, "data: ") {
+			data := strings.TrimPrefix(line, "data: ")
+			if data == "[DONE]" {
+				gotDone = true
+				break
+			}
+		}
+	}
+
+	if !gotDone {
+		t.Error("Expected to receive [DONE] signal")
+	}
 }

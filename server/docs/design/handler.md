@@ -168,6 +168,11 @@ func (h *Handler) CreateWorkspace(w http.ResponseWriter, r *http.Request) {
 
 ### Chat Handler (chat.go)
 
+The chat handler provides two endpoints for AI SDK integration:
+
+**POST /api/projects/{projectId}/chat** - Start a new chat or send messages
+**GET /api/projects/{projectId}/chat/{sessionId}/stream** - Resume an interrupted stream
+
 ```go
 // POST /api/projects/{projectId}/chat
 func (h *Handler) Chat(w http.ResponseWriter, r *http.Request) {
@@ -177,33 +182,131 @@ func (h *Handler) Chat(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    // Create or get session
-    session, err := h.services.Chat.EnsureSession(r.Context(), req)
-    if err != nil {
-        h.Error(w, err, http.StatusInternalServerError)
+    // Validate ID and messages are provided
+    if req.ID == "" || len(req.Messages) == 0 {
+        h.Error(w, err, http.StatusBadRequest)
         return
+    }
+
+    // Check if session exists, create if needed
+    existingSession, err := h.chatService.GetSessionByID(ctx, req.ID)
+    if err != nil {
+        // Session doesn't exist - create it
+        if req.WorkspaceID == "" || req.AgentID == "" {
+            h.Error(w, "workspaceId and agentId required for new sessions", http.StatusBadRequest)
+            return
+        }
+        _, err := h.chatService.NewSession(ctx, service.NewSessionRequest{
+            SessionID:   req.ID,
+            ProjectID:   projectID,
+            WorkspaceID: req.WorkspaceID,
+            AgentID:     req.AgentID,
+            Messages:    req.Messages,
+        })
+        if err != nil {
+            h.Error(w, err, http.StatusBadRequest)
+            return
+        }
     }
 
     // Set SSE headers
     w.Header().Set("Content-Type", "text/event-stream")
     w.Header().Set("Cache-Control", "no-cache")
     w.Header().Set("Connection", "keep-alive")
+    w.Header().Set("x-vercel-ai-ui-message-stream", "v1")
 
     // Get SSE stream from sandbox
-    stream, err := h.services.Chat.SendToSandbox(r.Context(), session, req.Messages)
+    sseCh, err := h.chatService.SendToSandbox(ctx, projectID, req.ID, req.Messages)
     if err != nil {
-        h.Error(w, err, http.StatusInternalServerError)
+        writeSSEErrorAndDone(w, err.Error())
         return
     }
 
     // Proxy stream to client
     flusher := w.(http.Flusher)
-    for line := range stream {
-        fmt.Fprintf(w, "%s\n", line)
+    for line := range sseCh {
+        if line.Done {
+            fmt.Fprintf(w, "data: [DONE]\n\n")
+            flusher.Flush()
+            return
+        }
+        fmt.Fprintf(w, "data: %s\n\n", line.Data)
+        flusher.Flush()
+    }
+}
+
+// GET /api/projects/{projectId}/chat/{sessionId}/stream
+// Resumes an in-progress chat stream (for AI SDK resume functionality)
+func (h *Handler) ChatStream(w http.ResponseWriter, r *http.Request) {
+    sessionID := r.PathValue("sessionId")
+
+    // Validate session exists and belongs to project
+    existingSession, err := h.chatService.GetSessionByID(ctx, sessionID)
+    if err != nil {
+        w.WriteHeader(http.StatusNoContent) // No session = no stream
+        return
+    }
+    if existingSession.ProjectID != projectID {
+        h.Error(w, "session does not belong to this project", http.StatusForbidden)
+        return
+    }
+
+    // Get the stream from sandbox
+    sseCh, err := h.chatService.GetStream(ctx, projectID, sessionID)
+    if err != nil {
+        w.WriteHeader(http.StatusNoContent) // No active stream
+        return
+    }
+
+    // Check if channel has data (with non-blocking select)
+    // IMPORTANT: Store any consumed message to send it after headers
+    var firstLine *service.SSELine
+    select {
+    case line, ok := <-sseCh:
+        if !ok {
+            w.WriteHeader(http.StatusNoContent) // Channel closed = no stream
+            return
+        }
+        firstLine = &line // Store the consumed message
+    default:
+        // Channel not ready yet - we have a stream
+    }
+
+    // Set SSE headers
+    w.Header().Set("Content-Type", "text/event-stream")
+    w.Header().Set("Cache-Control", "no-cache")
+    w.Header().Set("Connection", "keep-alive")
+    w.Header().Set("x-vercel-ai-ui-message-stream", "v1")
+
+    flusher := w.(http.Flusher)
+
+    // Send the first message if we consumed one during the check
+    if firstLine != nil {
+        if firstLine.Done {
+            fmt.Fprintf(w, "data: [DONE]\n\n")
+            flusher.Flush()
+            return
+        }
+        fmt.Fprintf(w, "data: %s\n\n", firstLine.Data)
+        flusher.Flush()
+    }
+
+    // Stream remaining messages
+    for line := range sseCh {
+        if line.Done {
+            fmt.Fprintf(w, "data: [DONE]\n\n")
+            flusher.Flush()
+            return
+        }
+        fmt.Fprintf(w, "data: %s\n\n", line.Data)
         flusher.Flush()
     }
 }
 ```
+
+**Stream Resume Fix:**
+
+The `ChatStream` handler includes a critical fix for stream resumption. When checking if a channel has data using a non-blocking `select`, any consumed message is stored in `firstLine` and sent after setting headers. This prevents message loss during the channel check, which was causing state corruption in the AI SDK.
 
 ### Events Handler (events.go)
 

@@ -1,0 +1,88 @@
+diff --git a/dist/index.js b/dist/index.js
+index a15f846a9a605a477cd9b5a6faec50817c70e76c..029730732c7f2c7b08b886b385e4789565b3c3a2 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -12325,14 +12325,16 @@ var AbstractChat = class {
+       this.setStatus({ status: "error", error: err });
+     } finally {
+       try {
+-        (_b = this.onFinish) == null ? void 0 : _b.call(this, {
+-          message: this.activeResponse.state.message,
+-          messages: this.state.messages,
+-          isAbort,
+-          isDisconnect,
+-          isError,
+-          finishReason: (_a18 = this.activeResponse) == null ? void 0 : _a18.state.finishReason
+-        });
++        if (this.activeResponse) {
++          (_b = this.onFinish) == null ? void 0 : _b.call(this, {
++            message: this.activeResponse.state.message,
++            messages: this.state.messages,
++            isAbort,
++            isDisconnect,
++            isError,
++            finishReason: this.activeResponse.state.finishReason
++          });
++        }
+       } catch (err) {
+         console.error(err);
+       }
+diff --git a/dist/index.mjs b/dist/index.mjs
+index 5abd9bbf15c45b0dd04914edc063fc56cfd6d516..036bc5ed6c6de44028b29a18cdd2943f62ca1c2b 100644
+--- a/dist/index.mjs
++++ b/dist/index.mjs
+@@ -12291,14 +12291,16 @@ var AbstractChat = class {
+       this.setStatus({ status: "error", error: err });
+     } finally {
+       try {
+-        (_b = this.onFinish) == null ? void 0 : _b.call(this, {
+-          message: this.activeResponse.state.message,
+-          messages: this.state.messages,
+-          isAbort,
+-          isDisconnect,
+-          isError,
+-          finishReason: (_a18 = this.activeResponse) == null ? void 0 : _a18.state.finishReason
+-        });
++        if (this.activeResponse) {
++          (_b = this.onFinish) == null ? void 0 : _b.call(this, {
++            message: this.activeResponse.state.message,
++            messages: this.state.messages,
++            isAbort,
++            isDisconnect,
++            isError,
++            finishReason: this.activeResponse.state.finishReason
++          });
++        }
+       } catch (err) {
+         console.error(err);
+       }
+diff --git a/src/ui/chat.ts b/src/ui/chat.ts
+index 0a31919adf38f76f91be87bb06f47f0f790c5525..1b81c8276b28afb8b7a4c7249dfea3051818249b 100644
+--- a/src/ui/chat.ts
++++ b/src/ui/chat.ts
+@@ -684,14 +684,17 @@ export abstract class AbstractChat<UI_MESSAGE extends UIMessage> {
+       this.setStatus({ status: 'error', error: err as Error });
+     } finally {
+       try {
+-        this.onFinish?.({
+-          message: this.activeResponse!.state.message,
+-          messages: this.state.messages,
+-          isAbort,
+-          isDisconnect,
+-          isError,
+-          finishReason: this.activeResponse?.state.finishReason,
+-        });
++        // Only call onFinish if activeResponse exists (e.g., not when early returning from resume with no stream)
++        if (this.activeResponse) {
++          this.onFinish?.({
++            message: this.activeResponse.state.message,
++            messages: this.state.messages,
++            isAbort,
++            isDisconnect,
++            isError,
++            finishReason: this.activeResponse.state.finishReason,
++          });
++        }
+       } catch (err) {
+         console.error(err);
+       }

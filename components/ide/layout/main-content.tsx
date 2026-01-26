@@ -1,7 +1,6 @@
 "use client";
 
 import * as React from "react";
-import { ChatPanel } from "@/components/ide/chat-panel";
 import { FilePanel } from "@/components/ide/file-panel";
 import { ResizeHandle } from "@/components/ide/resize-handle";
 import type { BottomView, FileNode, FileStatus } from "@/lib/api-types";
@@ -46,7 +45,7 @@ export function MainContent({
 	onRightSidebarResize,
 	onDiffMaximizeChange,
 }: MainContentProps) {
-	const { selectedSession, chatResetTrigger } = useSessionContext();
+	const { selectedSession } = useSessionContext();
 
 	const [bottomView, setBottomView] = usePersistedState<BottomView>(
 		STORAGE_KEYS.BOTTOM_VIEW,
@@ -183,16 +182,7 @@ export function MainContent({
 	}, [handleCloseDiffPanel, setOpenFilePaths, setActiveFilePath]);
 
 	// Computed
-	const showCenteredChat = selectedSession === null;
 	const showFilePanel = selectedSession !== null;
-
-	if (showCenteredChat) {
-		return (
-			<main className="flex-1 flex items-center justify-center overflow-hidden">
-				<ChatPanel key={chatResetTrigger} className="w-full h-full" />
-			</main>
-		);
-	}
 
 	return (
 		<>
