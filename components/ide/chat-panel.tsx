@@ -101,6 +101,7 @@ import type { Agent, SessionStatus } from "@/lib/api-types";
 import { useAgentContext } from "@/lib/contexts/agent-context";
 import { useDialogContext } from "@/lib/contexts/dialog-context";
 import { useSessionContext } from "@/lib/contexts/session-context";
+import { useLazyRender } from "@/lib/hooks/use-lazy-render";
 import { useMessages } from "@/lib/hooks/use-messages";
 import { usePromptHistory } from "@/lib/hooks/use-prompt-history";
 import { useSession } from "@/lib/hooks/use-sessions";
@@ -365,6 +366,48 @@ const MessageItem = React.memo(function MessageItem({
 				)}
 			</MessageContent>
 		</Message>
+	);
+});
+
+// Lazy-rendered message wrapper - defers rendering until first visible
+// Uses IntersectionObserver to detect visibility, then keeps message rendered
+interface LazyMessageItemProps extends MessageItemProps {
+	/** Estimated height for placeholder before render (prevents layout shift) */
+	estimatedHeight?: number;
+}
+
+// IntersectionObserver options - use rootMargin to pre-render messages
+// slightly before they enter the viewport for smoother scrolling
+const LAZY_OBSERVER_OPTIONS: IntersectionObserverInit = {
+	rootMargin: "200px 0px", // Pre-render 200px above/below viewport
+};
+
+const LazyMessageItem = React.memo(function LazyMessageItem({
+	message,
+	onCopy,
+	onRegenerate,
+	estimatedHeight = 100,
+}: LazyMessageItemProps) {
+	const [ref, hasBeenVisible] = useLazyRender(LAZY_OBSERVER_OPTIONS);
+
+	return (
+		<div ref={ref}>
+			{hasBeenVisible ? (
+				<MessageItem
+					message={message}
+					onCopy={onCopy}
+					onRegenerate={onRegenerate}
+				/>
+			) : (
+				// Placeholder with estimated height to maintain scroll position
+				<div
+					className="flex items-center justify-center text-muted-foreground/30"
+					style={{ minHeight: estimatedHeight }}
+				>
+					<Loader2 className="h-4 w-4 animate-spin" />
+				</div>
+			)}
+		</div>
 	);
 });
 
@@ -943,14 +986,27 @@ export function ChatPanel({ className }: ChatPanelProps) {
 							/>
 						) : (
 							<div className="max-w-3xl mx-auto w-full space-y-4">
-								{messages.map((message) => (
-									<MessageItem
-										key={message.id}
-										message={message}
-										onCopy={handleCopy}
-										onRegenerate={handleRegenerate}
-									/>
-								))}
+								{messages.map((message, index) => {
+									// Render last few messages immediately (they're likely visible)
+									// Lazy-render older messages to improve initial load performance
+									const isRecentMessage = index >= messages.length - 3;
+									return isRecentMessage ? (
+										<MessageItem
+											key={message.id}
+											message={message}
+											onCopy={handleCopy}
+											onRegenerate={handleRegenerate}
+										/>
+									) : (
+										<LazyMessageItem
+											key={message.id}
+											message={message}
+											onCopy={handleCopy}
+											onRegenerate={handleRegenerate}
+											estimatedHeight={message.role === "user" ? 80 : 150}
+										/>
+									);
+								})}
 								{/* Show shimmer status when waiting for assistant response */}
 								{isLoading && (
 									<div className="flex items-center gap-2 py-2">
