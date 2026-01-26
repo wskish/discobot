@@ -41,14 +41,15 @@ const (
 	dockerSocketPath = "/var/run/docker.sock"
 
 	// Paths
-	dataDir      = "/.data"
-	baseHomeDir  = "/.data/octobot"           // Base home directory (copied from /home/octobot)
-	workspaceDir = "/.data/octobot/workspace" // Workspace inside home
-	stagingDir   = "/.data/octobot/workspace.staging"
-	agentFSDir   = "/.data/.agentfs"
-	overlayFSDir = "/.data/.overlayfs"
-	mountHome    = "/home/octobot" // Where agentfs/overlayfs mounts
-	symlinkPath  = "/workspace"    // Symlink to /home/octobot/workspace
+	dataDir         = "/.data"
+	baseHomeDir     = "/.data/octobot"           // Base home directory (copied from /home/octobot)
+	workspaceDir    = "/.data/octobot/workspace" // Workspace inside home
+	stagingDir      = "/.data/octobot/workspace.staging"
+	agentFSDir      = "/.data/.agentfs"
+	overlayFSDir    = "/.data/.overlayfs"
+	mountHome       = "/home/octobot"     // Where agentfs/overlayfs mounts
+	symlinkPath     = "/workspace"        // Symlink to /home/octobot/workspace
+	tempMigrationFS = "/.data/.migration" // Temporary mount point for migration
 )
 
 // filesystemType represents the type of filesystem to use for session isolation
@@ -75,12 +76,151 @@ func detectFilesystemType(sessionID string) filesystemType {
 		}
 	}
 
+	// Check if migration marker exists (session has already been migrated)
+	migrationMarker := filepath.Join(overlayFSDir, sessionID, ".migrated")
+	if _, err := os.Stat(migrationMarker); err == nil {
+		fmt.Printf("octobot-agent: session already migrated to overlayfs\n")
+		return fsTypeOverlayFS
+	}
+
 	// Default: check for existing agentfs database
 	dbPath := filepath.Join(agentFSDir, sessionID+".db")
 	if _, err := os.Stat(dbPath); err == nil {
 		return fsTypeAgentFS
 	}
 	return fsTypeOverlayFS
+}
+
+// migrateAgentFSToOverlayFS migrates an existing agentfs session to overlayfs.
+// It mounts agentfs at a temporary location, creates overlayfs at the target,
+// rsyncs the data, and marks the migration as complete.
+func migrateAgentFSToOverlayFS(sessionID string, userInfo *userInfo) error {
+	fmt.Printf("octobot-agent: starting migration from agentfs to overlayfs for session %s\n", sessionID)
+
+	// Ensure migration directory exists
+	if err := os.MkdirAll(tempMigrationFS, 0755); err != nil {
+		return fmt.Errorf("failed to create migration directory: %w", err)
+	}
+
+	// Step 1: Mount agentfs at temporary location
+	fmt.Printf("octobot-agent: mounting agentfs at temporary location %s\n", tempMigrationFS)
+	if err := mountAgentFSAtPath(sessionID, tempMigrationFS, userInfo); err != nil {
+		return fmt.Errorf("failed to mount agentfs for migration: %w", err)
+	}
+
+	// Ensure cleanup on error
+	defer func() {
+		fmt.Printf("octobot-agent: unmounting temporary agentfs\n")
+		if err := syscall.Unmount(tempMigrationFS, 0); err != nil {
+			fmt.Fprintf(os.Stderr, "octobot-agent: warning: failed to unmount %s: %v\n", tempMigrationFS, err)
+		}
+	}()
+
+	// Step 2: Setup overlayfs directories at target location
+	fmt.Printf("octobot-agent: setting up overlayfs for migration\n")
+	if err := setupOverlayFS(sessionID, userInfo); err != nil {
+		return fmt.Errorf("failed to setup overlayfs for migration: %w", err)
+	}
+
+	// Step 3: Mount overlayfs at target
+	fmt.Printf("octobot-agent: mounting overlayfs at %s\n", mountHome)
+	if err := mountOverlayFS(sessionID); err != nil {
+		// Clean up overlayfs directories if mount fails
+		if cleanErr := os.RemoveAll(filepath.Join(overlayFSDir, sessionID)); cleanErr != nil {
+			fmt.Fprintf(os.Stderr, "octobot-agent: warning: failed to cleanup overlayfs directory: %v\n", cleanErr)
+		}
+		return fmt.Errorf("failed to mount overlayfs for migration: %w", err)
+	}
+
+	// Ensure overlayfs cleanup on error
+	defer func() {
+		// Only unmount if we're returning an error (normal path will keep it mounted)
+		if r := recover(); r != nil {
+			fmt.Printf("octobot-agent: unmounting overlayfs due to panic\n")
+			if unmountErr := syscall.Unmount(mountHome, 0); unmountErr != nil {
+				fmt.Fprintf(os.Stderr, "octobot-agent: warning: failed to unmount overlayfs: %v\n", unmountErr)
+			}
+			panic(r)
+		}
+	}()
+
+	// Step 4: Rsync from temp agentfs to target overlayfs
+	fmt.Printf("octobot-agent: syncing data from agentfs to overlayfs (this may take a while)\n")
+	rsyncCmd := exec.Command("rsync",
+		"-a",                // archive mode (preserve permissions, timestamps, etc.)
+		"--delete",          // delete files in destination that don't exist in source
+		tempMigrationFS+"/", // source (trailing slash is important for rsync)
+		mountHome+"/",       // destination
+	)
+	rsyncCmd.Stdout = os.Stdout
+	rsyncCmd.Stderr = os.Stderr
+	if err := rsyncCmd.Run(); err != nil {
+		if unmountErr := syscall.Unmount(mountHome, 0); unmountErr != nil {
+			fmt.Fprintf(os.Stderr, "octobot-agent: warning: failed to unmount overlayfs: %v\n", unmountErr)
+		}
+		if cleanErr := os.RemoveAll(filepath.Join(overlayFSDir, sessionID)); cleanErr != nil {
+			fmt.Fprintf(os.Stderr, "octobot-agent: warning: failed to cleanup overlayfs directory: %v\n", cleanErr)
+		}
+		return fmt.Errorf("rsync failed: %w", err)
+	}
+
+	fmt.Printf("octobot-agent: data sync completed successfully\n")
+
+	// Step 5: Unmount temporary agentfs
+	fmt.Printf("octobot-agent: unmounting temporary agentfs\n")
+	if err := syscall.Unmount(tempMigrationFS, 0); err != nil {
+		fmt.Fprintf(os.Stderr, "octobot-agent: warning: failed to unmount temporary agentfs: %v\n", err)
+		// Continue anyway - this is not fatal
+	}
+
+	// Step 6: Create migration marker
+	migrationMarker := filepath.Join(overlayFSDir, sessionID, ".migrated")
+	fmt.Printf("octobot-agent: creating migration marker at %s\n", migrationMarker)
+	if err := os.WriteFile(migrationMarker, []byte(time.Now().Format(time.RFC3339)), 0644); err != nil {
+		fmt.Fprintf(os.Stderr, "octobot-agent: warning: failed to create migration marker: %v\n", err)
+		// Continue anyway - the migration is complete
+	}
+
+	fmt.Printf("octobot-agent: migration completed successfully\n")
+	fmt.Printf("octobot-agent: note: agentfs database is preserved at %s for backup\n", filepath.Join(agentFSDir, sessionID+".db"))
+
+	return nil
+}
+
+// mountAgentFSAtPath mounts agentfs at a specific path (used for migration)
+func mountAgentFSAtPath(sessionID, mountPath string, u *userInfo) error {
+	const maxRetries = 3
+
+	var lastErr error
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		fmt.Printf("octobot-agent: mounting agentfs %s at %s (attempt %d/%d)\n", sessionID, mountPath, attempt, maxRetries)
+
+		cmd := exec.Command("agentfs", "mount", "-a", "--allow-root", sessionID, mountPath)
+		cmd.Dir = dataDir
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		cmd.SysProcAttr = &syscall.SysProcAttr{
+			Credential: &syscall.Credential{
+				Uid:    uint32(u.uid),
+				Gid:    uint32(u.gid),
+				Groups: u.groups,
+			},
+		}
+
+		if err := cmd.Run(); err != nil {
+			lastErr = err
+			fmt.Fprintf(os.Stderr, "octobot-agent: agentfs mount attempt %d failed: %v\n", attempt, err)
+			if attempt < maxRetries {
+				time.Sleep(time.Second)
+			}
+			continue
+		}
+
+		fmt.Printf("octobot-agent: agentfs mounted successfully at %s\n", mountPath)
+		return nil
+	}
+
+	return fmt.Errorf("agentfs mount failed after %d retries: %w", maxRetries, lastErr)
 }
 
 func main() {
@@ -135,7 +275,7 @@ func run() error {
 	// Step 4: Setup and mount filesystem based on type
 	switch fsType {
 	case fsTypeAgentFS:
-		fmt.Printf("octobot-agent: using AgentFS (existing session data found)\n")
+		fmt.Printf("octobot-agent: agentfs session detected, migrating to overlayfs\n")
 
 		// Ensure agentfs directory exists with correct ownership
 		if err := os.MkdirAll(agentFSDir, 0755); err != nil {
@@ -150,9 +290,9 @@ func run() error {
 			return fmt.Errorf("agentfs init failed: %w", err)
 		}
 
-		// Mount agentfs over /home/octobot
-		if err := mountAgentFS(sessionID, userInfo); err != nil {
-			return fmt.Errorf("agentfs mount failed: %w", err)
+		// Perform migration from agentfs to overlayfs
+		if err := migrateAgentFSToOverlayFS(sessionID, userInfo); err != nil {
+			return fmt.Errorf("migration from agentfs to overlayfs failed: %w", err)
 		}
 
 	case fsTypeOverlayFS:
@@ -167,7 +307,9 @@ func run() error {
 		if err := mountOverlayFS(sessionID); err != nil {
 			// Fallback to agentfs if overlayfs fails
 			fmt.Printf("octobot-agent: overlayfs failed, falling back to agentfs: %v\n", err)
-			os.RemoveAll(filepath.Join(overlayFSDir, sessionID))
+			if cleanErr := os.RemoveAll(filepath.Join(overlayFSDir, sessionID)); cleanErr != nil {
+				fmt.Fprintf(os.Stderr, "octobot-agent: warning: failed to cleanup overlayfs directory: %v\n", cleanErr)
+			}
 
 			if err := os.MkdirAll(agentFSDir, 0755); err != nil {
 				return fmt.Errorf("failed to create agentfs directory: %w", err)
@@ -205,12 +347,12 @@ func run() error {
 func setupGitSafeDirectories(workspacePath string) error {
 	// Paths that need to be marked as safe for git operations
 	dirs := []string{
-		"/.workspace",                          // Source workspace mount point
-		"/.workspace/.git",                     // Git directory (some operations check .git specifically)
-		workspaceDir,                           // /.data/octobot/workspace
-		stagingDir,                             // /.data/octobot/workspace.staging (used during clone)
-		filepath.Join(mountHome, "workspace"),  // /home/octobot/workspace (after agentfs mount)
-		symlinkPath,                            // /workspace symlink
+		"/.workspace",                         // Source workspace mount point
+		"/.workspace/.git",                    // Git directory (some operations check .git specifically)
+		workspaceDir,                          // /.data/octobot/workspace
+		stagingDir,                            // /.data/octobot/workspace.staging (used during clone)
+		filepath.Join(mountHome, "workspace"), // /home/octobot/workspace (after agentfs mount)
+		symlinkPath,                           // /workspace symlink
 	}
 
 	// Add the specific workspacePath if provided and different from /.workspace
@@ -380,7 +522,11 @@ func copyFile(src, dst string) error {
 	if err != nil {
 		return err
 	}
-	defer srcFile.Close()
+	defer func() {
+		if closeErr := srcFile.Close(); closeErr != nil {
+			fmt.Fprintf(os.Stderr, "octobot-agent: warning: failed to close source file %s: %v\n", src, closeErr)
+		}
+	}()
 
 	srcInfo, err := srcFile.Stat()
 	if err != nil {
@@ -391,7 +537,11 @@ func copyFile(src, dst string) error {
 	if err != nil {
 		return err
 	}
-	defer dstFile.Close()
+	defer func() {
+		if closeErr := dstFile.Close(); closeErr != nil {
+			fmt.Fprintf(os.Stderr, "octobot-agent: warning: failed to close destination file %s: %v\n", dst, closeErr)
+		}
+	}()
 
 	_, err = io.Copy(dstFile, srcFile)
 	return err

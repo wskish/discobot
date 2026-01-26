@@ -125,6 +125,7 @@ FROM ubuntu:24.04 AS runtime
 # docker.io provides dockerd daemon and docker CLI (runs inside container with privileged mode)
 # docker-buildx is needed for multi-arch builds and advanced build features
 # iptables is needed by dockerd for network management
+# rsync is needed for agentfs to overlayfs migration
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \
@@ -133,6 +134,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     fuse3 \
     git \
     iptables \
+    rsync \
     socat \
     vim \
     && curl -fsSL https://deb.nodesource.com/setup_25.x | bash - \
