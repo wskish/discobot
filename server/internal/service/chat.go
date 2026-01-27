@@ -607,11 +607,12 @@ func deriveSessionName(messages json.RawMessage) string {
 		if msg.Role == "user" {
 			for _, part := range msg.Parts {
 				if part.Type == "text" && part.Text != "" {
-					name := part.Text
-					if len(name) > 50 {
-						name = name[:50] + "..."
+					// Trim leading/trailing whitespace
+					trimmed := strings.TrimSpace(part.Text)
+					// Only return if there's actual content after trimming
+					if trimmed != "" {
+						return trimmed
 					}
-					return name
 				}
 			}
 		}
