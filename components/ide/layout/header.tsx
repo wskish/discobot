@@ -16,10 +16,7 @@ import { OctobotLogo } from "@/components/ide/octobot-logo";
 import { SessionDropdownItem } from "@/components/ide/session-dropdown-item";
 import { ThemeToggle } from "@/components/ide/theme-toggle";
 import { WindowControls } from "@/components/ide/window-controls";
-import {
-	getWorkspaceDisplayPath,
-	WorkspaceIcon,
-} from "@/components/ide/workspace-path";
+import { WorkspaceDisplay } from "@/components/ide/workspace-display";
 import { Button } from "@/components/ui/button";
 import {
 	DropdownMenu,
@@ -181,19 +178,13 @@ export function Header({
 										type="button"
 										className="flex items-center gap-1.5 text-sm px-2 py-1 rounded-md hover:bg-accent transition-colors min-w-0 tauri-no-drag"
 									>
-										<WorkspaceIcon
-											path={sessionWorkspace.path}
-											className="h-4 w-4 shrink-0"
+										<WorkspaceDisplay
+											workspace={sessionWorkspace}
+											iconSize={16}
+											iconClassName="h-4 w-4"
+											textClassName="truncate max-w-[150px]"
+											showTooltip={false}
 										/>
-										<span
-											className="truncate max-w-[150px]"
-											title={sessionWorkspace.path}
-										>
-											{getWorkspaceDisplayPath(
-												sessionWorkspace.path,
-												sessionWorkspace.sourceType,
-											)}
-										</span>
 										<ChevronDown className="h-3 w-3 shrink-0 text-muted-foreground" />
 									</button>
 								</DropdownMenuTrigger>
@@ -206,13 +197,13 @@ export function Header({
 												onClick={() => handleWorkspaceSelect(ws)}
 												className="flex items-center gap-2"
 											>
-												<WorkspaceIcon
-													path={ws.path}
-													className="h-4 w-4 shrink-0"
+												<WorkspaceDisplay
+													workspace={ws}
+													iconSize={16}
+													iconClassName="h-4 w-4"
+													textClassName="flex-1"
+													showTooltip={false}
 												/>
-												<span className="truncate flex-1" title={ws.path}>
-													{getWorkspaceDisplayPath(ws.path, ws.sourceType)}
-												</span>
 												{isSelected && (
 													<Check className="h-4 w-4 shrink-0 text-primary" />
 												)}

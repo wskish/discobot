@@ -12,10 +12,7 @@ import {
 } from "lucide-react";
 import * as React from "react";
 import { getSessionDisplayName } from "@/components/ide/session-name";
-import {
-	parseWorkspacePath,
-	WorkspaceIcon,
-} from "@/components/ide/workspace-path";
+import { WorkspaceDisplay } from "@/components/ide/workspace-display";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
@@ -188,9 +185,6 @@ const WorkspaceNode = React.memo(function WorkspaceNode({
 	const { updateWorkspace } = useWorkspaces();
 	const inputRef = React.useRef<HTMLInputElement>(null);
 
-	const { displayPath, fullPath, workspaceType, wasShortened } =
-		parseWorkspacePath(workspace.path, workspace.sourceType);
-
 	// Fetch sessions when workspace is expanded
 	// Server filters out closed sessions unless includeClosed is true
 	const { sessions, isLoading: sessionsLoading } = useSessions(
@@ -247,9 +241,6 @@ const WorkspaceNode = React.memo(function WorkspaceNode({
 		}
 	};
 
-	// Determine what to display: displayName or parsed path
-	const displayName = workspace.displayName || displayPath;
-
 	return (
 		<div>
 			{/* biome-ignore lint/a11y/useSemanticElements: Complex interactive pattern with nested action button */}
@@ -264,44 +255,33 @@ const WorkspaceNode = React.memo(function WorkspaceNode({
 				role="button"
 				tabIndex={0}
 			>
-				<div
-					className="flex items-center gap-1.5 min-w-0 flex-1"
-					title={
-						isRenaming
-							? undefined
-							: workspace.displayName
-								? `${workspace.displayName} (${fullPath})`
-								: wasShortened
-									? fullPath
-									: undefined
-					}
-				>
+				<div className="flex items-center gap-1.5 min-w-0 flex-1">
 					{isExpanded ? (
 						<ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
 					) : (
 						<ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
 					)}
-					{getWorkspaceStatusIndicator(workspace.status) ?? (
-						<WorkspaceIcon
-							workspaceType={workspaceType}
-							className="h-4 w-4 shrink-0"
-						/>
-					)}
-					{isRenaming ? (
-						<input
-							ref={inputRef}
-							type="text"
-							value={editedName}
-							onChange={(e) => setEditedName(e.target.value)}
-							onKeyDown={handleKeyDown}
-							onBlur={saveRename}
-							onClick={(e) => e.stopPropagation()}
-							className="flex-1 min-w-0 px-1 py-0.5 text-sm bg-background border border-border rounded focus:outline-none focus:ring-1 focus:ring-ring"
-							placeholder={displayPath}
-						/>
-					) : (
-						<span className="font-mono truncate text-sm">{displayName}</span>
-					)}
+					{getWorkspaceStatusIndicator(workspace.status) ??
+						(isRenaming ? (
+							<input
+								ref={inputRef}
+								type="text"
+								value={editedName}
+								onChange={(e) => setEditedName(e.target.value)}
+								onKeyDown={handleKeyDown}
+								onBlur={saveRename}
+								onClick={(e) => e.stopPropagation()}
+								className="flex-1 min-w-0 px-1 py-0.5 text-sm bg-background border border-border rounded focus:outline-none focus:ring-1 focus:ring-ring ml-5"
+								placeholder={workspace.displayName || workspace.path}
+							/>
+						) : (
+							<WorkspaceDisplay
+								workspace={workspace}
+								iconSize={16}
+								iconClassName="h-4 w-4"
+								textClassName="font-mono text-sm"
+							/>
+						))}
 				</div>
 				{!isRenaming && (
 					<div className="flex items-center gap-0.5">

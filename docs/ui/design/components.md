@@ -69,6 +69,7 @@ Located in `components/ide/`:
 | Component | Description |
 |-----------|-------------|
 | `icon-renderer.tsx` | Theme-aware icon display |
+| `workspace-display.tsx` | Consistent workspace icon+name rendering |
 | `panel-controls.tsx` | Minimize/maximize buttons |
 | `resize-handle.tsx` | Draggable panel dividers |
 | `theme-toggle.tsx` | Dark/light mode switch |
@@ -169,6 +170,50 @@ Logic:
 ```tsx
 <IconRenderer icons={agent.icons} size={16} className="mr-2" />
 ```
+
+## WorkspaceDisplay Component
+
+Provides consistent rendering of workspace icon and name across the application.
+
+```typescript
+interface WorkspaceDisplayProps {
+  workspace: Workspace
+  iconSize?: number        // Default: 16
+  iconClassName?: string
+  textClassName?: string
+  className?: string
+  showTooltip?: boolean    // Default: auto (true when displayName is used or path is shortened)
+}
+```
+
+Features:
+- Respects workspace `displayName` property (takes precedence over parsed path)
+- Falls back to parsed path when no `displayName` is set
+- Displays appropriate icon based on workspace type (local, git, GitHub)
+- Shows tooltip with full path when needed
+- Consistent display across sidebar, header, and welcome page
+
+Usage:
+```tsx
+// Basic usage
+<WorkspaceDisplay workspace={workspace} />
+
+// With custom styling
+<WorkspaceDisplay
+  workspace={workspace}
+  iconSize={20}
+  iconClassName="h-5 w-5"
+  textClassName="font-semibold text-lg"
+/>
+
+// Explicit tooltip control
+<WorkspaceDisplay workspace={workspace} showTooltip={false} />
+```
+
+Path Display Logic:
+- Local paths: Shortened with `~` for home directory (e.g., `~/projects/my-app`)
+- Git repos: Shows `org/repo` format (e.g., `octocat/hello-world`)
+- DisplayName: Always takes precedence when set (e.g., "My Project")
 
 ## SidebarTree Component
 

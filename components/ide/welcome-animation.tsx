@@ -3,10 +3,7 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { Bot, ChevronDown, MessageSquare, Plus } from "lucide-react";
 import { IconRenderer } from "@/components/ide/icon-renderer";
-import {
-	getWorkspaceDisplayPath,
-	WorkspaceIcon,
-} from "@/components/ide/workspace-path";
+import { WorkspaceDisplay } from "@/components/ide/workspace-display";
 import { Button } from "@/components/ui/button";
 import {
 	DropdownMenu,
@@ -164,21 +161,12 @@ export function WelcomeSelectors({
 								>
 									{selectedWorkspace ? (
 										<>
-											<div
-												className="flex items-center gap-2 truncate"
-												title={selectedWorkspace.path}
-											>
-												<WorkspaceIcon
-													path={selectedWorkspace.path}
-													className="h-4 w-4 shrink-0"
-												/>
-												<span className="truncate">
-													{getWorkspaceDisplayPath(
-														selectedWorkspace.path,
-														selectedWorkspace.sourceType,
-													)}
-												</span>
-											</div>
+											<WorkspaceDisplay
+												workspace={selectedWorkspace}
+												iconSize={16}
+												iconClassName="h-4 w-4"
+												showTooltip={false}
+											/>
 											<ChevronDown className="h-4 w-4 shrink-0 opacity-50" />
 										</>
 									) : (
@@ -197,15 +185,13 @@ export function WelcomeSelectors({
 										key={ws.id}
 										onClick={() => onSelectWorkspace(ws.id)}
 										className="gap-2"
-										title={ws.path}
 									>
-										<WorkspaceIcon
-											path={ws.path}
-											className="h-4 w-4 shrink-0"
+										<WorkspaceDisplay
+											workspace={ws}
+											iconSize={16}
+											iconClassName="h-4 w-4"
+											showTooltip={false}
 										/>
-										<span className="truncate">
-											{getWorkspaceDisplayPath(ws.path, ws.sourceType)}
-										</span>
 									</DropdownMenuItem>
 								))}
 								{workspaces.length > 0 && <DropdownMenuSeparator />}
