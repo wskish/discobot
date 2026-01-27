@@ -46,6 +46,7 @@ type Session struct {
 	ID              string     `json:"id"`
 	ProjectID       string     `json:"projectId"`
 	Name            string     `json:"name"`
+	DisplayName     string     `json:"displayName,omitempty"`
 	Description     string     `json:"description"`
 	Timestamp       string     `json:"timestamp"`
 	Status          string     `json:"status"`
@@ -200,14 +201,21 @@ func (s *SessionService) UpdateStatus(ctx context.Context, sessionID, status str
 }
 
 // UpdateSession updates a session
-func (s *SessionService) UpdateSession(ctx context.Context, sessionID, name, status string) (*Session, error) {
+func (s *SessionService) UpdateSession(ctx context.Context, sessionID, name string, displayName *string, status string) (*Session, error) {
 	sess, err := s.store.GetSessionByID(ctx, sessionID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get session: %w", err)
 	}
 
-	sess.Name = name
-	sess.Status = status
+	if name != "" {
+		sess.Name = name
+	}
+	if displayName != nil {
+		sess.DisplayName = displayName
+	}
+	if status != "" {
+		sess.Status = status
+	}
 	if err := s.store.UpdateSession(ctx, sess); err != nil {
 		return nil, fmt.Errorf("failed to update session: %w", err)
 	}
@@ -361,6 +369,11 @@ func (s *SessionService) mapSession(sess *model.Session) *Session {
 		description = *sess.Description
 	}
 
+	displayName := ""
+	if sess.DisplayName != nil {
+		displayName = *sess.DisplayName
+	}
+
 	errorMessage := ""
 	if sess.ErrorMessage != nil {
 		errorMessage = *sess.ErrorMessage
@@ -400,6 +413,7 @@ func (s *SessionService) mapSession(sess *model.Session) *Session {
 		ID:              sess.ID,
 		ProjectID:       sess.ProjectID,
 		Name:            sess.Name,
+		DisplayName:     displayName,
 		Description:     description,
 		Timestamp:       timestamp,
 		Status:          sess.Status,

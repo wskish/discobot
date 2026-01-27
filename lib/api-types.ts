@@ -39,6 +39,8 @@ export type CommitStatus =
 export interface Session {
 	id: string;
 	name: string;
+	/** Optional display name for the session (if not set, name is used) */
+	displayName?: string;
 	description: string;
 	timestamp: string;
 	status: SessionStatus;
@@ -177,6 +179,7 @@ export interface CreateSessionRequest {
 
 export interface UpdateSessionRequest {
 	name?: string;
+	displayName?: string | null;
 	status?: SessionStatus;
 }
 

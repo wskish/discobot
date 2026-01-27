@@ -788,6 +788,12 @@ func (tc *TestClient) Put(path string, body interface{}) *http.Response {
 	return tc.do("PUT", path, body)
 }
 
+// Patch makes an authenticated PATCH request
+func (tc *TestClient) Patch(path string, body interface{}) *http.Response {
+	tc.ts.T.Helper()
+	return tc.do("PATCH", path, body)
+}
+
 // Delete makes an authenticated DELETE request
 func (tc *TestClient) Delete(path string) *http.Response {
 	tc.ts.T.Helper()

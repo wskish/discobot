@@ -230,6 +230,7 @@ type Session struct {
 	WorkspaceID     string    `gorm:"column:workspace_id;not null;type:text;index" json:"workspaceId"`
 	AgentID         *string   `gorm:"column:agent_id;type:text;index" json:"agentId,omitempty"`
 	Name            string    `gorm:"not null;type:text" json:"name"`
+	DisplayName     *string   `gorm:"column:display_name;type:text" json:"displayName,omitempty"`
 	Description     *string   `gorm:"type:text" json:"description,omitempty"`
 	Status          string    `gorm:"not null;type:text;default:initializing" json:"status"`
 	CommitStatus    string    `gorm:"column:commit_status;type:text;default:''" json:"commitStatus"`

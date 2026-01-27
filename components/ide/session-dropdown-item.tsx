@@ -2,6 +2,7 @@
 
 import { Check, Trash2, X } from "lucide-react";
 import type * as React from "react";
+import { getSessionDisplayName } from "@/components/ide/session-name";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import type { Session } from "@/lib/api-types";
 import {
@@ -41,7 +42,9 @@ export function SessionDropdownItem({
 		>
 			{statusIndicator}
 			<div className="flex-1 min-w-0">
-				<div className="truncate font-medium">{session.name}</div>
+				<div className="truncate font-medium">
+					{getSessionDisplayName(session)}
+				</div>
 				<div className="text-xs text-muted-foreground truncate">
 					{showTooltip ? tooltipText : formatTimeAgo(session.timestamp)}
 				</div>

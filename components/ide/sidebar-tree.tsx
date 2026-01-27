@@ -11,6 +11,7 @@ import {
 	Plus,
 } from "lucide-react";
 import * as React from "react";
+import { getSessionDisplayName } from "@/components/ide/session-name";
 import {
 	parseWorkspacePath,
 	WorkspaceIcon,
@@ -38,7 +39,11 @@ import {
 	STORAGE_KEYS,
 	usePersistedState,
 } from "@/lib/hooks/use-persisted-state";
-import { useDeleteSession, useSessions } from "@/lib/hooks/use-sessions";
+import {
+	useDeleteSession,
+	useSession,
+	useSessions,
+} from "@/lib/hooks/use-sessions";
 import { useWorkspaces } from "@/lib/hooks/use-workspaces";
 import { getSessionStatusIndicator } from "@/lib/session-utils";
 import { cn } from "@/lib/utils";
@@ -416,10 +421,59 @@ const SessionNode = React.memo(function SessionNode({
 	onClearSelection: () => void;
 }) {
 	const [menuOpen, setMenuOpen] = React.useState(false);
+	const [isRenaming, setIsRenaming] = React.useState(false);
+	const [editedName, setEditedName] = React.useState("");
 	const { deleteSession } = useDeleteSession();
+	const { updateSession } = useSession(session.id);
+	const inputRef = React.useRef<HTMLInputElement>(null);
 
-	const handleRename = () => {
-		console.log("Rename session:", session.id);
+	// Focus input when entering rename mode
+	React.useEffect(() => {
+		if (isRenaming && inputRef.current) {
+			inputRef.current.focus();
+			inputRef.current.select();
+		}
+	}, [isRenaming]);
+
+	const startRename = () => {
+		setEditedName(session.displayName || "");
+		setIsRenaming(true);
+		setMenuOpen(false);
+	};
+
+	const cancelRename = () => {
+		setIsRenaming(false);
+		setEditedName("");
+	};
+
+	const saveRename = async () => {
+		const trimmedName = editedName.trim();
+		// If unchanged, just cancel
+		if (trimmedName === (session.displayName || "")) {
+			cancelRename();
+			return;
+		}
+
+		try {
+			// If empty, pass null to clear the display name and revert to original name
+			await updateSession({
+				displayName: trimmedName === "" ? null : trimmedName,
+			});
+			setIsRenaming(false);
+		} catch (error) {
+			console.error("Failed to rename session:", error);
+			// Keep in rename mode on error
+		}
+	};
+
+	const handleKeyDown = (e: React.KeyboardEvent) => {
+		if (e.key === "Enter") {
+			e.preventDefault();
+			saveRename();
+		} else if (e.key === "Escape") {
+			e.preventDefault();
+			cancelRename();
+		}
 	};
 
 	const handleDelete = async () => {
@@ -436,19 +490,42 @@ const SessionNode = React.memo(function SessionNode({
 		session.status === SessionStatus.ERROR;
 	const tooltipText = getSessionHoverText(session);
 
+	// Get the display name (displayName if set, otherwise original name)
+	const displayName = getSessionDisplayName(session);
+
 	const sessionButton = (
 		<button
 			type="button"
-			onClick={() => onSessionSelect(session)}
+			onClick={() => !isRenaming && onSessionSelect(session)}
 			className="flex items-center gap-1.5 min-w-0 flex-1"
 			title={
-				!showTooltip && session.status !== "ready" ? tooltipText : undefined
+				isRenaming
+					? undefined
+					: session.displayName
+						? `${session.displayName} (${session.name})`
+						: !showTooltip && session.status !== "ready"
+							? tooltipText
+							: undefined
 			}
 		>
 			<span className="shrink-0 flex items-center justify-center w-4 h-4">
 				{getSessionStatusIndicator(session, "small")}
 			</span>
-			<span className="truncate text-sm">{session.name}</span>
+			{isRenaming ? (
+				<input
+					ref={inputRef}
+					type="text"
+					value={editedName}
+					onChange={(e) => setEditedName(e.target.value)}
+					onKeyDown={handleKeyDown}
+					onBlur={saveRename}
+					onClick={(e) => e.stopPropagation()}
+					className="flex-1 min-w-0 px-1 py-0.5 text-sm bg-background border border-border rounded focus:outline-none focus:ring-1 focus:ring-ring"
+					placeholder={session.name}
+				/>
+			) : (
+				<span className="truncate text-sm">{displayName}</span>
+			)}
 		</button>
 	);
 
@@ -460,7 +537,7 @@ const SessionNode = React.memo(function SessionNode({
 			)}
 			style={{ paddingLeft: "20px", paddingRight: "8px" }}
 		>
-			{showTooltip ? (
+			{showTooltip && !isRenaming ? (
 				<Tooltip>
 					<TooltipTrigger asChild>{sessionButton}</TooltipTrigger>
 					<TooltipContent
@@ -473,26 +550,31 @@ const SessionNode = React.memo(function SessionNode({
 			) : (
 				sessionButton
 			)}
-			<DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
-				<DropdownMenuTrigger asChild>
-					<button
-						type="button"
-						onClick={(e) => e.stopPropagation()}
-						className={cn(
-							"p-0.5 rounded hover:bg-muted shrink-0",
-							menuOpen ? "opacity-100" : "opacity-0 group-hover:opacity-100",
-						)}
-					>
-						<MoreHorizontal className="h-4 w-4 text-muted-foreground" />
-					</button>
-				</DropdownMenuTrigger>
-				<DropdownMenuContent align="end" className="w-32">
-					<DropdownMenuItem onClick={handleRename}>Rename</DropdownMenuItem>
-					<DropdownMenuItem onClick={handleDelete} className="text-destructive">
-						Delete
-					</DropdownMenuItem>
-				</DropdownMenuContent>
-			</DropdownMenu>
+			{!isRenaming && (
+				<DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
+					<DropdownMenuTrigger asChild>
+						<button
+							type="button"
+							onClick={(e) => e.stopPropagation()}
+							className={cn(
+								"p-0.5 rounded hover:bg-muted shrink-0",
+								menuOpen ? "opacity-100" : "opacity-0 group-hover:opacity-100",
+							)}
+						>
+							<MoreHorizontal className="h-4 w-4 text-muted-foreground" />
+						</button>
+					</DropdownMenuTrigger>
+					<DropdownMenuContent align="end" className="w-32">
+						<DropdownMenuItem onClick={startRename}>Rename</DropdownMenuItem>
+						<DropdownMenuItem
+							onClick={handleDelete}
+							className="text-destructive"
+						>
+							Delete
+						</DropdownMenuItem>
+					</DropdownMenuContent>
+				</DropdownMenu>
+			)}
 		</div>
 	);
 });

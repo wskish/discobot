@@ -27,15 +27,16 @@ func (h *Handler) UpdateSession(w http.ResponseWriter, r *http.Request) {
 	sessionID := chi.URLParam(r, "sessionId")
 
 	var req struct {
-		Name   string `json:"name"`
-		Status string `json:"status"`
+		Name        string  `json:"name"`
+		DisplayName *string `json:"displayName"`
+		Status      string  `json:"status"`
 	}
 	if err := h.DecodeJSON(r, &req); err != nil {
 		h.Error(w, http.StatusBadRequest, "Invalid request body")
 		return
 	}
 
-	session, err := h.sessionService.UpdateSession(r.Context(), sessionID, req.Name, req.Status)
+	session, err := h.sessionService.UpdateSession(r.Context(), sessionID, req.Name, req.DisplayName, req.Status)
 	if err != nil {
 		h.Error(w, http.StatusInternalServerError, "Failed to update session")
 		return

@@ -262,10 +262,48 @@ All API routes require authentication via session cookie (`octobot_session`) unl
 | GET | `/api/projects/{projectId}/workspaces/{workspaceId}/sessions` | List sessions in workspace | ✅ |
 | POST | `/api/projects/{projectId}/workspaces/{workspaceId}/sessions` | Create session | ✅ |
 | GET | `/api/projects/{projectId}/sessions/{sessionId}` | Get session | ✅ |
-| PUT | `/api/projects/{projectId}/sessions/{sessionId}` | Update session | ✅ |
+| PATCH | `/api/projects/{projectId}/sessions/{sessionId}` | Update session | ✅ |
 | DELETE | `/api/projects/{projectId}/sessions/{sessionId}` | Delete session | ✅ |
 | GET | `/api/projects/{projectId}/sessions/{sessionId}/files` | Get session files | 🚧 |
 | GET | `/api/projects/{projectId}/sessions/{sessionId}/messages` | List messages | 🚧 |
+
+#### Session Response
+
+```json
+{
+  "id": "string",
+  "projectId": "string",
+  "workspaceId": "string",
+  "agentId": "string",
+  "name": "string",              // Original name derived from first message (preserved)
+  "displayName": "string",       // Optional: custom display name (if set, shown in UI)
+  "description": "string",
+  "timestamp": "string",         // ISO 8601 timestamp
+  "status": "string",            // Session lifecycle status
+  "commitStatus": "string",      // Commit operation status
+  "commitError": "string",       // Error message if commit failed
+  "baseCommit": "string",        // Workspace commit SHA when commit started
+  "appliedCommit": "string",     // Final commit SHA after patches applied
+  "errorMessage": "string",      // Error message if status is "error"
+  "files": []                    // File tree with diffs
+}
+```
+
+**Session Name vs Display Name:**
+- `name`: Automatically derived from the first user message (up to 50 chars). This field is **preserved** and never changes after session creation.
+- `displayName`: Optional user-provided custom name. If set, the UI shows this instead of `name`. Can be cleared by setting to `null` or empty string, which reverts to showing `name`.
+
+#### Update Session Request
+
+```json
+{
+  "name": "string",              // Optional: update session name (rarely used)
+  "displayName": "string|null",  // Optional: set custom display name, or null to clear
+  "status": "string"             // Optional: update session status
+}
+```
+
+**Typical usage**: Only `displayName` is typically updated by users to customize how a session appears in the UI.
 
 ### Agents
 
