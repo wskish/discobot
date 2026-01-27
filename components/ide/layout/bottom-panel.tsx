@@ -210,7 +210,7 @@ export function BottomPanel({
 	return (
 		<div className="flex flex-col overflow-hidden" style={style}>
 			{/* Bottom panel header */}
-			<div className="h-10 flex items-center justify-between bg-muted/30 border-b border-border shrink-0">
+			<div className="h-10 flex items-center justify-between bg-background border-b border-border shrink-0">
 				<div className="flex items-center gap-0 flex-1 min-w-0 h-full overflow-hidden">
 					<Button
 						variant={view === "chat" ? "secondary" : "ghost"}
