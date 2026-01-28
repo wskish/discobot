@@ -353,6 +353,7 @@ export function DiffContent({ file }: DiffContentProps) {
 								enabled: true,
 								minimumLineCount: 3,
 								contextLineCount: 3,
+								revealLineCount: 0, // Start with regions collapsed
 							},
 							diffWordWrap: "on",
 						}}
@@ -587,6 +588,7 @@ function FileContentView({
 										enabled: true,
 										minimumLineCount: 3,
 										contextLineCount: 3,
+										revealLineCount: 0, // Start with regions collapsed
 									},
 									diffWordWrap: "on",
 								}}
