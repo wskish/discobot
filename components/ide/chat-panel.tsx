@@ -94,9 +94,10 @@ import {
 	SessionStatus as SessionStatusConstants,
 } from "@/lib/api-constants";
 import type { Agent, SessionStatus } from "@/lib/api-types";
-import { useAgentContext } from "@/lib/contexts/agent-context";
 import { useDialogContext } from "@/lib/contexts/dialog-context";
 import { useMainPanelContext } from "@/lib/contexts/main-panel-context";
+import { useAgentTypes } from "@/lib/hooks/use-agent-types";
+import { useAgents } from "@/lib/hooks/use-agents";
 import { useLazyRender } from "@/lib/hooks/use-lazy-render";
 import { useMessages } from "@/lib/hooks/use-messages";
 import { usePromptHistory } from "@/lib/hooks/use-prompt-history";
@@ -559,7 +560,8 @@ const ChatInputArea = React.memo(
 export function ChatPanel({ className }: ChatPanelProps) {
 	// Get data from contexts
 	const { workspaces } = useWorkspaces();
-	const { agents, agentTypes, selectedAgentId } = useAgentContext();
+	const { agents } = useAgents();
+	const { agentTypes } = useAgentTypes();
 	const {
 		view,
 		selectedSession,
@@ -611,7 +613,7 @@ export function ChatPanel({ className }: ChatPanelProps) {
 		);
 	const [localSelectedAgentId, setLocalSelectedAgentId] = React.useState<
 		string | null
-	>(selectedAgentId || (agents.length > 0 ? agents[0].id : null));
+	>(preselectedAgentId || (agents.length > 0 ? agents[0].id : null));
 	const [isShimmering, setIsShimmering] = React.useState(false);
 
 	// Track workspace selection trigger for shimmer effect
@@ -812,12 +814,6 @@ export function ChatPanel({ className }: ChatPanelProps) {
 			setLocalSelectedAgentId(preselectedAgentId);
 		}
 	}, [preselectedAgentId]);
-
-	React.useEffect(() => {
-		if (selectedAgentId) {
-			setLocalSelectedAgentId(selectedAgentId);
-		}
-	}, [selectedAgentId]);
 
 	// Auto-select first workspace when workspaces become available and nothing is selected
 	React.useEffect(() => {

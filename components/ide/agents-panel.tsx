@@ -17,8 +17,8 @@ import {
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import type { Agent, Icon } from "@/lib/api-types";
-import { useAgentContext } from "@/lib/contexts/agent-context";
 import { useDialogContext } from "@/lib/contexts/dialog-context";
+import { useAgentTypes } from "@/lib/hooks/use-agent-types";
 import { useAgents } from "@/lib/hooks/use-agents";
 import { cn } from "@/lib/utils";
 
@@ -35,9 +35,12 @@ export function AgentsPanel({
 	className,
 	style,
 }: AgentsPanelProps) {
-	const { agents, agentTypes, selectedAgentId, selectAgent } =
-		useAgentContext();
+	const { agents } = useAgents();
+	const { agentTypes } = useAgentTypes();
 	const { agentDialog } = useDialogContext();
+	const [selectedAgentId, setSelectedAgentId] = React.useState<string | null>(
+		null,
+	);
 
 	return (
 		<div
@@ -92,7 +95,7 @@ export function AgentsPanel({
 								agent={agent}
 								icons={agentType?.icons}
 								isSelected={selectedAgentId === agent.id}
-								onSelect={() => selectAgent(agent.id)}
+								onSelect={() => setSelectedAgentId(agent.id)}
 								onConfigure={() => agentDialog.open({ agent })}
 							/>
 						);

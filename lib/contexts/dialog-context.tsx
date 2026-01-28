@@ -10,6 +10,8 @@ import type {
 	SupportedAgentType,
 	Workspace,
 } from "@/lib/api-types";
+import { useAgentTypes } from "@/lib/hooks/use-agent-types";
+import { useAgents } from "@/lib/hooks/use-agents";
 import { useAuthProviders } from "@/lib/hooks/use-auth-providers";
 import { useCredentials } from "@/lib/hooks/use-credentials";
 import {
@@ -17,7 +19,6 @@ import {
 	useDialogControl,
 } from "@/lib/hooks/use-dialog-control";
 import { useWorkspaces } from "@/lib/hooks/use-workspaces";
-import { useAgentContext } from "./agent-context";
 import { useMainPanelContext } from "./main-panel-context";
 
 // Dialog data types
@@ -84,7 +85,8 @@ interface DialogProviderProps {
 export function DialogProvider({ children }: DialogProviderProps) {
 	const mainPanel = useMainPanelContext();
 	const workspace = useWorkspaces();
-	const agent = useAgentContext();
+	const { createAgent, updateAgent, mutate: mutateAgents } = useAgents();
+	const { agentTypes } = useAgentTypes();
 	const { authProviders } = useAuthProviders();
 	const { credentials } = useCredentials();
 
@@ -141,17 +143,14 @@ export function DialogProvider({ children }: DialogProviderProps) {
 		async (agentData: CreateAgentRequest) => {
 			const editingAgent = agentDialog.data?.agent;
 			if (editingAgent) {
-				await agent.updateAgent(editingAgent.id, agentData);
-				agent.mutate();
+				await updateAgent(editingAgent.id, agentData);
+				mutateAgents();
 			} else {
-				const newAgent = await agent.createAgent(agentData);
-				if (newAgent) {
-					agent.selectAgent(newAgent.id);
-				}
+				await createAgent(agentData);
 			}
 			agentDialog.close();
 		},
-		[agentDialog, agent],
+		[agentDialog, createAgent, updateAgent, mutateAgents],
 	);
 
 	const handleConfirmDeleteWorkspace = React.useCallback(
@@ -194,14 +193,14 @@ export function DialogProvider({ children }: DialogProviderProps) {
 				}
 			} else {
 				// "Free" selected or already has credentials - create agent directly
-				const newAgent = await agent.createAgent({
+				const newAgent = await createAgent({
 					name: agentType.name,
 					description: agentType.description,
 					agentType: agentType.id,
 				});
 				// Make it the default agent
 				await api.setDefaultAgent(newAgent.id);
-				agent.mutate();
+				mutateAgents();
 				// Create workspace if provided
 				if (workspaceData) {
 					const ws = await workspace.createWorkspace(workspaceData);
@@ -211,7 +210,7 @@ export function DialogProvider({ children }: DialogProviderProps) {
 				}
 			}
 		},
-		[workspace, agent, mainPanel, credentialsDialog],
+		[workspace, createAgent, mutateAgents, mainPanel, credentialsDialog],
 	);
 
 	const closeSystemRequirements = React.useCallback(() => {

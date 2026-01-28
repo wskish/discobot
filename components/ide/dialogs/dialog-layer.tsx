@@ -1,6 +1,7 @@
 import { lazy, Suspense } from "react";
-import { useAgentContext } from "@/lib/contexts/agent-context";
 import { useDialogContext } from "@/lib/contexts/dialog-context";
+import { useAgentTypes } from "@/lib/hooks/use-agent-types";
+import { useAgents } from "@/lib/hooks/use-agents";
 import { useWorkspaces } from "@/lib/hooks/use-workspaces";
 
 // Lazy load dialogs - not needed on initial render
@@ -38,7 +39,8 @@ const WelcomeModal = lazy(() =>
 
 export function DialogLayer() {
 	const { workspaces } = useWorkspaces();
-	const { agents, agentTypes, isLoading: agentsLoading } = useAgentContext();
+	const { agents, isLoading: agentsLoading } = useAgents();
+	const { agentTypes } = useAgentTypes();
 	const dialogs = useDialogContext();
 
 	return (
