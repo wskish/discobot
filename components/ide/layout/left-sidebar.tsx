@@ -1,4 +1,3 @@
-
 import * as React from "react";
 import { AgentsPanel } from "@/components/ide/agents-panel";
 import { ResizeHandle } from "@/components/ide/resize-handle";

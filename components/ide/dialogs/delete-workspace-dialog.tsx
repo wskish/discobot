@@ -1,4 +1,3 @@
-
 import { AlertTriangle } from "lucide-react";
 import * as React from "react";
 import { getWorkspaceShortName } from "@/components/ide/workspace-path";

@@ -1,4 +1,3 @@
-
 import {
 	ChevronDown,
 	Key,
@@ -9,8 +8,8 @@ import {
 import * as React from "react";
 import { CredentialsDialog } from "@/components/ide/dialogs/credentials-dialog";
 import { DiscobotBrand } from "@/components/ide/discobot-brand";
-import { getSessionDisplayName } from "@/components/ide/session-name";
 import { SessionDropdownItem } from "@/components/ide/session-dropdown-item";
+import { getSessionDisplayName } from "@/components/ide/session-name";
 import { ThemeToggle } from "@/components/ide/theme-toggle";
 import { WindowControls } from "@/components/ide/window-controls";
 import { WorkspaceDisplay } from "@/components/ide/workspace-display";

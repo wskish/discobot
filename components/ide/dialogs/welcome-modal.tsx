@@ -1,4 +1,3 @@
-
 import { ArrowLeft, ChevronDown, ChevronRight, Sparkles } from "lucide-react";
 import * as React from "react";
 import { Button } from "@/components/ui/button";
@@ -17,9 +16,9 @@ import type {
 } from "@/lib/api-types";
 import { STORAGE_KEYS } from "@/lib/hooks/use-persisted-state";
 import { cn } from "@/lib/utils";
-import { IconRenderer } from "../icon-renderer";
-import { DiscobotLogo } from "../discobot-logo";
 import { DiscobotBrand } from "../discobot-brand";
+import { DiscobotLogo } from "../discobot-logo";
+import { IconRenderer } from "../icon-renderer";
 import { WorkspaceForm, type WorkspaceFormRef } from "../workspace-form";
 
 interface WelcomeModalProps {

@@ -1,4 +1,3 @@
-
 import "@xterm/xterm/css/xterm.css";
 
 import { MessageSquare } from "lucide-react";

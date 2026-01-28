@@ -1,4 +1,3 @@
-
 import { AnimatePresence, motion } from "framer-motion";
 import { Bot, ChevronDown, MessageSquare, Plus } from "lucide-react";
 import { IconRenderer } from "@/components/ide/icon-renderer";

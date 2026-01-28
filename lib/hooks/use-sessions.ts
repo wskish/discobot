@@ -1,4 +1,3 @@
-
 import useSWR, { mutate } from "swr";
 import { api } from "../api-client";
 import type { Session, UpdateSessionRequest } from "../api-types";

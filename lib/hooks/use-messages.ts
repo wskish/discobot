@@ -1,4 +1,3 @@
-
 import type { UIMessage } from "ai";
 import useSWR from "swr";
 import { api } from "../api-client";

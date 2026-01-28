@@ -1,4 +1,3 @@
-
 import type * as React from "react";
 import { MainPanelProvider } from "./main-panel-context";
 import { ProjectEventsProvider } from "./project-events-context";

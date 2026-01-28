@@ -1,4 +1,3 @@
-
 import { LoaderIcon, MicIcon, SquareIcon } from "lucide-react";
 import {
 	type ComponentProps,

@@ -1,4 +1,3 @@
-
 import {
 	ChevronRightIcon,
 	FileIcon,

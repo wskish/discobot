@@ -1,4 +1,3 @@
-
 import * as React from "react";
 import { DiffContent } from "@/components/ide/diff-content";
 import { FilePanel } from "@/components/ide/file-panel";

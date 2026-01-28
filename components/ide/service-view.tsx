@@ -1,4 +1,3 @@
-
 import { Globe, Terminal } from "lucide-react";
 import * as React from "react";
 import { ServiceOutput } from "@/components/ide/service-output";

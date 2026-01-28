@@ -1,4 +1,3 @@
-
 import { Download, Maximize2, X, ZoomIn, ZoomOut } from "lucide-react";
 import * as React from "react";
 import { createPortal } from "react-dom";

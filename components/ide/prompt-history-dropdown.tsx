@@ -1,4 +1,3 @@
-
 import { ChevronUpIcon, HistoryIcon, PinIcon } from "lucide-react";
 import { memo, type RefObject, useEffect, useRef } from "react";
 import { MAX_VISIBLE_HISTORY } from "@/lib/hooks/use-prompt-history";

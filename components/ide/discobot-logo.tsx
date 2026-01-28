@@ -1,4 +1,3 @@
-
 import { cn } from "@/lib/utils";
 
 interface DiscobotLogoProps {
@@ -25,13 +24,7 @@ export function DiscobotLogo({ className, size = 24 }: DiscobotLogoProps) {
 			<title>Discobot logo</title>
 
 			{/* Disco ball sphere */}
-			<circle
-				cx="24"
-				cy="26"
-				r="18"
-				fill="currentColor"
-				opacity="0.15"
-			/>
+			<circle cx="24" cy="26" r="18" fill="currentColor" opacity="0.15" />
 			<circle
 				cx="24"
 				cy="26"
@@ -43,24 +36,9 @@ export function DiscobotLogo({ className, size = 24 }: DiscobotLogoProps) {
 			/>
 
 			{/* Disco ball mirror tiles - horizontal lines */}
-			<path
-				d="M6 26 H42"
-				stroke="currentColor"
-				strokeWidth="1"
-				opacity="0.5"
-			/>
-			<path
-				d="M8 18 H40"
-				stroke="currentColor"
-				strokeWidth="1"
-				opacity="0.5"
-			/>
-			<path
-				d="M8 34 H40"
-				stroke="currentColor"
-				strokeWidth="1"
-				opacity="0.5"
-			/>
+			<path d="M6 26 H42" stroke="currentColor" strokeWidth="1" opacity="0.5" />
+			<path d="M8 18 H40" stroke="currentColor" strokeWidth="1" opacity="0.5" />
+			<path d="M8 34 H40" stroke="currentColor" strokeWidth="1" opacity="0.5" />
 
 			{/* Disco ball mirror tiles - vertical curves */}
 			<path
@@ -70,12 +48,7 @@ export function DiscobotLogo({ className, size = 24 }: DiscobotLogoProps) {
 				opacity="0.5"
 				fill="none"
 			/>
-			<path
-				d="M24 8 V44"
-				stroke="currentColor"
-				strokeWidth="1"
-				opacity="0.5"
-			/>
+			<path d="M24 8 V44" stroke="currentColor" strokeWidth="1" opacity="0.5" />
 			<path
 				d="M34 8.5 Q34 26 34 43.5"
 				stroke="currentColor"
@@ -125,14 +98,7 @@ export function DiscobotLogo({ className, size = 24 }: DiscobotLogoProps) {
 				strokeWidth="2"
 				strokeLinecap="round"
 			/>
-			<rect
-				x="22"
-				y="2"
-				width="4"
-				height="3"
-				rx="1"
-				fill="currentColor"
-			/>
+			<rect x="22" y="2" width="4" height="3" rx="1" fill="currentColor" />
 
 			{/* Robot eyes - visor style */}
 			<rect

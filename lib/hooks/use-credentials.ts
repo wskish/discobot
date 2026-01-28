@@ -1,4 +1,3 @@
-
 import useSWR from "swr";
 import { api } from "../api-client";
 import type { CreateCredentialRequest } from "../api-types";

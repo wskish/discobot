@@ -1,4 +1,3 @@
-
 import { Check, Trash2, X } from "lucide-react";
 import type * as React from "react";
 import { getSessionDisplayName } from "@/components/ide/session-name";

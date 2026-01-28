@@ -1,4 +1,3 @@
-
 import { useEffect } from "react";
 
 // This component suppresses the benign "ResizeObserver loop" error
