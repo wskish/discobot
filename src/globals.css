@@ -197,16 +197,3 @@
 	app-region: no-drag;
 }
 
-/* Blur effect at top of chat input area */
-.chat-input-blur::before {
-	content: "";
-	position: absolute;
-	top: -40px;
-	left: 0;
-	right: 0;
-	height: 40px;
-	background: linear-gradient(to top, var(--background), transparent);
-	backdrop-filter: blur(8px);
-	-webkit-backdrop-filter: blur(8px);
-	pointer-events: none;
-}
