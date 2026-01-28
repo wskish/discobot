@@ -13,11 +13,9 @@ import { OctobotLogo } from "@/components/ide/octobot-logo";
 import { SessionDropdownItem } from "@/components/ide/session-dropdown-item";
 import { ThemeToggle } from "@/components/ide/theme-toggle";
 import { WindowControls } from "@/components/ide/window-controls";
+import { WorkspaceDisplay } from "@/components/ide/workspace-display";
 import { WorkspaceDropdownItem } from "@/components/ide/workspace-dropdown-item";
-import {
-	getWorkspaceDisplayPath,
-	WorkspaceIcon,
-} from "@/components/ide/workspace-path";
+import { getWorkspaceDisplayPath } from "@/components/ide/workspace-path";
 import { Button } from "@/components/ui/button";
 import {
 	DropdownMenu,
@@ -200,19 +198,13 @@ export function Header({ leftSidebarOpen, onToggleSidebar }: HeaderProps) {
 							>
 								{sessionWorkspace ? (
 									<>
-										<WorkspaceIcon
-											path={sessionWorkspace.path}
-											className="h-4 w-4 shrink-0"
+										<WorkspaceDisplay
+											workspace={sessionWorkspace}
+											iconSize={16}
+											iconClassName="h-4 w-4"
+											textClassName="truncate max-w-[150px]"
+											showTooltip={true}
 										/>
-										<span
-											className="truncate max-w-[150px]"
-											title={sessionWorkspace.path}
-										>
-											{getWorkspaceDisplayPath(
-												sessionWorkspace.path,
-												sessionWorkspace.sourceType,
-											)}
-										</span>
 									</>
 								) : (
 									<span className="text-muted-foreground">

@@ -2,10 +2,7 @@
 
 import { Check, Trash2, X } from "lucide-react";
 import type * as React from "react";
-import {
-	getWorkspaceDisplayPath,
-	WorkspaceIcon,
-} from "@/components/ide/workspace-path";
+import { WorkspaceDisplay } from "@/components/ide/workspace-display";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import type { Workspace } from "@/lib/api-types";
 
@@ -33,10 +30,14 @@ export function WorkspaceDropdownItem({
 			onClick={onSelect}
 			className="group/item flex items-center gap-2"
 		>
-			<WorkspaceIcon path={workspace.path} className="h-4 w-4 shrink-0" />
-			<span className="truncate flex-1" title={workspace.path}>
-				{getWorkspaceDisplayPath(workspace.path, workspace.sourceType)}
-			</span>
+			<WorkspaceDisplay
+				workspace={workspace}
+				iconSize={16}
+				iconClassName="h-4 w-4"
+				textClassName="truncate"
+				className="flex-1"
+				showTooltip={false}
+			/>
 			{isSelected && !isConfirming && (
 				<Check className="h-4 w-4 shrink-0 text-primary" />
 			)}
