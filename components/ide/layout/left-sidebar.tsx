@@ -43,19 +43,20 @@ export function LeftSidebar({ isOpen, width, onResize }: LeftSidebarProps) {
 	}
 
 	return (
-		<div className="flex">
+		<div className="flex relative">
 			<aside
 				ref={sidebarRef}
-				className="border-r border-border bg-sidebar overflow-hidden flex flex-col"
+				className="border-r border-border bg-sidebar overflow-hidden flex flex-col relative"
 				style={{ width }}
 			>
 				{/* Workspaces section - takes remaining space */}
-				<SidebarTree className="flex-1 min-h-0" />
-
-				{/* Resize handle between workspaces and agents */}
-				{!agentsPanelMinimized && (
-					<ResizeHandle onResize={handleAgentsPanelResize} />
-				)}
+				<div className="flex-1 min-h-0 relative">
+					<SidebarTree className="h-full" />
+					{/* Resize handle between workspaces and agents */}
+					{!agentsPanelMinimized && (
+						<ResizeHandle onResize={handleAgentsPanelResize} />
+					)}
+				</div>
 
 				{/* Agents section - 20% default */}
 				<AgentsPanel
@@ -67,10 +68,10 @@ export function LeftSidebar({ isOpen, width, onResize }: LeftSidebarProps) {
 						agentsPanelMinimized ? {} : { height: `${agentsPanelHeight}%` }
 					}
 				/>
-			</aside>
 
-			{/* Vertical resize handle for sidebar width */}
-			<ResizeHandle orientation="vertical" onResize={onResize} />
+				{/* Vertical resize handle for sidebar width */}
+				<ResizeHandle orientation="vertical" onResize={onResize} />
+			</aside>
 		</div>
 	);
 }

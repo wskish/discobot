@@ -213,7 +213,7 @@ export function MainContent({
 
 			{/* Right - File panel (only show when session is selected) */}
 			{showFilePanel && rightSidebarOpen && (
-				<>
+				<div className="relative">
 					<ResizeHandle
 						orientation="vertical"
 						onResize={onRightSidebarResize ?? (() => {})}
@@ -225,7 +225,7 @@ export function MainContent({
 						className="overflow-hidden"
 						style={{ width: rightSidebarWidth }}
 					/>
-				</>
+				</div>
 			)}
 		</>
 	);

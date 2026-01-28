@@ -61,9 +61,13 @@ export function ResizeHandle({
 			aria-valuemax={100}
 			tabIndex={0}
 			className={cn(
-				"transition-colors hover:bg-primary/20",
-				isVertical ? "w-1 cursor-col-resize" : "h-1 cursor-row-resize",
+				"absolute z-10 transition-colors",
+				isVertical
+					? "top-0 bottom-0 -right-0.5 w-1 hover:w-2 cursor-col-resize"
+					: "left-0 right-0 -bottom-0.5 h-1 hover:h-2 cursor-row-resize",
+				"hover:bg-primary/20",
 				isDragging && "bg-primary/30",
+				isDragging && (isVertical ? "w-2" : "h-2"),
 				className,
 			)}
 			onMouseDown={handleMouseDown}
