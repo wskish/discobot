@@ -211,6 +211,12 @@ function getStatusDisplay(status: SessionStatus): {
 				icon: <CheckCircle className="h-4 w-4 text-green-500" />,
 				isLoading: false,
 			};
+		case "running":
+			return {
+				text: "Running",
+				icon: <CheckCircle className="h-4 w-4 text-green-500" />,
+				isLoading: false,
+			};
 		case "stopped":
 			return {
 				text: "Session stopped",
@@ -961,9 +967,10 @@ export function ChatPanel({ className }: ChatPanelProps) {
 			{/* Welcome header - animated in/out based on mode */}
 			<WelcomeHeader show={mode === "welcome" && !sessionNotFound} />
 
-			{/* Session status header - shows when not ready */}
+			{/* Session status header - shows when not ready or running */}
 			{selectedSession &&
-				selectedSession.status !== SessionStatusConstants.READY && (
+				selectedSession.status !== SessionStatusConstants.READY &&
+				selectedSession.status !== SessionStatusConstants.RUNNING && (
 					<div
 						className={cn(
 							"flex items-center gap-2 py-3 px-4 border-b",
