@@ -60,6 +60,7 @@ export const STORAGE_KEYS = {
 	// Session visibility
 	SHOW_CLOSED_SESSIONS: "octobot:showClosedSessions",
 	// Per-session state (sessionStorage)
+	ACTIVE_VIEW: "octobot:activeView",
 	OPEN_FILE_PATHS: "octobot:openFilePaths",
 	ACTIVE_FILE_PATH: "octobot:activeFilePath",
 	FILE_VIEW_MODES: "octobot:fileViewModes",

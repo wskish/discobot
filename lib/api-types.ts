@@ -524,8 +524,8 @@ export interface ServiceOutputEvent {
 // UI Types
 // ============================================================================
 
-/** Bottom panel view type - includes chat, terminal, services, and file paths */
-export type BottomView =
+/** Active view type in the main panel - includes chat, terminal, services, and file paths */
+export type ActiveView =
 	| "chat"
 	| "terminal"
 	| `service:${string}`

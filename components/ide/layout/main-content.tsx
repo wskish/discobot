@@ -4,7 +4,7 @@ import { FilePanel } from "@/components/ide/file-panel";
 import { ResizeHandle } from "@/components/ide/resize-handle";
 import { SessionListTable } from "@/components/ide/session-list-table";
 import { getWorkspaceDisplayPath } from "@/components/ide/workspace-path";
-import type { BottomView, FileNode, FileStatus } from "@/lib/api-types";
+import type { ActiveView, FileNode, FileStatus } from "@/lib/api-types";
 import { useMainPanelContext } from "@/lib/contexts/main-panel-context";
 import {
 	STORAGE_KEYS,
@@ -12,7 +12,7 @@ import {
 } from "@/lib/hooks/use-persisted-state";
 import { useSessionFiles } from "@/lib/hooks/use-session-files";
 import { useWorkspaces } from "@/lib/hooks/use-workspaces";
-import { BottomPanel } from "./bottom-panel";
+import { MainPanel } from "./main-panel";
 
 interface MainContentProps {
 	rightSidebarOpen?: boolean;
@@ -46,24 +46,34 @@ export function MainContent({
 		useMainPanelContext();
 	const { workspaces } = useWorkspaces();
 
-	const [bottomView, setBottomView] = React.useState<BottomView>("chat");
-
-	// Helper to update view when file is selected
-	const setBottomViewToFile = React.useCallback((filePath: string) => {
-		setBottomView(`file:${filePath}`);
-	}, []);
-
 	// Get current session ID for keying storage
 	const currentSessionId = selectedSession?.id ?? null;
 
-	// Persist open file paths and active file in sessionStorage (per-tab, per-session)
-	// Key by session ID to prevent file list conflicts when switching sessions
+	// Persist active view, open file paths, and active file in sessionStorage (per-tab, per-session)
+	// Key by session ID to prevent state conflicts when switching sessions
+	const activeViewStorageKey = currentSessionId
+		? `${STORAGE_KEYS.ACTIVE_VIEW}:${currentSessionId}`
+		: STORAGE_KEYS.ACTIVE_VIEW;
 	const sessionStorageKey = currentSessionId
 		? `${STORAGE_KEYS.OPEN_FILE_PATHS}:${currentSessionId}`
 		: STORAGE_KEYS.OPEN_FILE_PATHS;
 	const activeFileStorageKey = currentSessionId
 		? `${STORAGE_KEYS.ACTIVE_FILE_PATH}:${currentSessionId}`
 		: STORAGE_KEYS.ACTIVE_FILE_PATH;
+
+	const [activeView, setActiveView] = usePersistedState<ActiveView>(
+		activeViewStorageKey,
+		"chat",
+		"session",
+	);
+
+	// Helper to update view when file is selected
+	const setActiveViewToFile = React.useCallback(
+		(filePath: string) => {
+			setActiveView(`file:${filePath}`);
+		},
+		[setActiveView],
+	);
 
 	const [openFilePaths, setOpenFilePaths] = usePersistedState<string[]>(
 		sessionStorageKey,
@@ -109,9 +119,9 @@ export function MainContent({
 				return prev;
 			});
 			setActiveFilePath(path);
-			setBottomViewToFile(path);
+			setActiveViewToFile(path);
 		},
-		[setOpenFilePaths, setActiveFilePath, setBottomViewToFile],
+		[setOpenFilePaths, setActiveFilePath, setActiveViewToFile],
 	);
 
 	const handleTabClose = React.useCallback(
@@ -123,22 +133,28 @@ export function MainContent({
 					if (newOpenPaths.length > 0) {
 						const nextFile = newOpenPaths[newOpenPaths.length - 1];
 						setActiveFilePath(nextFile);
-						setBottomViewToFile(nextFile);
+						setActiveViewToFile(nextFile);
 					} else {
 						setActiveFilePath(null);
-						setBottomView("chat");
+						setActiveView("chat");
 					}
 				}
 
 				return newOpenPaths;
 			});
 		},
-		[activeFilePath, setOpenFilePaths, setActiveFilePath, setBottomViewToFile],
+		[
+			activeFilePath,
+			setOpenFilePaths,
+			setActiveFilePath,
+			setActiveViewToFile,
+			setActiveView,
+		],
 	);
 
-	// Extract active file path from bottomView
-	const activeFilePathFromView = bottomView.startsWith("file:")
-		? bottomView.slice(5)
+	// Extract active file path from activeView
+	const activeFilePathFromView = activeView.startsWith("file:")
+		? activeView.slice(5)
 		: null;
 
 	// Sync activeFilePath with the view when a file is shown
@@ -189,9 +205,9 @@ export function MainContent({
 						showClosedSessions={showClosedSessions}
 					/>
 				) : (
-					<BottomPanel
-						view={bottomView}
-						onViewChange={setBottomView}
+					<MainPanel
+						view={activeView}
+						onViewChange={setActiveView}
 						rightSidebarOpen={rightSidebarOpen}
 						onToggleRightSidebar={onToggleRightSidebar}
 						changedFilesCount={changedCount}

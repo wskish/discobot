@@ -24,14 +24,14 @@ import {
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api-client";
 import { CommitStatus } from "@/lib/api-constants";
-import type { BottomView, FileNode } from "@/lib/api-types";
+import type { ActiveView, FileNode } from "@/lib/api-types";
 import { useMainPanelContext } from "@/lib/contexts/main-panel-context";
 import { useServices } from "@/lib/hooks/use-services";
 import { cn } from "@/lib/utils";
 
-interface BottomPanelProps {
-	view: BottomView;
-	onViewChange: (view: BottomView) => void;
+interface MainPanelProps {
+	view: ActiveView;
+	onViewChange: (view: ActiveView) => void;
 	rightSidebarOpen?: boolean;
 	onToggleRightSidebar?: () => void;
 	changedFilesCount?: number;
@@ -40,7 +40,7 @@ interface BottomPanelProps {
 	diffContent?: React.ReactNode;
 }
 
-export function BottomPanel({
+export function MainPanel({
 	view,
 	onViewChange,
 	rightSidebarOpen,
@@ -49,7 +49,7 @@ export function BottomPanel({
 	openFiles = [],
 	onTabClose,
 	diffContent,
-}: BottomPanelProps) {
+}: MainPanelProps) {
 	const { getSelectedSessionId, selectedSession } = useMainPanelContext();
 	const selectedSessionId = getSelectedSessionId();
 
@@ -196,7 +196,7 @@ export function BottomPanel({
 
 	return (
 		<div className="flex flex-col overflow-hidden flex-1">
-			{/* Bottom panel header */}
+			{/* Main panel header with view tabs */}
 			<div className="h-10 flex items-center justify-between bg-background border-b border-border shrink-0">
 				<div className="flex items-center gap-0 flex-1 min-w-0 h-full overflow-hidden">
 					<Button
