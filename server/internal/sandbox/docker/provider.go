@@ -394,30 +394,47 @@ func (p *Provider) Stop(ctx context.Context, sessionID string, timeout time.Dura
 	return nil
 }
 
-// Remove removes a sandbox container but preserves the data volume.
-// Data volumes (octobot-data-*) are left for the user to clean up manually if needed.
-func (p *Provider) Remove(ctx context.Context, sessionID string) error {
+// Remove removes a sandbox container and optionally its associated data volume.
+// By default, data volumes are preserved (useful for rebuilds).
+// Pass sandbox.RemoveVolumes() to delete volumes (for session deletion).
+func (p *Provider) Remove(ctx context.Context, sessionID string, opts ...sandbox.RemoveOption) error {
+	cfg := sandbox.ParseRemoveOptions(opts)
+
 	containerID, err := p.getContainerID(ctx, sessionID)
 	if err != nil {
-		if err == sandbox.ErrNotFound {
-			return nil // Already removed
+		if err != sandbox.ErrNotFound {
+			return err
 		}
-		return err
+		// Container not found, but continue to clean up volume if requested
+		containerID = ""
 	}
 
-	removeOptions := containerTypes.RemoveOptions{
-		Force:         true,
-		RemoveVolumes: true, // Only removes anonymous volumes, not our named data volume
+	if containerID != "" {
+		removeOptions := containerTypes.RemoveOptions{
+			Force:         true,
+			RemoveVolumes: true, // Only removes anonymous volumes, not named volumes
+		}
+
+		if err := p.client.ContainerRemove(ctx, containerID, removeOptions); err != nil {
+			return fmt.Errorf("failed to remove sandbox container: %w", err)
+		}
+
+		// Remove from mapping
+		p.containerIDsMu.Lock()
+		delete(p.containerIDs, sessionID)
+		p.containerIDsMu.Unlock()
 	}
 
-	if err := p.client.ContainerRemove(ctx, containerID, removeOptions); err != nil {
-		return fmt.Errorf("failed to remove sandbox: %w", err)
+	// Explicitly remove the named data volume if requested
+	if cfg.RemoveVolumes {
+		dataVolName := volumeName(sessionID)
+		if err := p.client.VolumeRemove(ctx, dataVolName, true); err != nil {
+			// Don't fail if volume doesn't exist
+			if !cerrdefs.IsNotFound(err) {
+				return fmt.Errorf("failed to remove data volume %s: %w", dataVolName, err)
+			}
+		}
 	}
-
-	// Remove from mapping
-	p.containerIDsMu.Lock()
-	delete(p.containerIDs, sessionID)
-	p.containerIDsMu.Unlock()
 
 	return nil
 }

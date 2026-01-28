@@ -157,7 +157,7 @@ func (m *mockSandboxProvider) Stop(_ context.Context, _ string, _ time.Duration)
 	return nil
 }
 
-func (m *mockSandboxProvider) Remove(_ context.Context, _ string) error {
+func (m *mockSandboxProvider) Remove(_ context.Context, _ string, _ ...sandbox.RemoveOption) error {
 	return nil
 }
 

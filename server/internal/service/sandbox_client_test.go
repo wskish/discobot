@@ -47,7 +47,7 @@ func (m *mockSandboxProvider) Stop(_ context.Context, _ string, _ time.Duration)
 	return nil
 }
 
-func (m *mockSandboxProvider) Remove(_ context.Context, _ string) error {
+func (m *mockSandboxProvider) Remove(_ context.Context, _ string, _ ...sandbox.RemoveOption) error {
 	return nil
 }
 
@@ -473,7 +473,9 @@ func (m *mockSandboxProviderWithTransport) Start(_ context.Context, _ string) er
 func (m *mockSandboxProviderWithTransport) Stop(_ context.Context, _ string, _ time.Duration) error {
 	return nil
 }
-func (m *mockSandboxProviderWithTransport) Remove(_ context.Context, _ string) error { return nil }
+func (m *mockSandboxProviderWithTransport) Remove(_ context.Context, _ string, _ ...sandbox.RemoveOption) error {
+	return nil
+}
 func (m *mockSandboxProviderWithTransport) Exec(_ context.Context, _ string, _ []string, _ sandbox.ExecOptions) (*sandbox.ExecResult, error) {
 	return &sandbox.ExecResult{ExitCode: 0}, nil
 }

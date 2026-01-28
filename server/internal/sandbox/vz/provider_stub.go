@@ -57,7 +57,7 @@ func (p *Provider) Stop(_ context.Context, _ string, _ time.Duration) error {
 }
 
 // Remove returns an error on non-darwin platforms.
-func (p *Provider) Remove(_ context.Context, _ string) error {
+func (p *Provider) Remove(_ context.Context, _ string, _ ...sandbox.RemoveOption) error {
 	return fmt.Errorf("vz sandbox provider is only available on macOS")
 }
 

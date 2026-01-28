@@ -336,11 +336,11 @@ func (s *SessionService) publishCommitStatusChanged(ctx context.Context, project
 // PerformDeletion performs the actual session deletion work.
 // This is called by the SessionDeleteExecutor job handler.
 func (s *SessionService) PerformDeletion(ctx context.Context, projectID, sessionID string) error {
-	// Step 1: Destroy sandbox (idempotent - handles not found)
+	// Step 1: Destroy sandbox and associated volumes (idempotent - handles not found)
 	if s.sandboxProvider != nil {
-		if err := s.sandboxProvider.Remove(ctx, sessionID); err != nil {
+		if err := s.sandboxProvider.Remove(ctx, sessionID, sandbox.RemoveVolumes()); err != nil {
 			if !errors.Is(err, sandbox.ErrNotFound) {
-				return fmt.Errorf("failed to remove sandbox: %w", err)
+				return fmt.Errorf("failed to remove sandbox with volumes: %w", err)
 			}
 			// Sandbox not found is fine - continue with deletion
 		}
@@ -555,7 +555,7 @@ func (s *SessionService) initializeSync(
 			needsCreation = false
 
 		default:
-			// Sandbox is in failed state - remove and recreate
+			// Sandbox is in failed state - remove and recreate (preserve volumes)
 			log.Printf("Removing failed sandbox for session %s", sessionID)
 			if err := s.sandboxProvider.Remove(ctx, sessionID); err != nil {
 				log.Printf("Warning: failed to remove old sandbox for session %s: %v", sessionID, err)

@@ -40,7 +40,7 @@ type Provider struct {
 	CreateFunc     func(ctx context.Context, sessionID string, opts sandbox.CreateOptions) (*sandbox.Sandbox, error)
 	StartFunc      func(ctx context.Context, sessionID string) error
 	StopFunc       func(ctx context.Context, sessionID string, timeout time.Duration) error
-	RemoveFunc     func(ctx context.Context, sessionID string) error
+	RemoveFunc     func(ctx context.Context, sessionID string, opts ...sandbox.RemoveOption) error
 	GetFunc        func(ctx context.Context, sessionID string) (*sandbox.Sandbox, error)
 	GetSecretFunc  func(ctx context.Context, sessionID string) (string, error)
 	ExecFunc       func(ctx context.Context, sessionID string, cmd []string, opts sandbox.ExecOptions) (*sandbox.ExecResult, error)
@@ -191,11 +191,15 @@ func (p *Provider) Stop(ctx context.Context, sessionID string, timeout time.Dura
 	return nil
 }
 
-// Remove removes a mock sandbox.
-func (p *Provider) Remove(ctx context.Context, sessionID string) error {
+// Remove removes a mock sandbox and optionally its associated data.
+// By default, secrets are preserved (simulates Docker volume preservation).
+// Pass sandbox.RemoveVolumes() to delete secrets (simulates complete cleanup).
+func (p *Provider) Remove(ctx context.Context, sessionID string, opts ...sandbox.RemoveOption) error {
 	if p.RemoveFunc != nil {
-		return p.RemoveFunc(ctx, sessionID)
+		return p.RemoveFunc(ctx, sessionID, opts...)
 	}
+
+	cfg := sandbox.ParseRemoveOptions(opts)
 
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -205,7 +209,11 @@ func (p *Provider) Remove(ctx context.Context, sessionID string) error {
 	}
 
 	delete(p.sandboxes, sessionID)
-	delete(p.secrets, sessionID)
+
+	// Clean up secrets if removeVolumes is true
+	if cfg.RemoveVolumes {
+		delete(p.secrets, sessionID)
+	}
 
 	// Emit state event
 	p.emitEvent(sandbox.StateEvent{

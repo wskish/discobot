@@ -691,7 +691,8 @@ forceStop:
 }
 
 // Remove removes a sandbox and its resources.
-func (p *Provider) Remove(ctx context.Context, sessionID string) error {
+func (p *Provider) Remove(ctx context.Context, sessionID string, opts ...sandbox.RemoveOption) error {
+	// VZ always removes disk, opts parameter ignored for consistency with interface
 	p.vmInstancesMu.Lock()
 	instance, exists := p.vmInstances[sessionID]
 	if !exists {
@@ -719,7 +720,7 @@ func (p *Provider) Remove(ctx context.Context, sessionID string) error {
 		instance.consoleWrite.Close()
 	}
 
-	// Remove disk image
+	// Remove disk image (always removed for VZ, removeVolumes param ignored)
 	if instance.diskPath != "" {
 		os.Remove(instance.diskPath)
 	}

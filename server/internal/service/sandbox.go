@@ -82,7 +82,7 @@ func (s *SandboxService) CreateForSession(ctx context.Context, sessionID string)
 
 	// Start the sandbox immediately
 	if err := s.provider.Start(ctx, sessionID); err != nil {
-		// Clean up on failure
+		// Clean up on failure (don't need to remove volumes since this is a new sandbox)
 		_ = s.provider.Remove(ctx, sessionID)
 		return fmt.Errorf("failed to start sandbox: %w", err)
 	}
@@ -125,7 +125,7 @@ func (s *SandboxService) EnsureRunning(ctx context.Context, sessionID string) er
 		// Start it
 		return s.provider.Start(ctx, sessionID)
 	case sandbox.StatusFailed:
-		// Remove and recreate
+		// Remove and recreate (preserve volumes for potential data recovery)
 		_ = s.provider.Remove(ctx, sessionID)
 		return s.CreateForSession(ctx, sessionID)
 	default:
@@ -167,6 +167,7 @@ func (s *SandboxService) StopForSession(ctx context.Context, sessionID string) e
 }
 
 // DestroyForSession removes the sandbox when a session is deleted.
+// This is deprecated - use SessionService.PerformDeletion instead which handles volumes.
 func (s *SandboxService) DestroyForSession(ctx context.Context, sessionID string) error {
 	err := s.provider.Remove(ctx, sessionID)
 	if err == sandbox.ErrNotFound {
@@ -211,13 +212,14 @@ func (s *SandboxService) ReconcileSandboxes(ctx context.Context) error {
 		_, err := s.store.GetSessionByID(ctx, sb.SessionID)
 		if err != nil {
 			log.Printf("Failed to get session %s, removing orphaned sandbox: %v", sb.SessionID, err)
+			// Preserve volumes for orphaned sandboxes in case of recovery
 			if err := s.provider.Remove(ctx, sb.SessionID); err != nil {
 				log.Printf("Failed to remove orphaned sandbox for session %s: %v", sb.SessionID, err)
 			}
 			continue
 		}
 
-		// Remove the old sandbox
+		// Remove the old sandbox (preserve volume for image update)
 		if err := s.provider.Remove(ctx, sb.SessionID); err != nil {
 			log.Printf("Failed to remove sandbox for session %s: %v", sb.SessionID, err)
 			continue

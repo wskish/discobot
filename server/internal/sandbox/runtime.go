@@ -32,9 +32,11 @@ type Provider interface {
 	// The timeout specifies how long to wait before force-killing.
 	Stop(ctx context.Context, sessionID string, timeout time.Duration) error
 
-	// Remove removes a sandbox and its resources.
+	// Remove removes a sandbox and optionally its associated data volumes.
 	// The sandbox must be stopped first.
-	Remove(ctx context.Context, sessionID string) error
+	// By default, data volumes are preserved (useful for rebuilds).
+	// Pass RemoveVolumes() to delete all data volumes (for session deletion).
+	Remove(ctx context.Context, sessionID string, opts ...RemoveOption) error
 
 	// Get returns the current state of a sandbox.
 	Get(ctx context.Context, sessionID string) (*Sandbox, error)
@@ -79,6 +81,34 @@ type Provider interface {
 	// For Docker, this watches the Docker events API for container lifecycle events.
 	// For VZ, this uses the VM state change notifications.
 	Watch(ctx context.Context) (<-chan StateEvent, error)
+}
+
+// RemoveOption configures sandbox removal behavior.
+type RemoveOption func(*RemoveConfig)
+
+// RemoveConfig holds the parsed remove options.
+type RemoveConfig struct {
+	RemoveVolumes bool
+}
+
+// RemoveVolumes returns an option that enables volume deletion during removal.
+// By default, volumes are preserved. Use this option for session deletion.
+func RemoveVolumes() RemoveOption {
+	return func(cfg *RemoveConfig) {
+		cfg.RemoveVolumes = true
+	}
+}
+
+// ParseRemoveOptions parses remove options with defaults.
+// This is exported for provider implementations to use.
+func ParseRemoveOptions(opts []RemoveOption) RemoveConfig {
+	cfg := RemoveConfig{
+		RemoveVolumes: false, // Default: preserve volumes
+	}
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+	return cfg
 }
 
 // Sandbox represents a running or stopped sandbox instance.

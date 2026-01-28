@@ -47,8 +47,9 @@ type Provider interface {
     // Stop a sandbox
     Stop(ctx context.Context, sessionID string, timeout time.Duration) error
 
-    // Remove a sandbox
-    Remove(ctx context.Context, sessionID string) error
+    // Remove a sandbox and optionally its data volumes
+    // Pass sandbox.RemoveVolumes() to delete volumes
+    Remove(ctx context.Context, sessionID string, opts ...RemoveOption) error
 
     // Get sandbox info
     Get(ctx context.Context, sessionID string) (*Sandbox, error)
@@ -418,6 +419,60 @@ labels := map[string]string{
 }
 ```
 
+## Container Removal with Optional Volume Cleanup
+
+The sandbox provider's `Remove()` method accepts optional `RemoveOption` parameters:
+
+### Default behavior (no options)
+- **Purpose**: Remove container for rebuild scenarios (e.g., image updates)
+- **Behavior**: Deletes the container but preserves data volumes
+- **Use case**: Image reconciliation, container recreation, failed container recovery
+- **Docker**: Removes container only, leaves `octobot-data-{sessionID}` volume intact
+- **VZ**: Removes VM (always removes disk)
+
+```go
+// Used during sandbox reconciliation to rebuild outdated containers
+// No options = preserves volumes by default
+if err := provider.Remove(ctx, sessionID); err != nil {
+    return err
+}
+```
+
+### With sandbox.RemoveVolumes() option
+- **Purpose**: Complete cleanup when deleting a session
+- **Behavior**: Deletes both container and all associated data volumes
+- **Use case**: Session deletion, permanent cleanup
+- **Docker**: Removes container AND explicitly deletes the `octobot-data-{sessionID}` volume
+- **VZ**: Removes VM and all associated storage (same as default)
+
+```go
+// Used during session deletion to clean up all resources
+// Pass sandbox.RemoveVolumes() to delete volumes
+if err := provider.Remove(ctx, sessionID, sandbox.RemoveVolumes()); err != nil {
+    return err
+}
+```
+
+### Docker Volume Management
+
+Docker containers use named data volumes for persistent storage:
+
+```go
+// Volume naming
+dataVolName := fmt.Sprintf("octobot-data-%s", sessionID)
+
+// Volume is mounted at /.data inside container
+Mounts: []mount.Mount{
+    {
+        Type:   mount.TypeVolume,
+        Source: dataVolName,
+        Target: "/.data",
+    },
+}
+```
+
+**Important**: Docker's `RemoveVolumes: true` flag only removes anonymous volumes, not named volumes. Named volumes must be explicitly deleted with `VolumeRemove()`.
+
 ## Sandbox Reconciliation
 
 On server startup, reconcile sandboxes with database state:
@@ -433,7 +488,7 @@ func (s *SandboxService) ReconcileSandboxes(ctx context.Context) error {
     for _, sb := range sandboxes {
         session, err := s.store.GetSession(ctx, sb.SessionID)
         if err != nil || session.Status == "removing" {
-            // Remove orphaned sandbox
+            // Remove orphaned sandbox (preserves volumes for potential recovery)
             log.Printf("Removing orphaned sandbox: %s", sb.SessionID)
             s.provider.Remove(ctx, sb.SessionID)
         }
