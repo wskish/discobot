@@ -23,6 +23,10 @@ interface IDEConfig {
 
 /**
  * Available IDEs for remote SSH sessions.
+ *
+ * Note: VS Code and Cursor don't support inline port numbers in their URL schemes.
+ * They expect SSH config-based host definitions. For non-standard ports, users must
+ * configure an SSH config entry with the appropriate port setting.
  */
 const IDE_CONFIGS: IDEConfig[] = [
 	{
@@ -38,12 +42,14 @@ const IDE_CONFIGS: IDEConfig[] = [
 	{
 		id: "jetbrains",
 		name: "JetBrains",
+		// JetBrains Gateway uses separate parameters for host, user, port, and path
 		urlTemplate:
-			"jetbrains-gateway://connect#host={user}@{host}:{port}&projectPath={path}",
+			"jetbrains://connect#type=ssh&host={host}&user={user}&port={port}&projectPath={path}",
 	},
 	{
 		id: "zed",
 		name: "Zed",
+		// Zed supports full SSH connection string with optional port
 		urlTemplate: "zed://ssh/{user}@{host}:{port}{path}",
 	},
 ];
