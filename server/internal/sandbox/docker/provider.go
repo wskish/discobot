@@ -116,20 +116,29 @@ func (p *Provider) Image() string {
 
 // Create creates a new Docker container for the given session.
 func (p *Provider) Create(ctx context.Context, sessionID string, opts sandbox.CreateOptions) (*sandbox.Sandbox, error) {
-	// Check if sandbox already exists
+	// Check if sandbox already exists in cache
 	p.containerIDsMu.RLock()
-	if _, exists := p.containerIDs[sessionID]; exists {
-		p.containerIDsMu.RUnlock()
-		return nil, sandbox.ErrAlreadyExists
-	}
+	cachedID, existsInCache := p.containerIDs[sessionID]
 	p.containerIDsMu.RUnlock()
 
 	name := containerName(sessionID)
 
 	// Check if container exists by name (from previous runs)
 	if existing, err := p.client.ContainerInspect(ctx, name); err == nil && existing.ContainerJSONBase != nil {
-		// Remove existing container
-		_ = p.client.ContainerRemove(ctx, existing.ID, containerTypes.RemoveOptions{Force: true})
+		// If we have a cached ID and it matches the existing container, return error
+		if existsInCache && cachedID == existing.ID {
+			return nil, sandbox.ErrAlreadyExists
+		}
+		// Otherwise, remove the stale container (force cleanup from previous runs)
+		log.Printf("Removing stale container %s (%s) before creating new sandbox", existing.ID[:12], name)
+		if err := p.client.ContainerRemove(ctx, existing.ID, containerTypes.RemoveOptions{Force: true}); err != nil {
+			return nil, fmt.Errorf("failed to remove stale container: %w", err)
+		}
+		// Clear any stale cache entry
+		p.clearContainerID(sessionID)
+	} else if existsInCache {
+		// Cache has an entry but container doesn't exist - clear stale cache
+		p.clearContainerID(sessionID)
 	}
 
 	// Use the globally configured sandbox image

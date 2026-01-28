@@ -547,18 +547,31 @@ func (s *SessionService) initializeSync(
 			s.updateStatusWithEvent(ctx, projectID, sessionID, model.SessionStatusCreatingSandbox, nil)
 			if err := s.sandboxProvider.Start(ctx, sessionID); err != nil {
 				if !errors.Is(err, sandbox.ErrAlreadyRunning) {
-					log.Printf("Sandbox start failed for session %s: %v", sessionID, err)
-					s.updateStatusWithEvent(ctx, projectID, sessionID, model.SessionStatusError, ptrString("sandbox start failed: "+err.Error()))
-					return fmt.Errorf("sandbox start failed: %w", err)
+					log.Printf("Sandbox start failed for session %s: %v, will attempt to remove and recreate", sessionID, err)
+					// Start failed - try to remove and recreate
+					if rmErr := s.sandboxProvider.Remove(ctx, sessionID); rmErr != nil {
+						log.Printf("Failed to remove failed sandbox for session %s: %v", sessionID, rmErr)
+						s.updateStatusWithEvent(ctx, projectID, sessionID, model.SessionStatusError, ptrString("sandbox start failed and removal failed: "+rmErr.Error()))
+						return fmt.Errorf("sandbox start failed and removal failed: %w", rmErr)
+					}
+					// Successfully removed, allow recreation
+					needsCreation = true
+				} else {
+					// Already running (race condition), treat as success
+					needsCreation = false
 				}
+			} else {
+				// Successfully started
+				needsCreation = false
 			}
-			needsCreation = false
 
 		default:
 			// Sandbox is in failed state - remove and recreate (preserve volumes)
 			log.Printf("Removing failed sandbox for session %s", sessionID)
 			if err := s.sandboxProvider.Remove(ctx, sessionID); err != nil {
-				log.Printf("Warning: failed to remove old sandbox for session %s: %v", sessionID, err)
+				log.Printf("Failed to remove old sandbox for session %s: %v", sessionID, err)
+				s.updateStatusWithEvent(ctx, projectID, sessionID, model.SessionStatusError, ptrString("failed to remove old sandbox: "+err.Error()))
+				return fmt.Errorf("failed to remove old sandbox: %w", err)
 			}
 		}
 	}
