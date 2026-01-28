@@ -184,7 +184,8 @@ export const WorkspaceForm = React.forwardRef<
 	const inputType = detectInputType(input);
 
 	// Only fetch suggestions for local paths
-	const shouldFetchSuggestions = inputType === "local" || inputType === "unknown";
+	const shouldFetchSuggestions =
+		inputType === "local" || inputType === "unknown";
 	const { suggestions: apiSuggestions } = useSuggestions(
 		shouldFetchSuggestions ? input : "",
 		"path",
@@ -331,7 +332,9 @@ export const WorkspaceForm = React.forwardRef<
 												index === selectedIndex && "bg-accent",
 												!suggestion.valid && "opacity-60",
 											)}
-											onMouseDown={() => handleSuggestionClick(suggestion.value)}
+											onMouseDown={() =>
+												handleSuggestionClick(suggestion.value)
+											}
 											onMouseEnter={() => setSelectedIndex(index)}
 										>
 											{getInputIcon(suggestionType, "h-3.5 w-3.5 shrink-0")}
