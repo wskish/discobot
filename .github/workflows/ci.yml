@@ -41,3 +41,5 @@ jobs:
 
       - name: Run CI
         run: pnpm run ci
+        env:
+          CI: true

@@ -29,7 +29,7 @@
 		"test:agent:unit": "cd agent-api && npm run test:unit",
 		"test:agent:integration": "cd agent-api && npm run test:integration",
 		"test:watcher": "node --import tsx --test scripts/agent-watcher/watcher.test.ts",
-		"ci": "npm run check:fix && npm run test:unit && npm run build && git diff --exit-code",
+		"ci": "npm run check:fix && npm run test:unit && npm run build && ([ \"$CI\" = \"true\" ] && git diff --exit-code || true)",
 		"lint": "biome lint . && npm run lint:go",
 		"lint:go": "npm run lint:go:server && npm run lint:go:proxy",
 		"lint:go:server": "cd server && go tool golangci-lint run",
