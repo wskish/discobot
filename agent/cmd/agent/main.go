@@ -762,11 +762,7 @@ func setupWorkspace(workspacePath, workspaceCommit string, u *userInfo) error {
 	// Note: git safe.directory is configured system-wide in setupGitSafeDirectories()
 
 	// Clone to staging directory first
-	cloneArgs := []string{"clone", "--single-branch"}
-	if workspaceCommit != "" {
-		cloneArgs = append(cloneArgs, "--no-checkout")
-	}
-	cloneArgs = append(cloneArgs, workspacePath, stagingDir)
+	cloneArgs := []string{"clone", "--single-branch", workspacePath, stagingDir}
 
 	cmd := exec.Command("git", cloneArgs...)
 	cmd.Stdout = os.Stdout
@@ -776,13 +772,16 @@ func setupWorkspace(workspacePath, workspaceCommit string, u *userInfo) error {
 		return fmt.Errorf("git clone failed: %w", err)
 	}
 
-	// If specific commit requested, checkout that commit
+	// If specific commit requested, create a branch at that commit to avoid detached HEAD
 	if workspaceCommit != "" {
-		cmd = exec.Command("git", "-C", stagingDir, "checkout", workspaceCommit)
+		// Create a temporary branch at the target commit
+		branchName := "octobot-session"
+		cmd = exec.Command("git", "-C", stagingDir, "checkout", "-B", branchName, workspaceCommit)
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
+		fmt.Printf("octobot-agent: creating branch %s at commit %s\n", branchName, workspaceCommit)
 		if err := cmd.Run(); err != nil {
-			return fmt.Errorf("git checkout %s failed: %w", workspaceCommit, err)
+			return fmt.Errorf("git checkout -B %s %s failed: %w", branchName, workspaceCommit, err)
 		}
 	}
 
