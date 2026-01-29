@@ -144,7 +144,9 @@ export function SidebarTree({ className }: SidebarTreeProps) {
 						selectedSessionId={view.type === "session" ? view.sessionId : null}
 						onAddSession={(workspaceId) => showNewSession({ workspaceId })}
 						onDeleteWorkspace={deleteWorkspaceDialog.open}
-						onClearSelection={() => showNewSession()}
+						onClearSelection={() =>
+							showNewSession({ workspaceId: workspace.id })
+						}
 						showClosedSessions={showClosedSessions}
 					/>
 				))}
@@ -465,7 +467,7 @@ const SessionNode = React.memo(function SessionNode({
 	const handleDelete = async () => {
 		const wasSelected = isSelected;
 		await deleteSession(session.id);
-		// If the deleted session was currently selected, go to welcome screen
+		// If the deleted session was currently selected, show new session with workspace pre-populated
 		if (wasSelected) {
 			onClearSelection();
 		}
