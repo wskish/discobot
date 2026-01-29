@@ -48,6 +48,9 @@ type Config struct {
 	VZInitrdPath   string // Path to initial ramdisk (optional)
 	VZBaseDiskPath string // Path to base disk image to clone (optional)
 
+	// Local provider settings
+	LocalAgentBinary string // Path to agent API binary for local provider (default: obot-agent-api in PATH)
+
 	// SSH server settings
 	SSHEnabled     bool   // Enable SSH server (default: true)
 	SSHPort        int    // SSH server port (default: 3333)
@@ -142,6 +145,9 @@ func Load() (*Config, error) {
 	cfg.VZKernelPath = getEnv("VZ_KERNEL_PATH", "")
 	cfg.VZInitrdPath = getEnv("VZ_INITRD_PATH", "")
 	cfg.VZBaseDiskPath = getEnv("VZ_BASE_DISK_PATH", "")
+
+	// Local provider settings
+	cfg.LocalAgentBinary = getEnv("LOCAL_AGENT_BINARY", "obot-agent-api")
 
 	// SSH server settings
 	cfg.SSHEnabled = getEnvBool("SSH_ENABLED", true)

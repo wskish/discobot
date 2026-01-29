@@ -69,6 +69,8 @@ export interface Workspace {
 	/** Optional display name for the workspace (if not set, path is used) */
 	displayName?: string;
 	sourceType: "local" | "git";
+	/** Sandbox provider to use: "docker" for containers, "local" for direct process execution */
+	provider: "docker" | "local";
 	status: WorkspaceStatus;
 	/** Error message if status is "error" */
 	errorMessage?: string;
@@ -169,6 +171,7 @@ export interface CreateWorkspaceRequest {
 	path: string;
 	displayName?: string;
 	sourceType: "local" | "git";
+	provider?: "docker" | "local";
 }
 
 export interface CreateSessionRequest {

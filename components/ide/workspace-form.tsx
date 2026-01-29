@@ -1,7 +1,16 @@
 import { SiGithub } from "@icons-pack/react-simple-icons";
-import { AlertCircle, Check, GitBranch, HardDrive } from "lucide-react";
+import {
+	AlertCircle,
+	Check,
+	Container,
+	GitBranch,
+	HardDrive,
+	Zap,
+} from "lucide-react";
 import * as React from "react";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import type { CreateWorkspaceRequest } from "@/lib/api-types";
 import { useSuggestions } from "@/lib/hooks/use-suggestions";
 import { cn } from "@/lib/utils";
@@ -177,6 +186,7 @@ export const WorkspaceForm = React.forwardRef<
 	ref,
 ) {
 	const [input, setInput] = React.useState(initialValue ?? "");
+	const [provider, setProvider] = React.useState<"docker" | "local">("docker");
 	const [showSuggestions, setShowSuggestions] = React.useState(false);
 	const [selectedIndex, setSelectedIndex] = React.useState(-1);
 	const inputRef = React.useRef<HTMLInputElement>(null);
@@ -240,10 +250,11 @@ export const WorkspaceForm = React.forwardRef<
 		onSubmit({
 			path,
 			sourceType,
+			provider,
 		});
 
 		setInput("");
-	}, [validation.isValid, inputType, input, onSubmit]);
+	}, [validation.isValid, inputType, input, provider, onSubmit]);
 
 	// Expose submit and isValid to parent via ref
 	React.useImperativeHandle(
@@ -299,6 +310,7 @@ export const WorkspaceForm = React.forwardRef<
 	return (
 		<div className={cn("space-y-4", className)}>
 			<div className="relative">
+				<Label className="text-sm font-medium mb-2 block">Workspace Path</Label>
 				<div className="flex items-center gap-2">
 					<div className="shrink-0 w-8 h-8 flex items-center justify-center rounded-md border bg-muted">
 						{getInputIcon(inputType, "h-4 w-4")}
@@ -373,6 +385,49 @@ export const WorkspaceForm = React.forwardRef<
 					)}
 				</div>
 			</div>
+			<div className="space-y-3">
+				<Label className="text-sm font-medium">Sandbox Provider</Label>
+				<RadioGroup
+					value={provider}
+					onValueChange={(v) => setProvider(v as "docker" | "local")}
+				>
+					<div className="flex items-start space-x-3 p-3 rounded-lg border hover:bg-accent/50 transition-colors cursor-pointer">
+						<RadioGroupItem
+							value="docker"
+							id="provider-docker"
+							className="mt-0.5"
+						/>
+						<Label htmlFor="provider-docker" className="flex-1 cursor-pointer">
+							<div className="flex items-center gap-2 mb-1">
+								<Container className="h-4 w-4 text-blue-500" />
+								<span className="font-medium">Docker (Recommended)</span>
+							</div>
+							<p className="text-xs text-muted-foreground">
+								Run agent in isolated container with full Docker support. Safer
+								and more compatible.
+							</p>
+						</Label>
+					</div>
+					<div className="flex items-start space-x-3 p-3 rounded-lg border hover:bg-accent/50 transition-colors cursor-pointer">
+						<RadioGroupItem
+							value="local"
+							id="provider-local"
+							className="mt-0.5"
+						/>
+						<Label htmlFor="provider-local" className="flex-1 cursor-pointer">
+							<div className="flex items-center gap-2 mb-1">
+								<Zap className="h-4 w-4 text-amber-500" />
+								<span className="font-medium">Local Process</span>
+							</div>
+							<p className="text-xs text-muted-foreground">
+								Run agent directly in workspace directory without containers.
+								Faster startup but no isolation.
+							</p>
+						</Label>
+					</div>
+				</RadioGroup>
+			</div>
+
 			{showFormatHints && (
 				<div className="text-xs text-muted-foreground space-y-1">
 					<p className="font-medium">Supported formats:</p>

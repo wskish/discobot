@@ -29,6 +29,7 @@ func (h *Handler) CreateWorkspace(w http.ResponseWriter, r *http.Request) {
 		Path        string  `json:"path"`
 		DisplayName *string `json:"displayName"`
 		SourceType  string  `json:"sourceType"`
+		Provider    string  `json:"provider"`
 	}
 	if err := h.DecodeJSON(r, &req); err != nil {
 		h.Error(w, http.StatusBadRequest, "Invalid request body")
@@ -41,6 +42,9 @@ func (h *Handler) CreateWorkspace(w http.ResponseWriter, r *http.Request) {
 	if req.SourceType == "" {
 		req.SourceType = "local"
 	}
+	if req.Provider == "" {
+		req.Provider = "docker"
+	}
 
 	workspace, err := h.workspaceService.CreateWorkspace(r.Context(), projectID, req.Path, req.SourceType)
 	if err != nil {
@@ -48,21 +52,27 @@ func (h *Handler) CreateWorkspace(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Update display name if provided
-	if req.DisplayName != nil {
+	// Update display name and provider if provided
+	if req.DisplayName != nil || req.Provider != "" {
 		// Get the model workspace and update it
 		modelWorkspace, err := h.store.GetWorkspaceByID(r.Context(), workspace.ID)
 		if err != nil {
-			h.Error(w, http.StatusInternalServerError, "Failed to get workspace for display name update")
+			h.Error(w, http.StatusInternalServerError, "Failed to get workspace for update")
 			return
 		}
-		modelWorkspace.DisplayName = req.DisplayName
+		if req.DisplayName != nil {
+			modelWorkspace.DisplayName = req.DisplayName
+		}
+		if req.Provider != "" {
+			modelWorkspace.Provider = req.Provider
+		}
 		if err := h.store.UpdateWorkspace(r.Context(), modelWorkspace); err != nil {
-			h.Error(w, http.StatusInternalServerError, "Failed to update workspace display name")
+			h.Error(w, http.StatusInternalServerError, "Failed to update workspace")
 			return
 		}
 		// Update the response object
 		workspace.DisplayName = req.DisplayName
+		workspace.Provider = req.Provider
 	}
 
 	// Enqueue workspace initialization job
@@ -132,6 +142,12 @@ func (h *Handler) UpdateWorkspace(w http.ResponseWriter, r *http.Request) {
 		} else if str, ok := displayName.(string); ok {
 			workspace.DisplayName = &str
 		}
+		modified = true
+	}
+
+	// Update provider if provided
+	if provider, ok := rawReq["provider"].(string); ok {
+		workspace.Provider = provider
 		modified = true
 	}
 

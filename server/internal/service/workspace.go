@@ -34,6 +34,7 @@ type Workspace struct {
 	Path         string     `json:"path"`
 	DisplayName  *string    `json:"displayName,omitempty"`
 	SourceType   string     `json:"sourceType"`
+	Provider     string     `json:"provider"`
 	Status       string     `json:"status"`
 	ErrorMessage string     `json:"errorMessage,omitempty"`
 	Commit       string     `json:"commit,omitempty"`
@@ -136,6 +137,7 @@ func (s *WorkspaceService) mapWorkspace(ctx context.Context, ws *model.Workspace
 		Path:        ws.Path,
 		DisplayName: ws.DisplayName,
 		SourceType:  ws.SourceType,
+		Provider:    ws.Provider,
 		Status:      ws.Status,
 		Sessions:    []*Session{},
 	}

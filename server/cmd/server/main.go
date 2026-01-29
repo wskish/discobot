@@ -27,6 +27,7 @@ import (
 	"github.com/obot-platform/octobot/server/internal/routes"
 	"github.com/obot-platform/octobot/server/internal/sandbox"
 	"github.com/obot-platform/octobot/server/internal/sandbox/docker"
+	"github.com/obot-platform/octobot/server/internal/sandbox/local"
 	"github.com/obot-platform/octobot/server/internal/sandbox/vz"
 	"github.com/obot-platform/octobot/server/internal/service"
 	"github.com/obot-platform/octobot/server/internal/ssh"
@@ -82,14 +83,28 @@ func main() {
 	}
 	log.Printf("Git provider initialized at %s", cfg.WorkspaceDir)
 
-	// Initialize sandbox provider
-	// On darwin/arm64, try VZ (Virtualization.framework) first, then fall back to Docker
-	// On other platforms, use Docker only
-	var sandboxProvider sandbox.Provider
-	var providerType string
+	// Initialize sandbox providers
+	// Create a manager that can route to different providers based on workspace configuration
+	sandboxManager := sandbox.NewManager()
 
+	// Initialize Docker provider (default)
+	if dockerProvider, dockerErr := docker.NewProvider(cfg); dockerErr != nil {
+		log.Printf("Warning: Failed to initialize Docker sandbox provider: %v", dockerErr)
+	} else {
+		sandboxManager.RegisterProvider("docker", dockerProvider)
+		log.Printf("Docker sandbox provider initialized (image: %s)", cfg.SandboxImage)
+	}
+
+	// Initialize local provider
+	if localProvider, localErr := local.NewProvider(cfg); localErr != nil {
+		log.Printf("Warning: Failed to initialize local sandbox provider: %v", localErr)
+	} else {
+		sandboxManager.RegisterProvider("local", localProvider)
+		log.Printf("Local sandbox provider initialized")
+	}
+
+	// On darwin/arm64, try VZ (Virtualization.framework) as well
 	if runtime.GOOS == "darwin" && runtime.GOARCH == "arm64" && cfg.VZKernelPath != "" {
-		// Try VZ provider on Apple Silicon with kernel configured
 		vzCfg := &vz.Config{
 			DataDir:      cfg.VZDataDir,
 			KernelPath:   cfg.VZKernelPath,
@@ -98,26 +113,41 @@ func main() {
 		}
 		if vzProvider, vzErr := vz.NewProvider(cfg, vzCfg); vzErr != nil {
 			log.Printf("Warning: Failed to initialize VZ sandbox provider: %v", vzErr)
-			log.Println("Falling back to Docker provider...")
 		} else {
-			sandboxProvider = vzProvider
-			providerType = "vz"
+			sandboxManager.RegisterProvider("vz", vzProvider)
+			log.Printf("VZ sandbox provider initialized")
 		}
 	}
 
-	// Fall back to Docker if VZ is not available or not on darwin/arm64
-	if sandboxProvider == nil {
-		if dockerProvider, dockerErr := docker.NewProvider(cfg); dockerErr != nil {
-			log.Printf("Warning: Failed to initialize Docker sandbox provider: %v", dockerErr)
-			log.Println("Terminal/sandbox operations will not be available")
-		} else {
-			sandboxProvider = dockerProvider
-			providerType = "docker"
-		}
-	}
+	// Create provider proxy that routes based on workspace configuration
+	// The proxy will look up the session's workspace and use its provider setting
+	var sandboxProvider sandbox.Provider
+	if len(sandboxManager.ListProviders()) > 0 {
+		// Create a sandbox service for the provider getter function
+		// This is a bit of a chicken-and-egg problem, so we'll pass the store directly
+		providerGetter := func(ctx context.Context, sessionID string) (string, error) {
+			// Get session to retrieve workspace ID
+			session, err := s.GetSessionByID(ctx, sessionID)
+			if err != nil {
+				return "", fmt.Errorf("failed to get session: %w", err)
+			}
 
-	if sandboxProvider != nil {
-		log.Printf("Sandbox provider initialized (type: %s, image: %s)", providerType, cfg.SandboxImage)
+			// Get workspace to retrieve provider
+			workspace, err := s.GetWorkspaceByID(ctx, session.WorkspaceID)
+			if err != nil {
+				return "", fmt.Errorf("failed to get workspace: %w", err)
+			}
+
+			// Default to docker if not set
+			if workspace.Provider == "" {
+				return "docker", nil
+			}
+
+			return workspace.Provider, nil
+		}
+
+		sandboxProvider = sandbox.NewProviderProxy(sandboxManager, providerGetter)
+		log.Printf("Sandbox provider proxy initialized with %d providers", len(sandboxManager.ListProviders()))
 
 		// Reconcile sandboxes on startup to ensure they use the correct image
 		sandboxSvc := service.NewSandboxService(s, sandboxProvider, cfg)

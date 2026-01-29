@@ -30,6 +30,28 @@ func NewSandboxService(s *store.Store, p sandbox.Provider, cfg *config.Config) *
 	}
 }
 
+// GetProviderForSession returns the provider name for the given session based on its workspace.
+func (s *SandboxService) GetProviderForSession(ctx context.Context, sessionID string) (string, error) {
+	// Get session to retrieve workspace ID
+	session, err := s.store.GetSessionByID(ctx, sessionID)
+	if err != nil {
+		return "", fmt.Errorf("failed to get session: %w", err)
+	}
+
+	// Get workspace to retrieve provider
+	workspace, err := s.store.GetWorkspaceByID(ctx, session.WorkspaceID)
+	if err != nil {
+		return "", fmt.Errorf("failed to get workspace: %w", err)
+	}
+
+	// Default to docker if not set
+	if workspace.Provider == "" {
+		return model.WorkspaceProviderDocker, nil
+	}
+
+	return workspace.Provider, nil
+}
+
 // CreateForSession creates and starts a sandbox for the given session.
 // It retrieves the workspace path and commit from the session in the database
 // and generates a cryptographically secure shared secret.
@@ -55,6 +77,12 @@ func (s *SandboxService) CreateForSession(ctx context.Context, sessionID string)
 		workspaceCommit = *session.WorkspaceCommit
 	}
 
+	// Get workspace source for the WORKSPACE_SOURCE env var
+	workspace, err := s.store.GetWorkspaceByID(ctx, session.WorkspaceID)
+	if err != nil {
+		return fmt.Errorf("failed to get workspace: %w", err)
+	}
+
 	// Generate a cryptographically secure shared secret
 	sharedSecret := generateSandboxSecret(32)
 
@@ -68,6 +96,7 @@ func (s *SandboxService) CreateForSession(ctx context.Context, sessionID string)
 			"octobot.project.id":   session.ProjectID,
 		},
 		WorkspacePath:   workspacePath,
+		WorkspaceSource: workspace.Path, // Original workspace path (local or git URL)
 		WorkspaceCommit: workspaceCommit,
 		Resources: sandbox.ResourceConfig{
 			Timeout: s.cfg.SandboxIdleTimeout,

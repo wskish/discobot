@@ -173,6 +173,12 @@ const (
 	WorkspaceStatusError        = "error"        // Something failed during setup
 )
 
+// Workspace provider constants representing how sessions are executed
+const (
+	WorkspaceProviderDocker = "docker" // Run in Docker containers (default)
+	WorkspaceProviderLocal  = "local"  // Run in local directory without isolation
+)
+
 // Workspace represents a working directory (local folder or git repo).
 type Workspace struct {
 	ID           string    `gorm:"primaryKey;type:text" json:"id"`
@@ -180,6 +186,7 @@ type Workspace struct {
 	Path         string    `gorm:"not null;type:text" json:"path"`
 	DisplayName  *string   `gorm:"column:display_name;type:text" json:"displayName,omitempty"`
 	SourceType   string    `gorm:"column:source_type;not null;type:text" json:"sourceType"`
+	Provider     string    `gorm:"not null;type:text;default:docker" json:"provider"`
 	Status       string    `gorm:"not null;type:text;default:initializing" json:"status"`
 	ErrorMessage *string   `gorm:"column:error_message;type:text" json:"errorMessage,omitempty"`
 	Commit       *string   `gorm:"type:text" json:"commit,omitempty"`
