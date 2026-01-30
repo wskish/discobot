@@ -177,7 +177,7 @@ func (p *Provider) Create(ctx context.Context, sessionID string, opts sandbox.Cr
 	// Build environment variables
 	var env []string
 
-	// Add session ID (required by obot-agent for AgentFS database naming)
+	// Add session ID (required by octobot-agent for AgentFS database naming)
 	env = append(env, fmt.Sprintf("SESSION_ID=%s", sessionID))
 
 	// Add hashed secret as OCTOBOT_SECRET env var
@@ -266,13 +266,34 @@ func (p *Provider) Create(ctx context.Context, sessionID string, opts sandbox.Cr
 		})
 	}
 
+	// Add project cache volume mount if enabled and project ID is available
+	if p.cfg.CacheEnabled {
+		projectID := opts.Labels["octobot.project.id"]
+		if projectID != "" {
+			// Ensure the cache volume exists
+			cacheVolName, err := p.ensureCacheVolume(ctx, projectID)
+			if err != nil {
+				log.Printf("Warning: failed to create cache volume for project %s: %v", projectID, err)
+			} else {
+				// Mount the entire cache volume at /.data/cache
+				// The agent will bind-mount individual directories from here
+				hostConfig.Mounts = append(hostConfig.Mounts, mount.Mount{
+					Type:   mount.TypeVolume,
+					Source: cacheVolName,
+					Target: "/.data/cache",
+				})
+				log.Printf("Mounted cache volume %s at /.data/cache for session %s", cacheVolName, sessionID)
+			}
+		}
+	}
+
 	// Configure network
 	if p.cfg.DockerNetwork != "" {
 		hostConfig.NetworkMode = containerTypes.NetworkMode(p.cfg.DockerNetwork)
 	}
 
 	// Enable privileged mode for running Docker daemon inside container
-	// The container runs its own Docker daemon (started by obot-agent if dockerd is available)
+	// The container runs its own Docker daemon (started by octobot-agent if dockerd is available)
 	hostConfig.Privileged = true
 
 	// Always expose port 3002 with a random host port

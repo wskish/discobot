@@ -24,7 +24,7 @@ const watcher = new AgentWatcher({
 	additionalDirs: [AGENT_DIR],
 	projectRoot: ROOT_DIR,
 	envFilePath: SERVER_ENV_PATH,
-	imageName: "obot-agent-api",
+	imageName: "octobot-agent-api",
 	imageTag: "dev",
 	debounceMs: 500,
 });

@@ -133,10 +133,10 @@ Credentials are encrypted with AES-256-GCM before storage.
          │    │   Agent Container    │     │   MITM Proxy         │
          │    │   (per session)      │     │   (per container)    │
          │    │   ┌──────────────┐   │     │   ┌──────────────┐   │
-         │    │   │ obot-agent   │   │     │   │ HTTP/SOCKS5  │   │
+         │    │   │ octobot-agent   │   │     │   │ HTTP/SOCKS5  │   │
          │    │   │ (PID 1 init) │   │     │   │ + TLS MITM   │   │
          │    │   │      ↓       │   │     │   └──────────────┘   │
-         │    │   │ obot-agent-  │   │ ──▶ │                      │
+         │    │   │ octobot-agent-  │   │ ──▶ │                      │
          │    │   │ api + AI CLI │   │     │                      │
          │    │   └──────────────┘   │     │                      │
          │    └──────────────────────┘     └──────────────────────┘

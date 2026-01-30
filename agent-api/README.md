@@ -80,16 +80,16 @@ npm start
 
 ```bash
 # Build image (from project root)
-docker build -t obot-agent-api .
+docker build -t octobot-agent-api .
 
 # Or from agent-api directory
-docker build -t obot-agent-api -f ../Dockerfile ..
+docker build -t octobot-agent-api -f ../Dockerfile ..
 
 # Run container
 docker run -p 8080:3002 \
   -e ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY \
   -v /path/to/workspace:/workspace \
-  obot-agent-api
+  octobot-agent-api
 ```
 
 ## API Endpoints

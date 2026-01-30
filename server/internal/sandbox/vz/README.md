@@ -133,7 +133,7 @@ mount -t virtiofs octobot-meta /run/octobot/metadata || true
 
 # Start agent (it will automatically start socat if vsock is configured)
 cd /opt/octobot
-exec ./obot-agent-api
+exec ./octobot-agent-api
 ```
 
 Note: The agent automatically starts socat for vsock forwarding based on the metadata configuration. No manual socat setup is needed.

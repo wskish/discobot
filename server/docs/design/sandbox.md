@@ -9,6 +9,7 @@ This module provides the sandbox runtime abstraction for managing Docker contain
 | `internal/sandbox/runtime.go` | Provider interface definition |
 | `internal/sandbox/errors.go` | Error types |
 | `internal/sandbox/docker/provider.go` | Docker implementation |
+| `internal/sandbox/docker/cache.go` | Cache volume management |
 | `internal/sandbox/mock/provider.go` | Mock implementation for testing |
 
 ## Architecture

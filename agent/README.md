@@ -1,6 +1,6 @@
 # Octobot Agent - Container Init Process
 
-The `obot-agent` binary is a minimal PID 1 init process for container environments. It handles workspace initialization, AgentFS setup, and process management for Octobot containers.
+The `octobot-agent` binary is a minimal PID 1 init process for container environments. It handles workspace initialization, AgentFS setup, and process management for Octobot containers.
 
 ## Features
 
@@ -21,7 +21,7 @@ The `obot-agent` binary is a minimal PID 1 init process for container environmen
 3. Initialize AgentFS database (if not exists)
 4. Mount AgentFS over /home/octobot with -a --allow-root
 5. Create /workspace symlink to /home/octobot/workspace
-6. Run obot-agent-api as octobot user
+6. Run octobot-agent-api as octobot user
 ```
 
 ## Usage
@@ -40,7 +40,7 @@ docker run -e SESSION_ID=abc123 -e WORKSPACE_PATH=https://github.com/user/repo o
 | `SESSION_ID` | Yes | - | Unique session identifier for AgentFS database |
 | `WORKSPACE_PATH` | No | - | Git URL or local path to clone |
 | `WORKSPACE_COMMIT` | No | - | Specific commit SHA to checkout |
-| `AGENT_BINARY` | No | `/opt/octobot/bin/obot-agent-api` | Path to the agent API binary |
+| `AGENT_BINARY` | No | `/opt/octobot/bin/octobot-agent-api` | Path to the agent API binary |
 | `AGENT_USER` | No | `octobot` | Username to run the agent API as |
 
 ## Filesystem Layout
@@ -74,7 +74,7 @@ The agent is built as part of the Docker multi-stage build:
 
 ```bash
 # Build just the agent binary
-go build -o obot-agent ./agent/cmd/agent
+go build -o octobot-agent ./agent/cmd/agent
 
 # Or via Docker (as part of full build)
 docker build -t octobot .
@@ -87,7 +87,7 @@ Container Start (root)
         │
         ▼
 ┌───────────────────┐
-│   obot-agent      │  ← PID 1 (runs as root)
+│   octobot-agent      │  ← PID 1 (runs as root)
 │   (init process)  │
 │                   │
 │   1. Copy home    │
@@ -100,7 +100,7 @@ Container Start (root)
           │  fork + setuid(octobot)
           ▼
 ┌───────────────────┐
-│ obot-agent-api    │  ← Child process (runs as octobot)
+│ octobot-agent-api    │  ← Child process (runs as octobot)
 │ (agent API)       │
 │                   │
 │ Sees:             │
@@ -112,7 +112,7 @@ Container Start (root)
 ### Signal Flow
 
 ```
-SIGTERM/SIGINT → obot-agent → forwards to child process group
+SIGTERM/SIGINT → octobot-agent → forwards to child process group
                       │
                       └→ Waits up to 10s for graceful shutdown
                       └→ Force-kills child if timeout exceeded
@@ -120,7 +120,7 @@ SIGTERM/SIGINT → obot-agent → forwards to child process group
 
 ### Process Reaping
 
-As PID 1, `obot-agent` is responsible for calling `wait()` on orphaned processes. This prevents zombie process accumulation when child processes fork and their parents exit.
+As PID 1, `octobot-agent` is responsible for calling `wait()` on orphaned processes. This prevents zombie process accumulation when child processes fork and their parents exit.
 
 ## AgentFS Mount Flags
 

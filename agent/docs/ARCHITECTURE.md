@@ -1,10 +1,10 @@
 # Agent Architecture
 
-This document describes the architecture of the `obot-agent` init process.
+This document describes the architecture of the `octobot-agent` init process.
 
 ## Overview
 
-The `obot-agent` binary serves as the container's PID 1 process, providing:
+The `octobot-agent` binary serves as the container's PID 1 process, providing:
 
 1. Home directory initialization (copy from template)
 2. Workspace initialization (git clone)
@@ -101,6 +101,19 @@ The `obot-agent` binary serves as the container's PID 1 process, providing:
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────┐
+│  Step 5.5: Mount Cache Directories                          │
+│  ──────────────────────────────                             │
+│  • Check if /.data/cache volume exists                      │
+│  • Load cache config from user workspace (optional)         │
+│    Location: /home/octobot/workspace/.octobot/cache.json   │
+│  • Bind-mount cache dirs from /.data/cache to overlay       │
+│  • Mounts sit on top of /home/octobot overlay               │
+│  • Prevents cache writes to overlay layer                   │
+│  See: docs/design/cache-config.md                           │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
 │  Step 6: Create Workspace Symlink                           │
 │  ───────────────────────────────                            │
 │  • Create /workspace -> /home/octobot/workspace symlink     │
@@ -109,11 +122,12 @@ The `obot-agent` binary serves as the container's PID 1 process, providing:
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────┐
-│  Step 6: Setup Proxy Configuration                          │
-│  ────────────────────────────                               │
+│  Step 7: Setup Proxy Configuration                          │
+│  ────────────────────────────────                           │
 │  • Use embedded default config only (security: no workspace │
 │    config reading before sandbox is ready)                  │
-│  • Write to /.data/proxy/config.yaml                        │
+│  • Write config to /.data/proxy/config.yaml (session)       │
+│  • Proxy data (certs, cache) at /.data/cache/proxy (project)│
 │  • Default enables Docker registry caching (20GB)           │
 └─────────────────────────────────────────────────────────────┘
                               │
@@ -180,7 +194,7 @@ The `obot-agent` binary serves as the container's PID 1 process, providing:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                     obot-agent (PID 1)                       │
+│                     octobot-agent (PID 1)                       │
 ├─────────────────────────────────────────────────────────────┤
 │                                                             │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────────┐   │
@@ -241,6 +255,8 @@ Manages the HTTP/HTTPS/SOCKS5 proxy with Docker registry caching:
 - Sets `HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY`, and `NODE_EXTRA_CA_CERTS`
 - Tracks proxy process for cleanup on shutdown
 - Enables Docker registry caching (5-10x faster repeated pulls)
+- **Cache location**: `/.data/cache/proxy/` (project-scoped, shared across sessions)
+- **Config location**: `/.data/proxy/config.yaml` (session-scoped)
 - **Performance**: Starts early in parallel with workspace cloning
 
 See [design/proxy-integration.md](design/proxy-integration.md) for implementation details.
@@ -309,13 +325,23 @@ Responsible for:
 │  │   ├── .bashrc                (shell config)              │
 │  │   ├── .profile               (user profile)              │
 │  │   └── workspace/             (cloned repository)         │
-│  └── .agentfs/                                              │
-│      └── {SESSION_ID}.db        (SQLite with changes)       │
+│  ├── .agentfs/                  (AgentFS databases)         │
+│  │   └── {SESSION_ID}.db        (SQLite with changes)       │
+│  ├── .overlayfs/                (OverlayFS layers)          │
+│  │   └── {SESSION_ID}/          (upper + work dirs)         │
+│  ├── proxy/                     (session-scoped)            │
+│  │   └── config.yaml            (proxy configuration)       │
+│  └── cache/                     (project-scoped volume)     │
+│      └── proxy/                 (proxy cache & certs)       │
+│          ├── certs/             (CA certificates)           │
+│          └── cache/             (Docker registry cache)     │
 │                                                             │
-│  /home/octobot                  (AgentFS FUSE mount)        │
+│  /home/octobot                  (AgentFS/OverlayFS mount)   │
 │  ├── .config/octobot/           (agent-api persistence)     │
 │  │   ├── agent-session.json     (session metadata)          │
 │  │   └── agent-messages.json    (message history)           │
+│  ├── .cache/                    (bind mount from cache vol) │
+│  ├── .npm/                      (bind mount from cache vol) │
 │  └── workspace/                 (COW of /.data/octobot/ws)  │
 │                                                             │
 │  /workspace -> /home/octobot/workspace (symlink)            │

@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -201,6 +202,63 @@ func (h *Handler) AcceptInvitation(w http.ResponseWriter, r *http.Request) {
 
 	if err := h.projectService.AcceptInvitation(r.Context(), token, userID); err != nil {
 		h.Error(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	h.JSON(w, http.StatusOK, map[string]bool{"success": true})
+}
+
+// ListProjectCacheVolumes lists cache volumes for a project
+func (h *Handler) ListProjectCacheVolumes(w http.ResponseWriter, r *http.Request) {
+	projectID := chi.URLParam(r, "projectId")
+
+	// Check if provider supports cache volume listing
+	type cacheVolumeManager interface {
+		ListCacheVolumes(ctx context.Context, projectID string) (interface{}, error)
+	}
+
+	cvm, ok := h.sandboxProvider.(cacheVolumeManager)
+	if !ok {
+		h.Error(w, http.StatusNotImplemented, "Cache volumes not supported by provider")
+		return
+	}
+
+	volumes, err := cvm.ListCacheVolumes(r.Context(), projectID)
+	if err != nil {
+		h.Error(w, http.StatusInternalServerError, "Failed to list cache volumes")
+		return
+	}
+
+	h.JSON(w, http.StatusOK, map[string]interface{}{
+		"volumes": volumes,
+	})
+}
+
+// DeleteProjectCacheVolume deletes the cache volume for a project
+func (h *Handler) DeleteProjectCacheVolume(w http.ResponseWriter, r *http.Request) {
+	projectID := chi.URLParam(r, "projectId")
+
+	// Check if user is admin or owner
+	userID := middleware.GetUserID(r.Context())
+	role, err := h.projectService.GetMemberRole(r.Context(), projectID, userID)
+	if err != nil || (role != "owner" && role != "admin") {
+		h.Error(w, http.StatusForbidden, "Admin access required")
+		return
+	}
+
+	// Check if provider supports cache volume removal
+	type cacheVolumeManager interface {
+		RemoveCacheVolume(ctx context.Context, projectID string) error
+	}
+
+	cvm, ok := h.sandboxProvider.(cacheVolumeManager)
+	if !ok {
+		h.Error(w, http.StatusNotImplemented, "Cache volumes not supported by provider")
+		return
+	}
+
+	if err := cvm.RemoveCacheVolume(r.Context(), projectID); err != nil {
+		h.Error(w, http.StatusInternalServerError, "Failed to delete cache volume")
 		return
 	}
 

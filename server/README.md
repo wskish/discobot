@@ -48,6 +48,7 @@ The server handles:
 - [Service Module](./docs/design/service.md) - Business logic layer
 - [Store Module](./docs/design/store.md) - Data access layer
 - [Sandbox Module](./docs/design/sandbox.md) - Docker integration
+- [Cache System](./docs/design/cache.md) - Project-scoped cache volumes
 - [Events Module](./docs/design/events.md) - SSE and event system
 - [Jobs Module](./docs/design/jobs.md) - Background job processing
 
@@ -85,6 +86,7 @@ golangci-lint run
 | `AUTH_ENABLED` | `false` | Enable authentication |
 | `WORKSPACE_DIR` | `/tmp/workspaces` | Base directory for workspaces |
 | `SANDBOX_IMAGE` | `ghcr.io/obot-platform/octobot:main` | Default sandbox image |
+| `CACHE_ENABLED` | `true` | Enable project-scoped cache volumes |
 | `ENCRYPTION_KEY` | (required) | Key for credential encryption |
 
 ### Building

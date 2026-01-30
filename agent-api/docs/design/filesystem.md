@@ -35,8 +35,8 @@ This document describes the file system layout inside the agent container, inclu
 │   └── ...                       # Ephemeral files
 │
 ├── opt/octobot/bin/
-│   ├── obot-agent-api            # Agent API server binary (Bun standalone, glibc)
-│   ├── obot-agent-api.musl       # Agent API server binary (Bun standalone, musl)
+│   ├── octobot-agent-api            # Agent API server binary (Bun standalone, glibc)
+│   ├── octobot-agent-api.musl       # Agent API server binary (Bun standalone, musl)
 │   ├── agentfs                   # AgentFS file system tool (Rust, static)
 │   └── proxy                     # MITM proxy (Go, static)
 │
@@ -126,12 +126,12 @@ All Octobot executables are installed here. Added to `$PATH` at runtime.
 
 | Binary | Source | Purpose | Linking |
 |--------|--------|---------|---------|
-| `obot-agent-api` | Bun standalone | Agent HTTP server (glibc) | Dynamic (glibc) |
-| `obot-agent-api.musl` | Bun standalone | Agent HTTP server (musl) | Dynamic (musl) |
+| `octobot-agent-api` | Bun standalone | Agent HTTP server (glibc) | Dynamic (glibc) |
+| `octobot-agent-api.musl` | Bun standalone | Agent HTTP server (musl) | Dynamic (musl) |
 | `agentfs` | Rust (tursodatabase/agentfs) | File system operations with sandboxing | Static |
 | `proxy` | Go (proxy module) | MITM proxy for network interception | Static |
 
-**Note:** All binaries except `obot-agent-api*` are fully statically linked. The agent API binaries are built with Bun's `--compile` flag, which produces self-contained executables that still require libc (either glibc or musl depending on build variant). Use the `.musl` variant for Alpine-based systems.
+**Note:** All binaries except `octobot-agent-api*` are fully statically linked. The agent API binaries are built with Bun's `--compile` flag, which produces self-contained executables that still require libc (either glibc or musl depending on build variant). Use the `.musl` variant for Alpine-based systems.
 
 Permissions: **Read-only** at runtime
 
@@ -164,7 +164,7 @@ Used to pass runtime configuration from the host to the VM without network.
 ┌─────────────────────────────────────────────────────────────────┐
 │  Docker Container                                                │
 │                                                                  │
-│  obot-agent-api      ─────────────  Main process                │
+│  octobot-agent-api      ─────────────  Main process                │
 │                                                                  │
 │  /.data              ─────────────  Docker volume (persistent)  │
 │  /.workspace         ─────────────  Read-only bind mount        │
@@ -226,7 +226,7 @@ The container runs as non-root (`USER octobot`):
 ```dockerfile
 USER octobot
 ENTRYPOINT ["/usr/bin/tini", "--"]
-CMD ["/opt/octobot/bin/obot-agent-api"]
+CMD ["/opt/octobot/bin/octobot-agent-api"]
 ```
 
 The `tini` init process handles:
