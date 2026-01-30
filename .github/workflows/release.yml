@@ -168,11 +168,23 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # Extract version from tag: v0.1.0-alpha12 → 0.1.0-12
+      - name: Parse version from tag
+        id: version
+        shell: bash
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"  # Strip 'v' prefix
+          # Strip alpha/beta/rc: 0.1.0-alpha12 → 0.1.0-12
+          VERSION=$(echo "$TAG" | sed -E 's/(alpha|beta|rc)//g')
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Parsed version: $VERSION"
+
       # Build Tauri app and create release
       - name: Build and Release
         uses: tauri-apps/tauri-action@v0.6.1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_APP_VERSION: ${{ steps.version.outputs.version }}
           TAURI_TARGET_TRIPLE: ${{ matrix.target }}
           # macOS code signing
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}

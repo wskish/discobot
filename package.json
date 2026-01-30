@@ -1,6 +1,6 @@
 {
 	"name": "discobot",
-	"version": "0.0.1-alpha9",
+	"version": "0.0.0-dev",
 	"private": true,
 	"type": "module",
 	"scripts": {
