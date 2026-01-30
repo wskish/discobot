@@ -11,10 +11,10 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 
-	"github.com/obot-platform/octobot/proxy/internal/cache"
-	"github.com/obot-platform/octobot/proxy/internal/config"
-	"github.com/obot-platform/octobot/proxy/internal/logger"
-	"github.com/obot-platform/octobot/proxy/internal/proxy"
+	"github.com/obot-platform/discobot/proxy/internal/cache"
+	"github.com/obot-platform/discobot/proxy/internal/config"
+	"github.com/obot-platform/discobot/proxy/internal/logger"
+	"github.com/obot-platform/discobot/proxy/internal/proxy"
 )
 
 // Server is the API server for runtime configuration.

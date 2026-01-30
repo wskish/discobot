@@ -11,8 +11,8 @@ import (
 	"runtime"
 	"time"
 
-	"github.com/obot-platform/octobot/server/internal/config"
-	"github.com/obot-platform/octobot/server/internal/sandbox"
+	"github.com/obot-platform/discobot/server/internal/config"
+	"github.com/obot-platform/discobot/server/internal/sandbox"
 )
 
 // Config holds vz-specific configuration.

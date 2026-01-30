@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/obot-platform/octobot/server/internal/sandbox"
+	"github.com/obot-platform/discobot/server/internal/sandbox"
 )
 
 // eventSubscriber represents a subscriber to sandbox events.

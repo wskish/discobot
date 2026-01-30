@@ -3,7 +3,7 @@
  *
  * Manages service process lifecycle with file-based output storage.
  * Handles starting, stopping, and tracking service processes.
- * Output is persisted to ~/.config/octobot/services/output/{id}.out
+ * Output is persisted to ~/.config/discobot/services/output/{id}.out
  */
 
 import type { ChildProcess } from "node:child_process";
@@ -53,7 +53,7 @@ const STOPPED_SERVICE_GRACE_PERIOD = 30000;
 /**
  * Services directory name
  */
-const SERVICES_DIR = ".octobot/services";
+const SERVICES_DIR = ".discobot/services";
 
 // ============================================================================
 // Result Types

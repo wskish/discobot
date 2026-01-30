@@ -48,7 +48,7 @@ next-env.d.ts
 .agentfs/
 
 # Binaries
-proxy/octobot-proxy
+proxy/discobot-proxy
 server/server
 agent/agent
 

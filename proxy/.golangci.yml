@@ -34,7 +34,7 @@ formatters:
   settings:
     goimports:
       local-prefixes:
-        - github.com/obot-platform/octobot
+        - github.com/obot-platform/discobot
   exclusions:
     generated: lax
     paths:

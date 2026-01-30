@@ -19,7 +19,7 @@ test:
 # Clean build artifacts
 clean:
 	rm -rf bin/
-	rm -f octobot.db
+	rm -f discobot.db
 
 # Generate sqlc code
 sqlc:

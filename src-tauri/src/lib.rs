@@ -62,10 +62,10 @@ fn generate_secret() -> String {
 fn start_server(app: &tauri::AppHandle, port: u16, secret: &str) -> Result<CommandChild, String> {
     let sidecar = app
         .shell()
-        .sidecar("binaries/octobot-server")
+        .sidecar("binaries/discobot-server")
         .map_err(|e| format!("Failed to create sidecar command: {}", e))?
         .env("PORT", port.to_string())
-        .env("OCTOBOT_SECRET", secret)
+        .env("DISCOBOT_SECRET", secret)
         .env("TAURI", "true")
         .env("SUGGESTIONS_ENABLED", "true");
 

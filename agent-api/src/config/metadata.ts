@@ -3,11 +3,11 @@ import { join } from "node:path";
 
 /**
  * Default path where VirtioFS metadata is mounted in the VM.
- * The host shares a metadata directory via VirtioFS with tag "octobot-meta".
+ * The host shares a metadata directory via VirtioFS with tag "discobot-meta".
  * The guest mounts it at this path.
  */
 export const METADATA_PATH =
-	process.env.METADATA_PATH || "/run/octobot/metadata";
+	process.env.METADATA_PATH || "/run/discobot/metadata";
 
 /**
  * VsockConfig configures vsock-to-TCP forwarding.
@@ -141,11 +141,11 @@ export function loadConfig(): AgentConfig {
 	const port = metadata?.agent?.port || Number(process.env.PORT) || 3002;
 
 	// Shared secret - from metadata or environment
-	const sharedSecretHash = metadata?.secret || process.env.OCTOBOT_SECRET;
+	const sharedSecretHash = metadata?.secret || process.env.DISCOBOT_SECRET;
 
 	// Clear from environment so subprocess doesn't see it
-	if (process.env.OCTOBOT_SECRET) {
-		delete process.env.OCTOBOT_SECRET;
+	if (process.env.DISCOBOT_SECRET) {
+		delete process.env.DISCOBOT_SECRET;
 	}
 
 	// Session ID

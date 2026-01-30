@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/obot-platform/octobot/server/internal/sandbox"
+	"github.com/obot-platform/discobot/server/internal/sandbox"
 )
 
 const (

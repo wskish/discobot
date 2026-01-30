@@ -8,7 +8,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/obot-platform/octobot/server/internal/sandbox"
+	"github.com/obot-platform/discobot/server/internal/sandbox"
 )
 
 const (
@@ -16,18 +16,18 @@ const (
 	metadataSubdir = "metadata"
 
 	// MetadataTag is the VirtioFS tag used to mount metadata in the guest.
-	// The guest should mount this at /run/octobot/metadata.
-	MetadataTag = "octobot-meta"
+	// The guest should mount this at /run/discobot/metadata.
+	MetadataTag = "discobot-meta"
 
 	// MetadataGuestPath is the recommended mount point in the guest.
-	MetadataGuestPath = "/run/octobot/metadata"
+	MetadataGuestPath = "/run/discobot/metadata"
 )
 
 // VMMetadata contains configuration passed to the VM via VirtioFS.
 // This is written to the metadata directory before VM start and
 // mounted read-only in the guest.
 type VMMetadata struct {
-	// SessionID is the octobot session identifier.
+	// SessionID is the discobot session identifier.
 	SessionID string `json:"session_id"`
 
 	// Secret is the hashed shared secret for authentication.

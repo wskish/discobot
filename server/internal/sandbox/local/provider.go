@@ -19,8 +19,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/obot-platform/octobot/server/internal/config"
-	"github.com/obot-platform/octobot/server/internal/sandbox"
+	"github.com/obot-platform/discobot/server/internal/config"
+	"github.com/obot-platform/discobot/server/internal/sandbox"
 )
 
 // Provider implements the sandbox.Provider interface using local processes.
@@ -140,7 +140,7 @@ func (p *Provider) Create(_ context.Context, sessionID string, opts sandbox.Crea
 	// Add hashed secret if provided
 	if opts.SharedSecret != "" {
 		hashedSecret := hashSecret(opts.SharedSecret)
-		env["OCTOBOT_SECRET"] = hashedSecret
+		env["DISCOBOT_SECRET"] = hashedSecret
 	}
 
 	// Add workspace source and commit

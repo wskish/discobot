@@ -8,10 +8,10 @@ import (
 	"log"
 	"time"
 
-	"github.com/obot-platform/octobot/server/internal/config"
-	"github.com/obot-platform/octobot/server/internal/model"
-	"github.com/obot-platform/octobot/server/internal/sandbox"
-	"github.com/obot-platform/octobot/server/internal/store"
+	"github.com/obot-platform/discobot/server/internal/config"
+	"github.com/obot-platform/discobot/server/internal/model"
+	"github.com/obot-platform/discobot/server/internal/sandbox"
+	"github.com/obot-platform/discobot/server/internal/store"
 )
 
 // SandboxService manages sandbox lifecycle for sessions.
@@ -91,9 +91,9 @@ func (s *SandboxService) CreateForSession(ctx context.Context, sessionID string)
 	opts := sandbox.CreateOptions{
 		SharedSecret: sharedSecret,
 		Labels: map[string]string{
-			"octobot.session.id":   sessionID,
-			"octobot.workspace.id": session.WorkspaceID,
-			"octobot.project.id":   session.ProjectID,
+			"discobot.session.id":   sessionID,
+			"discobot.workspace.id": session.WorkspaceID,
+			"discobot.project.id":   session.ProjectID,
 		},
 		WorkspacePath:   workspacePath,
 		WorkspaceSource: workspace.Path, // Original workspace path (local or git URL)

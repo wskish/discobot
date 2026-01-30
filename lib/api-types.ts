@@ -469,7 +469,7 @@ export type ServiceStatus = "running" | "stopped" | "starting" | "stopping";
 
 /** Service represents a user-defined service in the sandbox */
 export interface Service {
-	/** Filename in .octobot/services/ */
+	/** Filename in .discobot/services/ */
 	id: string;
 	/** Display name (from config or id) */
 	name: string;

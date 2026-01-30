@@ -10,7 +10,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/obot-platform/octobot/server/internal/sandbox"
+	"github.com/obot-platform/discobot/server/internal/sandbox"
 )
 
 // serviceSubdomainPattern matches {session-id}-svc-{service-id}.* subdomains.

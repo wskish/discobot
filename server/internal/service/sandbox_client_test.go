@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/obot-platform/octobot/server/internal/sandbox"
+	"github.com/obot-platform/discobot/server/internal/sandbox"
 )
 
 // mockSandboxProvider implements sandbox.Provider for testing SandboxChatClient.
@@ -272,7 +272,7 @@ func TestSandboxChatClient_SendMessages_WithCredentials(t *testing.T) {
 
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == "POST" && r.URL.Path == "/chat" {
-			receivedCredentials = r.Header.Get("X-Octobot-Credentials")
+			receivedCredentials = r.Header.Get("X-Discobot-Credentials")
 			w.WriteHeader(http.StatusAccepted)
 			json.NewEncoder(w).Encode(map[string]string{
 				"completionId": "test-123",
@@ -518,8 +518,8 @@ func TestSandboxChatClient_SendMessages_WithGitConfig(t *testing.T) {
 
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == "POST" && r.URL.Path == "/chat" {
-			receivedGitUserName = r.Header.Get("X-Octobot-Git-User-Name")
-			receivedGitUserEmail = r.Header.Get("X-Octobot-Git-User-Email")
+			receivedGitUserName = r.Header.Get("X-Discobot-Git-User-Name")
+			receivedGitUserEmail = r.Header.Get("X-Discobot-Git-User-Email")
 			w.WriteHeader(http.StatusAccepted)
 			json.NewEncoder(w).Encode(map[string]string{
 				"completionId": "test-123",
@@ -560,10 +560,10 @@ func TestSandboxChatClient_SendMessages_WithGitConfig(t *testing.T) {
 
 	// Verify git config headers were sent
 	if receivedGitUserName != "Test User" {
-		t.Errorf("Expected X-Octobot-Git-User-Name: Test User, got: %s", receivedGitUserName)
+		t.Errorf("Expected X-Discobot-Git-User-Name: Test User, got: %s", receivedGitUserName)
 	}
 	if receivedGitUserEmail != "test@example.com" {
-		t.Errorf("Expected X-Octobot-Git-User-Email: test@example.com, got: %s", receivedGitUserEmail)
+		t.Errorf("Expected X-Discobot-Git-User-Email: test@example.com, got: %s", receivedGitUserEmail)
 	}
 }
 
@@ -572,8 +572,8 @@ func TestSandboxChatClient_SendMessages_WithPartialGitConfig(t *testing.T) {
 
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == "POST" && r.URL.Path == "/chat" {
-			receivedGitUserName = r.Header.Get("X-Octobot-Git-User-Name")
-			receivedGitUserEmail = r.Header.Get("X-Octobot-Git-User-Email")
+			receivedGitUserName = r.Header.Get("X-Discobot-Git-User-Name")
+			receivedGitUserEmail = r.Header.Get("X-Discobot-Git-User-Email")
 			w.WriteHeader(http.StatusAccepted)
 			json.NewEncoder(w).Encode(map[string]string{
 				"completionId": "test-123",
@@ -613,10 +613,10 @@ func TestSandboxChatClient_SendMessages_WithPartialGitConfig(t *testing.T) {
 
 	// Verify only name header was sent
 	if receivedGitUserName != "Name Only User" {
-		t.Errorf("Expected X-Octobot-Git-User-Name: Name Only User, got: %s", receivedGitUserName)
+		t.Errorf("Expected X-Discobot-Git-User-Name: Name Only User, got: %s", receivedGitUserName)
 	}
 	if receivedGitUserEmail != "" {
-		t.Errorf("Expected no X-Octobot-Git-User-Email header, got: %s", receivedGitUserEmail)
+		t.Errorf("Expected no X-Discobot-Git-User-Email header, got: %s", receivedGitUserEmail)
 	}
 }
 

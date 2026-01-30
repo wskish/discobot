@@ -37,8 +37,8 @@ serialNumber, _ := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
 template := x509.Certificate{
     SerialNumber: serialNumber,
     Subject: pkix.Name{
-        Organization: []string{"Octobot Proxy"},
-        CommonName:   "Octobot Proxy CA",
+        Organization: []string{"Discobot Proxy"},
+        CommonName:   "Discobot Proxy CA",
     },
     NotBefore:             time.Now(),
     NotAfter:              time.Now().Add(10 * 365 * 24 * time.Hour),
@@ -61,7 +61,7 @@ certDER, _ := x509.CreateCertificate(rand.Reader, &template, &template, &private
 
 **Key Details**:
 - **Implementation**: Pure Go using `crypto/x509` and `crypto/rsa` (no external dependencies)
-- **Subject**: `O=Octobot Proxy, CN=Octobot Proxy CA`
+- **Subject**: `O=Discobot Proxy, CN=Discobot Proxy CA`
 - **SANs (Subject Alternative Names)**: `localhost`, `127.0.0.1`, `::1` (for proper proxy identification)
 - **Validity**: 10 years (3650 days)
 - **Key Size**: 2048-bit RSA
@@ -96,7 +96,7 @@ return nil
 **Process**:
 ```bash
 # Copy certificate to standard location
-cp /.data/proxy/certs/ca.crt /usr/local/share/ca-certificates/octobot-proxy-ca.crt
+cp /.data/proxy/certs/ca.crt /usr/local/share/ca-certificates/discobot-proxy-ca.crt
 
 # Update system trust store
 update-ca-certificates
@@ -114,7 +114,7 @@ update-ca-certificates
 **Process**:
 ```bash
 # Copy certificate to standard location
-cp /.data/proxy/certs/ca.crt /etc/pki/ca-trust/source/anchors/octobot-proxy-ca.crt
+cp /.data/proxy/certs/ca.crt /etc/pki/ca-trust/source/anchors/discobot-proxy-ca.crt
 
 # Update system trust store
 update-ca-trust extract
@@ -209,23 +209,23 @@ ls -la /.data/proxy/certs/
 # View certificate details
 openssl x509 -in /.data/proxy/certs/ca.crt -text -noout
 # Should show:
-#   Subject: O = Octobot Proxy, CN = Octobot Proxy CA
+#   Subject: O = Discobot Proxy, CN = Discobot Proxy CA
 #   Validity: Not After : <10 years from generation>
 ```
 
 ### Verify System Trust (Debian/Ubuntu/Alpine)
 ```bash
 # Check certificate in trust directory
-ls -la /usr/local/share/ca-certificates/octobot-proxy-ca.crt
+ls -la /usr/local/share/ca-certificates/discobot-proxy-ca.crt
 
 # Check certificate in bundle
-grep -q "Octobot Proxy" /etc/ssl/certs/ca-certificates.crt && echo "FOUND"
+grep -q "Discobot Proxy" /etc/ssl/certs/ca-certificates.crt && echo "FOUND"
 ```
 
 ### Verify System Trust (Fedora/RHEL)
 ```bash
 # Check certificate in trust directory
-ls -la /etc/pki/ca-trust/source/anchors/octobot-proxy-ca.crt
+ls -la /etc/pki/ca-trust/source/anchors/discobot-proxy-ca.crt
 
 # Check trust bundles updated
 ls -la /etc/pki/ca-trust/extracted/
@@ -277,7 +277,7 @@ update-ca-certificates         # Debian/Ubuntu/Alpine
 update-ca-trust extract        # Fedora/RHEL
 
 # Check if certificate is in bundle
-grep "Octobot Proxy" /etc/ssl/certs/ca-certificates.crt
+grep "Discobot Proxy" /etc/ssl/certs/ca-certificates.crt
 ```
 
 ### Certificate Generation Fails

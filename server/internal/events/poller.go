@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/obot-platform/octobot/server/internal/store"
+	"github.com/obot-platform/discobot/server/internal/store"
 )
 
 // PollerConfig contains configuration for the event poller.

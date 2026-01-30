@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/obot-platform/octobot/server/internal/config"
-	"github.com/obot-platform/octobot/server/internal/database"
+	"github.com/obot-platform/discobot/server/internal/config"
+	"github.com/obot-platform/discobot/server/internal/database"
 )
 
 var postgresCleanup func(success bool)
@@ -72,7 +72,7 @@ func TestMain(m *testing.M) {
 // copied for each test. This avoids running AutoMigrate (~0.5s) per test.
 func createTemplateSQLiteDB() error {
 	// Create temp directory for template
-	tmpDir, err := os.MkdirTemp("", "octobot-test-template-*")
+	tmpDir, err := os.MkdirTemp("", "discobot-test-template-*")
 	if err != nil {
 		return fmt.Errorf("failed to create temp dir: %w", err)
 	}
@@ -104,7 +104,7 @@ func createTemplateSQLiteDB() error {
 // createTestSSHHostKey pre-generates an SSH host key for tests.
 // This avoids the expensive key generation (~1.4s) per SSH test.
 func createTestSSHHostKey() error {
-	tmpDir, err := os.MkdirTemp("", "octobot-test-ssh-*")
+	tmpDir, err := os.MkdirTemp("", "discobot-test-ssh-*")
 	if err != nil {
 		return fmt.Errorf("failed to create temp dir: %w", err)
 	}

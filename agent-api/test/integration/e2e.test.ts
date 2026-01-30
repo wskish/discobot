@@ -12,7 +12,7 @@ import { createApp } from "../../src/server/app.js";
 import { clearMessages, clearSession } from "../../src/store/session.js";
 
 // Set up test data directory before any imports that might use it
-const TEST_DATA_DIR = join(tmpdir(), `octobot-e2e-test-${process.pid}`);
+const TEST_DATA_DIR = join(tmpdir(), `discobot-e2e-test-${process.pid}`);
 process.env.SESSION_FILE = join(TEST_DATA_DIR, "session.json");
 process.env.MESSAGES_FILE = join(TEST_DATA_DIR, "messages.json");
 

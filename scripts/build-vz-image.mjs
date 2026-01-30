@@ -54,7 +54,7 @@ try {
 	console.log("VZ disk image built successfully");
 
 	// Verify output
-	const outputFile = join(resourcesDir, "octobot-rootfs.img.zst");
+	const outputFile = join(resourcesDir, "discobot-rootfs.img.zst");
 	if (existsSync(outputFile)) {
 		console.log(`Output: ${outputFile}`);
 	} else {

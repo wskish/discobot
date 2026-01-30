@@ -1,6 +1,6 @@
 # Proxy Architecture
 
-This document describes the architecture of the Octobot Proxy, a multi-protocol proxy server with HTTP interception and header injection capabilities.
+This document describes the architecture of the Discobot Proxy, a multi-protocol proxy server with HTTP interception and header injection capabilities.
 
 ## Overview
 

@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/obot-platform/octobot/server/internal/model"
-	"github.com/obot-platform/octobot/server/internal/service"
+	"github.com/obot-platform/discobot/server/internal/model"
+	"github.com/obot-platform/discobot/server/internal/service"
 )
 
 // SessionCommitExecutor handles session_commit jobs.

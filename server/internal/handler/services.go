@@ -8,7 +8,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/obot-platform/octobot/server/internal/middleware"
+	"github.com/obot-platform/discobot/server/internal/middleware"
 )
 
 // ============================================================================

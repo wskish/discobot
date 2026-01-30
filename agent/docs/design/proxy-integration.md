@@ -1,6 +1,6 @@
 # Proxy Integration with Agent
 
-This document describes how the HTTP proxy with Docker registry caching has been integrated into the Octobot agent.
+This document describes how the HTTP proxy with Docker registry caching has been integrated into the Discobot agent.
 
 ## Overview
 
@@ -75,7 +75,7 @@ The agent clones the workspace from git (if specified) or copies from the mount 
 
 **After workspace is available**, the agent sets up the proxy configuration:
 
-1. Checks for workspace-specific config at `/home/octobot/workspace/.octobot/proxy/config.yaml`
+1. Checks for workspace-specific config at `/home/discobot/workspace/.discobot/proxy/config.yaml`
 2. If found: Copies workspace config to `/.data/proxy/config.yaml`
 3. If not found: Writes built-in default config (with Docker caching enabled) to `/.data/proxy/config.yaml`
 
@@ -89,7 +89,7 @@ This happens **before** the proxy starts, ensuring configuration is always avail
 2. **Generate new certificate** if not found:
    - Uses Go's crypto/x509 library to create a 2048-bit RSA key pair
    - Creates a self-signed X.509 certificate valid for 10 years
-   - Subject: `O=Octobot Proxy, CN=Octobot Proxy CA`
+   - Subject: `O=Discobot Proxy, CN=Discobot Proxy CA`
    - **SANs (Subject Alternative Names)**: `localhost`, `127.0.0.1`, `::1`
    - Stored at `/.data/proxy/certs/ca.crt` (public) and `ca.key` (private, mode 0600)
 
@@ -113,7 +113,7 @@ Creates and chowns proxy directories:
 Starts the proxy with the config file:
 
 ```bash
-/opt/octobot/bin/proxy -config /.data/proxy/config.yaml
+/opt/discobot/bin/proxy -config /.data/proxy/config.yaml
 ```
 
 ### 6. Health Check
@@ -134,7 +134,7 @@ If proxy startup succeeded, sets proxy environment variables in multiple locatio
 - `NODE_EXTRA_CA_CERTS=/.data/proxy/certs/ca.crt` (Node.js: trust proxy CA)
 - Lowercase variants also set for all variables (except NODE_EXTRA_CA_CERTS)
 
-**B. System Profile** (`/etc/profile.d/octobot-proxy.sh`):
+**B. System Profile** (`/etc/profile.d/discobot-proxy.sh`):
 - Same environment variables written to profile script
 - Automatically sourced by login shells (bash, sh, zsh)
 - Falls back to `/etc/profile` if `/etc/profile.d` doesn't exist
@@ -174,15 +174,15 @@ The agent includes a built-in default configuration with Docker registry caching
 
 The agent looks for proxy configuration in this order:
 
-1. **Workspace config** (highest priority): `.octobot/proxy/config.yaml` in your workspace
+1. **Workspace config** (highest priority): `.discobot/proxy/config.yaml` in your workspace
 2. **Built-in default** (fallback): Embedded config with Docker caching enabled
 
 ### Workspace-Specific Configuration
 
-To customize proxy settings for a specific workspace, create `.octobot/proxy/config.yaml` in your repository:
+To customize proxy settings for a specific workspace, create `.discobot/proxy/config.yaml` in your repository:
 
 ```yaml
-# .octobot/proxy/config.yaml
+# .discobot/proxy/config.yaml
 proxy:
   port: 17080
   api_port: 17081
@@ -258,9 +258,9 @@ Response:
 The proxy logs to stdout/stderr (captured by container logs):
 
 ```
-octobot-agent: found proxy at /opt/octobot/bin/proxy, starting HTTP proxy...
-octobot-agent: proxy started (pid=42), waiting for health check...
-octobot-agent: HTTP proxy ready on port 17080
+discobot-agent: found proxy at /opt/discobot/bin/proxy, starting HTTP proxy...
+discobot-agent: proxy started (pid=42), waiting for health check...
+discobot-agent: HTTP proxy ready on port 17080
 ```
 
 During operation:
@@ -331,7 +331,7 @@ The agent **automatically generates** a CA certificate during container startup 
 **Generation process:**
 - Uses Go's `crypto/x509` and `crypto/rsa` packages to generate a 2048-bit RSA key pair
 - Creates a self-signed X.509 certificate valid for 10 years
-- Subject: `O=Octobot Proxy, CN=Octobot Proxy CA`
+- Subject: `O=Discobot Proxy, CN=Discobot Proxy CA`
 - **SANs (Subject Alternative Names)**: Includes `localhost`, `127.0.0.1`, and `::1` for proper proxy identification
 - Location: `/.data/proxy/certs/ca.crt` (public) and `ca.key` (private, mode 0600)
 
@@ -346,11 +346,11 @@ The agent **automatically installs** the CA certificate in the system trust stor
 **Supported distributions:**
 
 1. **Debian/Ubuntu/Alpine**:
-   - Copies certificate to `/usr/local/share/ca-certificates/octobot-proxy-ca.crt`
+   - Copies certificate to `/usr/local/share/ca-certificates/discobot-proxy-ca.crt`
    - Runs `update-ca-certificates` to update trust store
 
 2. **Fedora/RHEL/CentOS**:
-   - Copies certificate to `/etc/pki/ca-trust/source/anchors/octobot-proxy-ca.crt`
+   - Copies certificate to `/etc/pki/ca-trust/source/anchors/discobot-proxy-ca.crt`
    - Runs `update-ca-trust extract` to update trust store
 
 3. **Other distributions**:
@@ -389,15 +389,15 @@ sudo update-ca-trust extract
 
 Check logs for:
 ```
-octobot-agent: Proxy daemon not started: proxy binary not found at /opt/octobot/bin/proxy
+discobot-agent: Proxy daemon not started: proxy binary not found at /opt/discobot/bin/proxy
 ```
 
-**Solution**: Verify the proxy binary is included in the container image at `/opt/octobot/bin/proxy`.
+**Solution**: Verify the proxy binary is included in the container image at `/opt/discobot/bin/proxy`.
 
 ### Proxy Not Ready
 
 ```
-octobot-agent: proxy did not become ready: timeout waiting for proxy health check
+discobot-agent: proxy did not become ready: timeout waiting for proxy health check
 ```
 
 **Solution**: Check if port 17081 is available. Increase `proxyStartupTimeout` in agent code if needed.

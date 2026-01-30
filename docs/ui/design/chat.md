@@ -258,8 +258,8 @@ Pinned prompts are stored as a JSON-stringified array of strings in the user pre
 ### Storage
 
 #### LocalStorage
-- `octobot:prompt-history` - Recent prompt history (max 100 items)
-- `octobot-prompt-draft-{sessionId}` - Per-session draft persistence
+- `discobot:prompt-history` - Recent prompt history (max 100 items)
+- `discobot-prompt-draft-{sessionId}` - Per-session draft persistence
 
 #### User Preferences API
 - `prompts.pinned` - Pinned prompts (stored as JSON array, unlimited size, synced across devices)

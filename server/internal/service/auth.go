@@ -16,9 +16,9 @@ import (
 	"golang.org/x/oauth2/github"
 	"golang.org/x/oauth2/google"
 
-	"github.com/obot-platform/octobot/server/internal/config"
-	"github.com/obot-platform/octobot/server/internal/model"
-	"github.com/obot-platform/octobot/server/internal/store"
+	"github.com/obot-platform/discobot/server/internal/config"
+	"github.com/obot-platform/discobot/server/internal/model"
+	"github.com/obot-platform/discobot/server/internal/store"
 )
 
 // AuthService handles authentication operations

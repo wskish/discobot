@@ -9,7 +9,7 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
-	"github.com/obot-platform/octobot/proxy/internal/config"
+	"github.com/obot-platform/discobot/proxy/internal/config"
 )
 
 // Logger wraps zap.Logger with proxy-specific methods.

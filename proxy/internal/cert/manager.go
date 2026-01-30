@@ -83,8 +83,8 @@ func (m *Manager) generateCA(certPath, keyPath string) (*tls.Certificate, error)
 	template := x509.Certificate{
 		SerialNumber: serialNumber,
 		Subject: pkix.Name{
-			Organization: []string{"Octobot Proxy"},
-			CommonName:   "Octobot Proxy CA",
+			Organization: []string{"Discobot Proxy"},
+			CommonName:   "Discobot Proxy CA",
 		},
 		NotBefore:             time.Now(),
 		NotAfter:              time.Now().Add(10 * 365 * 24 * time.Hour), // 10 years

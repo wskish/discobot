@@ -4,18 +4,18 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/obot-platform/octobot/server/internal/config"
-	"github.com/obot-platform/octobot/server/internal/events"
-	"github.com/obot-platform/octobot/server/internal/git"
-	"github.com/obot-platform/octobot/server/internal/jobs"
-	"github.com/obot-platform/octobot/server/internal/sandbox"
-	"github.com/obot-platform/octobot/server/internal/service"
-	"github.com/obot-platform/octobot/server/internal/store"
+	"github.com/obot-platform/discobot/server/internal/config"
+	"github.com/obot-platform/discobot/server/internal/events"
+	"github.com/obot-platform/discobot/server/internal/git"
+	"github.com/obot-platform/discobot/server/internal/jobs"
+	"github.com/obot-platform/discobot/server/internal/sandbox"
+	"github.com/obot-platform/discobot/server/internal/service"
+	"github.com/obot-platform/discobot/server/internal/store"
 )
 
 const (
-	sessionCookieName = "octobot_session"
-	stateCookieName   = "octobot_oauth_state"
+	sessionCookieName = "discobot_session"
+	stateCookieName   = "discobot_oauth_state"
 )
 
 // Handler contains all HTTP handlers

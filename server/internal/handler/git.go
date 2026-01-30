@@ -5,7 +5,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/obot-platform/octobot/server/internal/git"
+	"github.com/obot-platform/discobot/server/internal/git"
 )
 
 // GetWorkspaceGitStatus returns the git status for a workspace

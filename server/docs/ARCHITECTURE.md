@@ -1,6 +1,6 @@
 # Server Architecture
 
-This document describes the architecture of the Octobot Go server, which provides REST APIs and manages workspace/session/sandbox lifecycle.
+This document describes the architecture of the Discobot Go server, which provides REST APIs and manages workspace/session/sandbox lifecycle.
 
 ## Overview
 
@@ -354,7 +354,7 @@ Chat Message → Update session status to "running"
 
 ```go
 type SandboxOptions struct {
-    Image       string            // e.g., "octobot-agent-api:latest"
+    Image       string            // e.g., "discobot-agent-api:latest"
     Binds       []string          // Volume mounts
     Env         []string          // Environment variables
     NetworkMode string            // Docker network

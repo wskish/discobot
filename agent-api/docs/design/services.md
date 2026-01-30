@@ -1,10 +1,10 @@
 # Services Module
 
-The services module manages user-defined services in the agent container. Services are files in the `.octobot/services/` directory that can be started, stopped, and monitored via the API.
+The services module manages user-defined services in the agent container. Services are files in the `.discobot/services/` directory that can be started, stopped, and monitored via the API.
 
 ## Overview
 
-Services are defined as files in the `workspace/.octobot/services/` directory. Each service can have optional YAML front matter to configure display name, description, and HTTP/HTTPS port bindings.
+Services are defined as files in the `workspace/.discobot/services/` directory. Each service can have optional YAML front matter to configure display name, description, and HTTP/HTTPS port bindings.
 
 There are two types of services:
 
@@ -17,7 +17,7 @@ There are two types of services:
 ### File Location
 
 ```
-workspace/.octobot/services/
+workspace/.discobot/services/
 ├── my-server        # Executable service file
 ├── api-backend      # Another service
 └── dev-proxy        # etc.
@@ -95,7 +95,7 @@ Passive services declare an HTTP endpoint without providing a script to run. The
 
 ### Passive Service Example
 
-Create a file `.octobot/services/webapp` (no extension needed, doesn't need to be executable):
+Create a file `.discobot/services/webapp` (no extension needed, doesn't need to be executable):
 
 ```yaml
 ---
@@ -140,7 +140,7 @@ Returns all discovered services with their current status.
       "name": "My Server",
       "description": "Development server",
       "http": 8080,
-      "path": "/workspace/.octobot/services/my-server",
+      "path": "/workspace/.discobot/services/my-server",
       "status": "running",
       "pid": 12345,
       "startedAt": "2024-01-15T10:30:00Z"
@@ -150,7 +150,7 @@ Returns all discovered services with their current status.
       "name": "Web App",
       "description": "Frontend (external)",
       "http": 3000,
-      "path": "/workspace/.octobot/services/webapp",
+      "path": "/workspace/.discobot/services/webapp",
       "status": "stopped",
       "passive": true
     }
@@ -263,7 +263,7 @@ interface ManagedService {
 Service output is persisted to disk for durability:
 
 ```
-~/.config/octobot/services/output/{id}.out
+~/.config/discobot/services/output/{id}.out
 ```
 
 - Format: JSONL (newline-delimited JSON)
@@ -344,7 +344,7 @@ Example: `01HXYZ123456789ABCDEFGHIJ-svc-myservice.localhost:3000`
 3. Gets HTTP client for the sandbox via the sandbox provider
 4. Proxies request to `/services/{service-id}/http{original-path}` on agent-api
 5. Sets `x-forwarded-path` to the original request path
-6. Does NOT pass credentials (Authorization, X-Octobot-Credentials headers)
+6. Does NOT pass credentials (Authorization, X-Discobot-Credentials headers)
 
 ### Security Notes
 

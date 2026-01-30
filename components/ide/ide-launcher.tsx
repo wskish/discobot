@@ -56,7 +56,7 @@ const IDE_CONFIGS: IDEConfig[] = [
 
 const PREFERENCE_KEY = "preferredIDE";
 const SSH_PORT = 3333;
-const WORKSPACE_PATH = "/home/octobot/workspace";
+const WORKSPACE_PATH = "/home/discobot/workspace";
 
 interface IDELauncherProps {
 	sessionId: string;

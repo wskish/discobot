@@ -1,6 +1,6 @@
-# Octobot Server
+# Discobot Server
 
-The Octobot Server is a Go backend that provides REST APIs for workspace management, session orchestration, and sandbox lifecycle management.
+The Discobot Server is a Go backend that provides REST APIs for workspace management, session orchestration, and sandbox lifecycle management.
 
 ## Overview
 
@@ -82,17 +82,17 @@ golangci-lint run
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `PORT` | `3001` | HTTP server port |
-| `DATABASE_DSN` | `octobot.db` | Database connection string |
+| `DATABASE_DSN` | `discobot.db` | Database connection string |
 | `AUTH_ENABLED` | `false` | Enable authentication |
 | `WORKSPACE_DIR` | `/tmp/workspaces` | Base directory for workspaces |
-| `SANDBOX_IMAGE` | `ghcr.io/obot-platform/octobot:main` | Default sandbox image |
+| `SANDBOX_IMAGE` | `ghcr.io/obot-platform/discobot:main` | Default sandbox image |
 | `CACHE_ENABLED` | `true` | Enable project-scoped cache volumes |
 | `ENCRYPTION_KEY` | (required) | Key for credential encryption |
 
 ### Building
 
 ```bash
-go build -o octobot-server ./cmd/server
+go build -o discobot-server ./cmd/server
 ```
 
 ## API Endpoints

@@ -25,8 +25,8 @@ This document describes the file system layout inside the agent container, inclu
 ├── workspace/                    # Project root (WRITABLE)
 │   └── ...                       # Working copy of project files
 │
-├── home/octobot/                 # User home directory (WRITABLE, via AgentFS)
-│   ├── .config/octobot/          # Session data storage
+├── home/discobot/                 # User home directory (WRITABLE, via AgentFS)
+│   ├── .config/discobot/          # Session data storage
 │   │   ├── agent-session.json    # Session metadata (SESSION_FILE)
 │   │   └── agent-messages.json   # Message history (MESSAGES_FILE)
 │   └── ...                       # User config, caches, etc.
@@ -34,13 +34,13 @@ This document describes the file system layout inside the agent container, inclu
 ├── tmp/                          # Temporary storage (WRITABLE)
 │   └── ...                       # Ephemeral files
 │
-├── opt/octobot/bin/
-│   ├── octobot-agent-api            # Agent API server binary (Bun standalone, glibc)
-│   ├── octobot-agent-api.musl       # Agent API server binary (Bun standalone, musl)
+├── opt/discobot/bin/
+│   ├── discobot-agent-api            # Agent API server binary (Bun standalone, glibc)
+│   ├── discobot-agent-api.musl       # Agent API server binary (Bun standalone, musl)
 │   ├── agentfs                   # AgentFS file system tool (Rust, static)
 │   └── proxy                     # MITM proxy (Go, static)
 │
-└── run/octobot/                  # Runtime directory (VZ only)
+└── run/discobot/                  # Runtime directory (VZ only)
     └── metadata/                 # VirtioFS mount for VM metadata
 ```
 
@@ -75,9 +75,9 @@ The working directory where Claude Code operates. This is where the agent reads 
 
 Permissions: **Writable**
 
-### `/home/octobot` - User Home (Writable)
+### `/home/discobot` - User Home (Writable)
 
-Home directory for the non-root `octobot` user (UID 1000).
+Home directory for the non-root `discobot` user (UID 1000).
 
 Used by:
 - Claude Code ACP for user-level configuration
@@ -87,14 +87,14 @@ Used by:
 
 Permissions: **Writable**
 
-### `/home/octobot/.config/octobot` - Session Data Storage (Writable, Persistent via AgentFS)
+### `/home/discobot/.config/discobot` - Session Data Storage (Writable, Persistent via AgentFS)
 
 Writable storage for session data. Persists across container restarts via AgentFS copy-on-write.
 
 | File | Env Variable | Default | Purpose |
 |------|--------------|---------|---------|
-| `agent-session.json` | `SESSION_FILE` | `/home/octobot/.config/octobot/agent-session.json` | Session ID and metadata |
-| `agent-messages.json` | `MESSAGES_FILE` | `/home/octobot/.config/octobot/agent-messages.json` | Message history |
+| `agent-session.json` | `SESSION_FILE` | `/home/discobot/.config/discobot/agent-session.json` | Session ID and metadata |
+| `agent-messages.json` | `MESSAGES_FILE` | `/home/discobot/.config/discobot/agent-messages.json` | Message history |
 
 Session file format:
 ```json
@@ -120,22 +120,22 @@ Used by:
 
 Permissions: **Writable**
 
-### `/opt/octobot/bin` - Octobot Binaries
+### `/opt/discobot/bin` - Discobot Binaries
 
-All Octobot executables are installed here. Added to `$PATH` at runtime.
+All Discobot executables are installed here. Added to `$PATH` at runtime.
 
 | Binary | Source | Purpose | Linking |
 |--------|--------|---------|---------|
-| `octobot-agent-api` | Bun standalone | Agent HTTP server (glibc) | Dynamic (glibc) |
-| `octobot-agent-api.musl` | Bun standalone | Agent HTTP server (musl) | Dynamic (musl) |
+| `discobot-agent-api` | Bun standalone | Agent HTTP server (glibc) | Dynamic (glibc) |
+| `discobot-agent-api.musl` | Bun standalone | Agent HTTP server (musl) | Dynamic (musl) |
 | `agentfs` | Rust (tursodatabase/agentfs) | File system operations with sandboxing | Static |
 | `proxy` | Go (proxy module) | MITM proxy for network interception | Static |
 
-**Note:** All binaries except `octobot-agent-api*` are fully statically linked. The agent API binaries are built with Bun's `--compile` flag, which produces self-contained executables that still require libc (either glibc or musl depending on build variant). Use the `.musl` variant for Alpine-based systems.
+**Note:** All binaries except `discobot-agent-api*` are fully statically linked. The agent API binaries are built with Bun's `--compile` flag, which produces self-contained executables that still require libc (either glibc or musl depending on build variant). Use the `.musl` variant for Alpine-based systems.
 
 Permissions: **Read-only** at runtime
 
-### `/run/octobot/metadata` - VM Metadata (VZ only)
+### `/run/discobot/metadata` - VM Metadata (VZ only)
 
 VirtioFS mount point for macOS Virtualization.framework VMs.
 
@@ -150,7 +150,7 @@ Used to pass runtime configuration from the host to the VM without network.
 │  WRITABLE            │  READ-ONLY                               │
 ├──────────────────────┼──────────────────────────────────────────┤
 │  /workspace          │  /.workspace                             │
-│  /home/octobot       │  /opt/octobot/bin                        │
+│  /home/discobot       │  /opt/discobot/bin                        │
 │  /tmp                │  /usr, /bin, /lib, etc.                  │
 │  /.data              │                                          │
 └──────────────────────┴──────────────────────────────────────────┘
@@ -164,12 +164,12 @@ Used to pass runtime configuration from the host to the VM without network.
 ┌─────────────────────────────────────────────────────────────────┐
 │  Docker Container                                                │
 │                                                                  │
-│  octobot-agent-api      ─────────────  Main process                │
+│  discobot-agent-api      ─────────────  Main process                │
 │                                                                  │
 │  /.data              ─────────────  Docker volume (persistent)  │
 │  /.workspace         ─────────────  Read-only bind mount        │
 │  /workspace          ─────────────  Writable project root       │
-│  /home/octobot       ─────────────  AgentFS mount (COW)         │
+│  /home/discobot       ─────────────  AgentFS mount (COW)         │
 │  /tmp                ─────────────  Writable tmpfs              │
 │                                                                  │
 │  Network: Bridge or host mode                                    │
@@ -187,16 +187,16 @@ Used to pass runtime configuration from the host to the VM without network.
 │  /.data              ─────────────  Mounted disk (persistent)   │
 │  /.workspace         ─────────────  VirtioFS (read-only)        │
 │  /workspace          ─────────────  Writable project root       │
-│  /home/octobot       ─────────────  AgentFS mount (COW)         │
+│  /home/discobot       ─────────────  AgentFS mount (COW)         │
 │  /tmp                ─────────────  Writable tmpfs              │
-│  /run/octobot/meta   ─────────────  VirtioFS for metadata       │
+│  /run/discobot/meta   ─────────────  VirtioFS for metadata       │
 │                                                                  │
 │  Network: Virtio-net                                             │
 │  Console: Virtio-console                                         │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-**Note:** In VZ VMs, the root filesystem is read-only. Writable directories (`/data`, `/workspace`, `/home/octobot`, `/tmp`) use tmpfs or overlay mounts.
+**Note:** In VZ VMs, the root filesystem is read-only. Writable directories (`/data`, `/workspace`, `/home/discobot`, `/tmp`) use tmpfs or overlay mounts.
 
 ## User and Permissions
 
@@ -204,29 +204,29 @@ Used to pass runtime configuration from the host to the VM without network.
 
 | Property | Value |
 |----------|-------|
-| Username | `octobot` |
+| Username | `discobot` |
 | UID | `1000` |
 | GID | `1000` |
-| Home | `/home/octobot` |
+| Home | `/home/discobot` |
 | Shell | `/bin/bash` |
 
 ### File Ownership
 
 | Path | Owner | Mode |
 |------|-------|------|
-| `/opt/octobot/bin/*` | `root:root` | `755` |
-| `/home/octobot` | `octobot:octobot` | `755` |
-| `/workspace` | `octobot:octobot` | varies |
-| `/.data` | `octobot:octobot` | `755` |
+| `/opt/discobot/bin/*` | `root:root` | `755` |
+| `/home/discobot` | `discobot:discobot` | `755` |
+| `/workspace` | `discobot:discobot` | varies |
+| `/.data` | `discobot:discobot` | `755` |
 
 ### Process Execution
 
-The container runs as non-root (`USER octobot`):
+The container runs as non-root (`USER discobot`):
 
 ```dockerfile
-USER octobot
+USER discobot
 ENTRYPOINT ["/usr/bin/tini", "--"]
-CMD ["/opt/octobot/bin/octobot-agent-api"]
+CMD ["/opt/discobot/bin/discobot-agent-api"]
 ```
 
 The `tini` init process handles:
@@ -240,8 +240,8 @@ The `tini` init process handles:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `SESSION_FILE` | `/home/octobot/.config/octobot/agent-session.json` | Session persistence |
-| `MESSAGES_FILE` | `/home/octobot/.config/octobot/agent-messages.json` | Message persistence |
+| `SESSION_FILE` | `/home/discobot/.config/discobot/agent-session.json` | Session persistence |
+| `MESSAGES_FILE` | `/home/discobot/.config/discobot/agent-messages.json` | Message persistence |
 | `AGENT_CWD` | `/workspace` | Working directory for Claude Code |
 
 ### Network Ports
@@ -278,13 +278,13 @@ const child = spawn(agentCommand, agentArgs, {
 │  /workspace          ───── WRITABLE ─────▶  Lost on restart     │
 │  (project root)            (unless synced)                       │
 │                                                                  │
-│  /home/octobot       ───── PERSISTS ─────▶  Via AgentFS COW     │
-│  (user home)               (session data in ~/.config/octobot)   │
+│  /home/discobot       ───── PERSISTS ─────▶  Via AgentFS COW     │
+│  (user home)               (session data in ~/.config/discobot)   │
 │                                                                  │
 │  /tmp                ───── WRITABLE ─────▶  Lost on restart     │
 │  (temporary)               (ephemeral)                           │
 │                                                                  │
-│  /opt/octobot/bin    ───── READ-ONLY ────▶  Image layers        │
+│  /opt/discobot/bin    ───── READ-ONLY ────▶  Image layers        │
 │  (application)             (rebuilt)                             │
 │                                                                  │
 └─────────────────────────────────────────────────────────────────┘

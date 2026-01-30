@@ -24,8 +24,8 @@ import (
 
 	"github.com/Code-Hex/vz/v3"
 
-	"github.com/obot-platform/octobot/server/internal/config"
-	"github.com/obot-platform/octobot/server/internal/sandbox"
+	"github.com/obot-platform/discobot/server/internal/config"
+	"github.com/obot-platform/discobot/server/internal/sandbox"
 )
 
 // eventSubscriber represents a subscriber to sandbox events.
@@ -36,7 +36,7 @@ type eventSubscriber struct {
 
 const (
 	// labelSecret is the metadata key for storing the raw shared secret.
-	labelSecret = "octobot.secret"
+	labelSecret = "discobot.secret"
 
 	// containerPort is the fixed port exposed by all sandboxes.
 	containerPort = 3002
@@ -182,7 +182,7 @@ func NewProvider(cfg *config.Config, vzCfg *Config) (*Provider, error) {
 
 // vmName generates a consistent VM name from session ID.
 func vmName(sessionID string) string {
-	return fmt.Sprintf("octobot-session-%s", sessionID)
+	return fmt.Sprintf("discobot-session-%s", sessionID)
 }
 
 // diskImagePath returns the path to the disk image for a session.
@@ -237,11 +237,11 @@ func (p *Provider) Create(ctx context.Context, sessionID string, opts sandbox.Cr
 	// WORKSPACE_SOURCE is the original source (local path or git URL)
 	env := make(map[string]string)
 
-	// Add session ID (required by octobot-agent for AgentFS database naming)
+	// Add session ID (required by discobot-agent for AgentFS database naming)
 	env["SESSION_ID"] = sessionID
 
 	if opts.SharedSecret != "" {
-		env["OCTOBOT_SECRET"] = hashSecret(opts.SharedSecret)
+		env["DISCOBOT_SECRET"] = hashSecret(opts.SharedSecret)
 	}
 	if opts.WorkspacePath != "" {
 		env["WORKSPACE_PATH"] = workspacePath
@@ -256,8 +256,8 @@ func (p *Provider) Create(ctx context.Context, sessionID string, opts sandbox.Cr
 	// Prepare metadata
 	metadata := map[string]string{
 		"name":             vmName(sessionID),
-		"octobot.managed":  "true",
-		"octobot.session":  sessionID,
+		"discobot.managed":  "true",
+		"discobot.session":  sessionID,
 		"workspace.path":   opts.WorkspacePath,
 		"workspace.commit": opts.WorkspaceCommit,
 	}
@@ -797,7 +797,7 @@ func (p *Provider) GetSecret(ctx context.Context, sessionID string) (string, err
 	return instance.secret, nil
 }
 
-// List returns all sandboxes managed by octobot.
+// List returns all sandboxes managed by discobot.
 func (p *Provider) List(ctx context.Context) ([]*sandbox.Sandbox, error) {
 	p.vmInstancesMu.RLock()
 	defer p.vmInstancesMu.RUnlock()

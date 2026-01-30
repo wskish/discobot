@@ -453,7 +453,7 @@ class ApiClient {
 	/**
 	 * Start a service in a session's sandbox.
 	 * @param sessionId Session ID
-	 * @param serviceId Service ID (filename in .octobot/services/)
+	 * @param serviceId Service ID (filename in .discobot/services/)
 	 */
 	async startService(
 		sessionId: string,
@@ -468,7 +468,7 @@ class ApiClient {
 	/**
 	 * Stop a service in a session's sandbox.
 	 * @param sessionId Session ID
-	 * @param serviceId Service ID (filename in .octobot/services/)
+	 * @param serviceId Service ID (filename in .discobot/services/)
 	 */
 	async stopService(
 		sessionId: string,
@@ -484,7 +484,7 @@ class ApiClient {
 	 * Get the URL for streaming service output via SSE.
 	 * Use with EventSource to receive real-time output.
 	 * @param sessionId Session ID
-	 * @param serviceId Service ID (filename in .octobot/services/)
+	 * @param serviceId Service ID (filename in .discobot/services/)
 	 */
 	getServiceOutputUrl(sessionId: string, serviceId: string): string {
 		return `${this.base}/sessions/${sessionId}/services/${serviceId}/output`;

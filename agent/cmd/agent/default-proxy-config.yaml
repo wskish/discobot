@@ -1,5 +1,5 @@
-# Default Octobot Proxy Configuration
-# This config is used when no workspace-specific config is found at .octobot/proxy/config.yaml
+# Default Discobot Proxy Configuration
+# This config is used when no workspace-specific config is found at .discobot/proxy/config.yaml
 
 proxy:
   port: 17080

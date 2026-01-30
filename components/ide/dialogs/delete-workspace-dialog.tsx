@@ -63,7 +63,7 @@ export function DeleteWorkspaceDialog({
 					</DialogTitle>
 					<DialogDescription>
 						Are you sure you want to delete &quot;{displayName}&quot;? This will
-						remove the workspace and all its sessions from Octobot.
+						remove the workspace and all its sessions from Discobot.
 					</DialogDescription>
 				</DialogHeader>
 

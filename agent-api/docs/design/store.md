@@ -30,7 +30,7 @@ This module handles session and message storage, providing both in-memory access
 │  └──────────────────────────────────────────────────────────┘  │
 │                           │                                      │
 │                           ▼                                      │
-│                  ~/.config/octobot/*.json                          │
+│                  ~/.config/discobot/*.json                          │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -40,8 +40,8 @@ This module handles session and message storage, providing both in-memory access
 
 ```typescript
 interface SessionStoreConfig {
-  sessionFile?: string   // Default: ~/.config/octobot/agent-session.json
-  messagesFile?: string  // Default: ~/.config/octobot/agent-messages.json
+  sessionFile?: string   // Default: ~/.config/discobot/agent-session.json
+  messagesFile?: string  // Default: ~/.config/discobot/agent-messages.json
 }
 
 class SessionStore {
@@ -186,8 +186,8 @@ class SessionStore {
   private messagesFile: string
 
   constructor(config?: SessionStoreConfig) {
-    this.sessionFile = config?.sessionFile ?? '~/.config/octobot/agent-session.json'
-    this.messagesFile = config?.messagesFile ?? '~/.config/octobot/agent-messages.json'
+    this.sessionFile = config?.sessionFile ?? '~/.config/discobot/agent-session.json'
+    this.messagesFile = config?.messagesFile ?? '~/.config/discobot/agent-messages.json'
   }
 
   getMessages(): UIMessage[] {

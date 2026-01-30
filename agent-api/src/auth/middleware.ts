@@ -10,11 +10,11 @@ const PUBLIC_PATHS = [/^\/services\/[^/]+\/http\//];
 /**
  * Creates an authentication middleware that validates Bearer tokens against a salted hash.
  *
- * When OCTOBOT_SECRET env var is set (as a salted hash), this middleware requires
+ * When DISCOBOT_SECRET env var is set (as a salted hash), this middleware requires
  * all requests to include an Authorization header with a Bearer token that verifies
  * against the hash.
  *
- * @param hashedSecret - The salted hash from OCTOBOT_SECRET env var, or undefined/empty to skip auth
+ * @param hashedSecret - The salted hash from DISCOBOT_SECRET env var, or undefined/empty to skip auth
  * @returns Hono middleware function
  */
 export function authMiddleware(hashedSecret: string | undefined) {

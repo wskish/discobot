@@ -9,11 +9,11 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 
-	"github.com/obot-platform/octobot/server/internal/config"
-	"github.com/obot-platform/octobot/server/internal/model"
-	"github.com/obot-platform/octobot/server/internal/sandbox"
-	"github.com/obot-platform/octobot/server/internal/sandbox/mock"
-	"github.com/obot-platform/octobot/server/internal/store"
+	"github.com/obot-platform/discobot/server/internal/config"
+	"github.com/obot-platform/discobot/server/internal/model"
+	"github.com/obot-platform/discobot/server/internal/sandbox"
+	"github.com/obot-platform/discobot/server/internal/sandbox/mock"
+	"github.com/obot-platform/discobot/server/internal/store"
 )
 
 // Use the config constant for test consistency

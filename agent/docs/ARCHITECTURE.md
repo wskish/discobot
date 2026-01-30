@@ -1,10 +1,10 @@
 # Agent Architecture
 
-This document describes the architecture of the `octobot-agent` init process.
+This document describes the architecture of the `discobot-agent` init process.
 
 ## Overview
 
-The `octobot-agent` binary serves as the container's PID 1 process, providing:
+The `discobot-agent` binary serves as the container's PID 1 process, providing:
 
 1. Home directory initialization (copy from template)
 2. Workspace initialization (git clone)
@@ -13,7 +13,7 @@ The `octobot-agent` binary serves as the container's PID 1 process, providing:
 5. CA certificate generation and system trust installation
 6. Docker daemon startup (if available, with proxy configuration)
 7. Process reaping for zombie collection
-8. Privilege separation (root → octobot user)
+8. Privilege separation (root → discobot user)
 9. Signal handling and forwarding
 10. Graceful shutdown coordination
 
@@ -50,10 +50,10 @@ The `octobot-agent` binary serves as the container's PID 1 process, providing:
 ┌─────────────────────────────────────────────────────────────┐
 │  Step 1: Base Home Setup                                    │
 │  ───────────────────────                                    │
-│  • Check if /.data/octobot exists                           │
-│  • If not, copy /home/octobot to /.data/octobot             │
+│  • Check if /.data/discobot exists                           │
+│  • If not, copy /home/discobot to /.data/discobot             │
 │  • Preserve all permissions and ownership                   │
-│  • Set ownership to octobot user                            │
+│  • Set ownership to discobot user                            │
 └─────────────────────────────────────────────────────────────┘
                               │
                               ▼
@@ -62,10 +62,10 @@ The `octobot-agent` binary serves as the container's PID 1 process, providing:
 │  ───────────────────────────────────────────                │
 │  • Start git clone in goroutine (slowest operation)         │
 │  • Runs in parallel with filesystem/proxy/Docker setup      │
-│  • Check if /.data/octobot/workspace exists                 │
+│  • Check if /.data/discobot/workspace exists                 │
 │  • If not, clone WORKSPACE_PATH to staging directory        │
 │  • Checkout WORKSPACE_COMMIT if specified                   │
-│  • Change ownership to octobot user                         │
+│  • Change ownership to discobot user                         │
 │  • Atomically rename staging → workspace                    │
 │  • Agent waits for completion before starting API           │
 └─────────────────────────────────────────────────────────────┘
@@ -75,7 +75,7 @@ The `octobot-agent` binary serves as the container's PID 1 process, providing:
 │  Step 3: AgentFS Directory                                  │
 │  ─────────────────────────                                  │
 │  • Create /.data/.agentfs directory                         │
-│  • Set ownership to octobot user                            │
+│  • Set ownership to discobot user                            │
 └─────────────────────────────────────────────────────────────┘
                               │
                               ▼
@@ -83,20 +83,20 @@ The `octobot-agent` binary serves as the container's PID 1 process, providing:
 │  Step 4: AgentFS Init                                       │
 │  ───────────────────                                        │
 │  • Check if /.data/.agentfs/{SESSION_ID}.db exists          │
-│  • If not, run: agentfs init --base /.data/octobot {id}     │
+│  • If not, run: agentfs init --base /.data/discobot {id}     │
 │  • Creates SQLite database with base layer reference        │
-│  • Runs as octobot user                                     │
+│  • Runs as discobot user                                     │
 └─────────────────────────────────────────────────────────────┘
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────┐
 │  Step 5: AgentFS Mount                                      │
 │  ──────────────────                                         │
-│  • Run as octobot user:                                     │
-│    agentfs mount -a --allow-root {id} /home/octobot         │
+│  • Run as discobot user:                                     │
+│    agentfs mount -a --allow-root {id} /home/discobot         │
 │  • -a: auto-unmount on exit                                 │
 │  • --allow-root: allow root access to FUSE mount            │
-│  • Mounts COW filesystem directly over /home/octobot        │
+│  • Mounts COW filesystem directly over /home/discobot        │
 └─────────────────────────────────────────────────────────────┘
                               │
                               ▼
@@ -105,9 +105,9 @@ The `octobot-agent` binary serves as the container's PID 1 process, providing:
 │  ──────────────────────────────                             │
 │  • Check if /.data/cache volume exists                      │
 │  • Load cache config from user workspace (optional)         │
-│    Location: /home/octobot/workspace/.octobot/cache.json   │
+│    Location: /home/discobot/workspace/.discobot/cache.json   │
 │  • Bind-mount cache dirs from /.data/cache to overlay       │
-│  • Mounts sit on top of /home/octobot overlay               │
+│  • Mounts sit on top of /home/discobot overlay               │
 │  • Prevents cache writes to overlay layer                   │
 │  See: docs/design/cache-config.md                           │
 └─────────────────────────────────────────────────────────────┘
@@ -116,7 +116,7 @@ The `octobot-agent` binary serves as the container's PID 1 process, providing:
 ┌─────────────────────────────────────────────────────────────┐
 │  Step 6: Create Workspace Symlink                           │
 │  ───────────────────────────────                            │
-│  • Create /workspace -> /home/octobot/workspace symlink     │
+│  • Create /workspace -> /home/discobot/workspace symlink     │
 │  • Provides convenient access to project directory          │
 └─────────────────────────────────────────────────────────────┘
                               │
@@ -150,7 +150,7 @@ The `octobot-agent` binary serves as the container's PID 1 process, providing:
 │  • Start proxy on port 17080 (HTTP/HTTPS/SOCKS5)            │
 │  • API endpoint on port 17081                               │
 │  • Wait for health check: http://localhost:17081/health     │
-│  • Write settings to /etc/profile.d/octobot-proxy.sh        │
+│  • Write settings to /etc/profile.d/discobot-proxy.sh        │
 │  • Logs to stdout (visible in container logs)               │
 └─────────────────────────────────────────────────────────────┘
                               │
@@ -181,10 +181,10 @@ The `octobot-agent` binary serves as the container's PID 1 process, providing:
 │  Step 11: Run Agent API                                     │
 │  ──────────────────────                                     │
 │  • Fork child process                                       │
-│  • Switch to octobot user (setuid/setgid)                   │
+│  • Switch to discobot user (setuid/setgid)                   │
 │  • Set HOME, USER, LOGNAME environment                      │
 │  • Set proxy environment (HTTP_PROXY, NODE_EXTRA_CA_CERTS)  │
-│  • Set working directory to /home/octobot/workspace         │
+│  • Set working directory to /home/discobot/workspace         │
 │  • Configure pdeathsig for cleanup                          │
 │  • Enter event loop for signal handling                     │
 └─────────────────────────────────────────────────────────────┘
@@ -194,7 +194,7 @@ The `octobot-agent` binary serves as the container's PID 1 process, providing:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                     octobot-agent (PID 1)                       │
+│                     discobot-agent (PID 1)                       │
 ├─────────────────────────────────────────────────────────────┤
 │                                                             │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────────┐   │
@@ -219,7 +219,7 @@ The `octobot-agent` binary serves as the container's PID 1 process, providing:
 
 Handles initial home directory setup:
 
-- Copies /home/octobot template to /.data/octobot
+- Copies /home/discobot template to /.data/discobot
 - Preserves file permissions and ownership
 - Recursive copy with symlink support
 - Only runs on first container start
@@ -238,7 +238,7 @@ Handles git operations for workspace initialization:
 Integrates with the AgentFS copy-on-write filesystem:
 
 - Initializes database with base layer reference
-- Mounts FUSE filesystem directly over /home/octobot
+- Mounts FUSE filesystem directly over /home/discobot
 - Uses `-a` flag for auto-unmount on exit
 - Uses `--allow-root` for root access (docker exec)
 - Provides efficient storage for session changes
@@ -251,7 +251,7 @@ Manages the HTTP/HTTPS/SOCKS5 proxy with Docker registry caching:
 - Generates CA certificate using Go crypto/x509 and installs in system trust store
 - Starts proxy daemon on port 17080 (proxy) and 17081 (API)
 - Waits for health check before proceeding
-- Writes proxy environment variables to `/etc/profile.d/octobot-proxy.sh`
+- Writes proxy environment variables to `/etc/profile.d/discobot-proxy.sh`
 - Sets `HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY`, and `NODE_EXTRA_CA_CERTS`
 - Tracks proxy process for cleanup on shutdown
 - Enables Docker registry caching (5-10x faster repeated pulls)
@@ -311,8 +311,8 @@ Responsible for:
 │                     What Agent Sees                          │
 ├─────────────────────────────────────────────────────────────┤
 │                                                             │
-│  /home/octobot  ─────► AgentFS FUSE mount (COW layer)       │
-│  /workspace     ─────► symlink to /home/octobot/workspace   │
+│  /home/discobot  ─────► AgentFS FUSE mount (COW layer)       │
+│  /workspace     ─────► symlink to /home/discobot/workspace   │
 │                                                             │
 └─────────────────────────────────────────────────────────────┘
 
@@ -321,7 +321,7 @@ Responsible for:
 ├─────────────────────────────────────────────────────────────┤
 │                                                             │
 │  /.data/                                                    │
-│  ├── octobot/                   (base layer, read-only)     │
+│  ├── discobot/                   (base layer, read-only)     │
 │  │   ├── .bashrc                (shell config)              │
 │  │   ├── .profile               (user profile)              │
 │  │   └── workspace/             (cloned repository)         │
@@ -336,15 +336,15 @@ Responsible for:
 │          ├── certs/             (CA certificates)           │
 │          └── cache/             (Docker registry cache)     │
 │                                                             │
-│  /home/octobot                  (AgentFS/OverlayFS mount)   │
-│  ├── .config/octobot/           (agent-api persistence)     │
+│  /home/discobot                  (AgentFS/OverlayFS mount)   │
+│  ├── .config/discobot/           (agent-api persistence)     │
 │  │   ├── agent-session.json     (session metadata)          │
 │  │   └── agent-messages.json    (message history)           │
 │  ├── .cache/                    (bind mount from cache vol) │
 │  ├── .npm/                      (bind mount from cache vol) │
-│  └── workspace/                 (COW of /.data/octobot/ws)  │
+│  └── workspace/                 (COW of /.data/discobot/ws)  │
 │                                                             │
-│  /workspace -> /home/octobot/workspace (symlink)            │
+│  /workspace -> /home/discobot/workspace (symlink)            │
 │                                                             │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -360,16 +360,16 @@ The init process runs as root to:
 - Perform mount operations
 - Initialize AgentFS database
 
-The child process runs as the `octobot` user with:
+The child process runs as the `discobot` user with:
 - No root access
 - Standard user filesystem permissions
-- Working directory set to /home/octobot/workspace
+- Working directory set to /home/discobot/workspace
 
 ### FUSE Mount Access
 
 The `--allow-root` flag on the AgentFS mount allows:
 - Root to access the FUSE filesystem (needed for docker exec)
-- The octobot user to read/write normally
+- The discobot user to read/write normally
 - Requires `user_allow_other` in /etc/fuse.conf
 
 ### Pdeathsig

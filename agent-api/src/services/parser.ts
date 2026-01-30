@@ -336,7 +336,7 @@ export function normalizeServiceId(filename: string): string {
  * - The file has front matter with http or https port defined
  * - The body after front matter is empty (whitespace only)
  *
- * @param servicesDir - Path to .octobot/services directory
+ * @param servicesDir - Path to .discobot/services directory
  * @returns Array of Service objects (with status: "stopped")
  */
 export async function discoverServices(

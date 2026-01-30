@@ -1,6 +1,6 @@
-# Octobot - IDE Chat Interface
+# Discobot - IDE Chat Interface
 
-Octobot is an IDE-like chat interface for managing coding sessions with AI agents. It provides a web-based development environment that lets users interact with AI coding assistants (Claude Code, Gemini CLI, etc.) within isolated workspaces.
+Discobot is an IDE-like chat interface for managing coding sessions with AI agents. It provides a web-based development environment that lets users interact with AI coding assistants (Claude Code, Gemini CLI, etc.) within isolated workspaces.
 
 ## Features
 
@@ -92,7 +92,7 @@ Create a `.env` file in the `server/` directory:
 
 ```bash
 # Database (optional, defaults to SQLite)
-DATABASE_URL=postgres://user:pass@localhost:5432/octobot
+DATABASE_URL=postgres://user:pass@localhost:5432/discobot
 
 # Encryption key for credentials
 ENCRYPTION_KEY=your-32-byte-key

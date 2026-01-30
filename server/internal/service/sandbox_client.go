@@ -13,9 +13,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/obot-platform/octobot/server/internal/sandbox"
-	"github.com/obot-platform/octobot/server/internal/sandbox/sandboxapi"
-	"github.com/obot-platform/octobot/server/internal/store"
+	"github.com/obot-platform/discobot/server/internal/sandbox"
+	"github.com/obot-platform/discobot/server/internal/sandbox/sandboxapi"
+	"github.com/obot-platform/discobot/server/internal/store"
 )
 
 // Retry configuration for sandbox requests.
@@ -180,17 +180,17 @@ func (c *SandboxChatClient) applyRequestAuth(ctx context.Context, req *http.Requ
 			if err != nil {
 				return fmt.Errorf("failed to marshal credentials: %w", err)
 			}
-			req.Header.Set("X-Octobot-Credentials", string(credJSON))
+			req.Header.Set("X-Discobot-Credentials", string(credJSON))
 		}
 	}
 
 	// Add git user config headers if provided
 	if opts != nil {
 		if opts.GitUserName != "" {
-			req.Header.Set("X-Octobot-Git-User-Name", opts.GitUserName)
+			req.Header.Set("X-Discobot-Git-User-Name", opts.GitUserName)
 		}
 		if opts.GitUserEmail != "" {
-			req.Header.Set("X-Octobot-Git-User-Email", opts.GitUserEmail)
+			req.Header.Set("X-Discobot-Git-User-Email", opts.GitUserEmail)
 		}
 	}
 

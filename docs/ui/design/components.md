@@ -72,7 +72,7 @@ Located in `components/ide/`:
 | `workspace-display.tsx` | Consistent workspace icon+name rendering |
 | `resize-handle.tsx` | Draggable panel dividers |
 | `theme-toggle.tsx` | Dark/light mode switch |
-| `octobot-logo.tsx` | Application logo |
+| `discobot-logo.tsx` | Application logo |
 
 ### AI Elements
 

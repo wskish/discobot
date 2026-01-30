@@ -21,7 +21,7 @@ export function useServices(sessionId: string | null) {
 
 	/**
 	 * Start a service.
-	 * @param serviceId Service ID (filename in .octobot/services/)
+	 * @param serviceId Service ID (filename in .discobot/services/)
 	 */
 	const startService = async (serviceId: string) => {
 		if (!sessionId) return;
@@ -31,7 +31,7 @@ export function useServices(sessionId: string | null) {
 
 	/**
 	 * Stop a service.
-	 * @param serviceId Service ID (filename in .octobot/services/)
+	 * @param serviceId Service ID (filename in .discobot/services/)
 	 */
 	const stopService = async (serviceId: string) => {
 		if (!sessionId) return;

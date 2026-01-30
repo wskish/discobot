@@ -746,7 +746,7 @@ export class ACPClient implements Agent {
 	// Persistence helpers for per-session files
 	private getSessionDir(sessionId: string): string {
 		const baseDir =
-			process.env.SESSION_BASE_DIR || "/home/octobot/.config/octobot/sessions";
+			process.env.SESSION_BASE_DIR || "/home/discobot/.config/discobot/sessions";
 		return join(baseDir, sessionId);
 	}
 
@@ -866,21 +866,21 @@ export class ACPClient implements Agent {
 	 * This ensures backwards compatibility with sessions created before multi-session support.
 	 *
 	 * Old format:
-	 * - /home/octobot/.config/octobot/agent-session.json
-	 * - /home/octobot/.config/octobot/agent-messages.json
+	 * - /home/discobot/.config/discobot/agent-session.json
+	 * - /home/discobot/.config/discobot/agent-messages.json
 	 *
 	 * New format:
-	 * - /home/octobot/.config/octobot/sessions/default/session.json
-	 * - /home/octobot/.config/octobot/sessions/default/messages.json
+	 * - /home/discobot/.config/discobot/sessions/default/session.json
+	 * - /home/discobot/.config/discobot/sessions/default/messages.json
 	 */
 	private async migrateOldSessionFiles(): Promise<void> {
 		try {
 			const oldSessionFile =
 				process.env.SESSION_FILE ||
-				"/home/octobot/.config/octobot/agent-session.json";
+				"/home/discobot/.config/discobot/agent-session.json";
 			const oldMessagesFile =
 				process.env.MESSAGES_FILE ||
-				"/home/octobot/.config/octobot/agent-messages.json";
+				"/home/discobot/.config/discobot/agent-messages.json";
 
 			const hasOldSession = existsSync(oldSessionFile);
 			const hasOldMessages = existsSync(oldMessagesFile);

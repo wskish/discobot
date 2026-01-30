@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, FileConflictError } from "../api-client";
 
-const STORAGE_PREFIX = "octobot:file-edit:";
+const STORAGE_PREFIX = "discobot:file-edit:";
 
 interface StoredEditState {
 	originalContent: string;

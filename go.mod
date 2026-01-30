@@ -1,4 +1,4 @@
-module github.com/obot-platform/octobot
+module github.com/obot-platform/discobot
 
 go 1.25.5
 

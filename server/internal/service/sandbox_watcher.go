@@ -4,15 +4,15 @@ import (
 	"context"
 	"log"
 
-	"github.com/obot-platform/octobot/server/internal/events"
-	"github.com/obot-platform/octobot/server/internal/model"
-	"github.com/obot-platform/octobot/server/internal/sandbox"
-	"github.com/obot-platform/octobot/server/internal/store"
+	"github.com/obot-platform/discobot/server/internal/events"
+	"github.com/obot-platform/discobot/server/internal/model"
+	"github.com/obot-platform/discobot/server/internal/sandbox"
+	"github.com/obot-platform/discobot/server/internal/store"
 )
 
 // SandboxWatcher watches for sandbox state changes and syncs session states.
 // It handles cases where sandboxes are modified externally (e.g., Docker
-// containers deleted outside of Octobot).
+// containers deleted outside of Discobot).
 type SandboxWatcher struct {
 	provider sandbox.Provider
 	store    *store.Store

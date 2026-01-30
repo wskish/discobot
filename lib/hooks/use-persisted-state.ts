@@ -49,23 +49,23 @@ export function usePersistedState<T>(
  * Storage key prefix for panel layout settings
  */
 export const STORAGE_KEYS = {
-	LEFT_SIDEBAR_OPEN: "octobot:leftSidebarOpen",
-	LEFT_SIDEBAR_WIDTH: "octobot:leftSidebarWidth",
-	RIGHT_SIDEBAR_OPEN: "octobot:rightSidebarOpen",
-	RIGHT_SIDEBAR_WIDTH: "octobot:rightSidebarWidth",
-	AGENTS_PANEL_MINIMIZED: "octobot:agentsPanelMinimized",
-	AGENTS_PANEL_HEIGHT: "octobot:agentsPanelHeight",
-	LAST_AGENT_TYPE_ID: "octobot:lastAgentTypeId",
-	LAST_WORKSPACE_PATH: "octobot:lastWorkspacePath",
-	SELECTED_WORKSPACE_ID: "octobot:selectedWorkspaceId",
+	LEFT_SIDEBAR_OPEN: "discobot:leftSidebarOpen",
+	LEFT_SIDEBAR_WIDTH: "discobot:leftSidebarWidth",
+	RIGHT_SIDEBAR_OPEN: "discobot:rightSidebarOpen",
+	RIGHT_SIDEBAR_WIDTH: "discobot:rightSidebarWidth",
+	AGENTS_PANEL_MINIMIZED: "discobot:agentsPanelMinimized",
+	AGENTS_PANEL_HEIGHT: "discobot:agentsPanelHeight",
+	LAST_AGENT_TYPE_ID: "discobot:lastAgentTypeId",
+	LAST_WORKSPACE_PATH: "discobot:lastWorkspacePath",
+	SELECTED_WORKSPACE_ID: "discobot:selectedWorkspaceId",
 	// Session visibility
-	SHOW_CLOSED_SESSIONS: "octobot:showClosedSessions",
+	SHOW_CLOSED_SESSIONS: "discobot:showClosedSessions",
 	// Per-session state (sessionStorage)
-	ACTIVE_VIEW: "octobot:activeView",
-	OPEN_FILE_PATHS: "octobot:openFilePaths",
-	ACTIVE_FILE_PATH: "octobot:activeFilePath",
-	FILE_VIEW_MODES: "octobot:fileViewModes",
+	ACTIVE_VIEW: "discobot:activeView",
+	OPEN_FILE_PATHS: "discobot:openFilePaths",
+	ACTIVE_FILE_PATH: "discobot:activeFilePath",
+	FILE_VIEW_MODES: "discobot:fileViewModes",
 	// Consolidated diff view state
-	CONSOLIDATED_DIFF_EXPANDED: "octobot:consolidatedDiffExpanded",
-	CONSOLIDATED_DIFF_REVIEWED: "octobot:consolidatedDiffReviewed",
+	CONSOLIDATED_DIFF_EXPANDED: "discobot:consolidatedDiffExpanded",
+	CONSOLIDATED_DIFF_REVIEWED: "discobot:consolidatedDiffReviewed",
 } as const;

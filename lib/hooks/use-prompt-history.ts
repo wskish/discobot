@@ -12,9 +12,9 @@ import { usePreferences } from "./use-preferences";
 // localStorage Helpers
 // ============================================================================
 
-const HISTORY_KEY = "octobot:prompt-history";
+const HISTORY_KEY = "discobot:prompt-history";
 const PINNED_PREFERENCE_KEY = "prompts.pinned";
-const DRAFT_PREFIX = "octobot-prompt-draft-";
+const DRAFT_PREFIX = "discobot-prompt-draft-";
 const MAX_HISTORY_SIZE = 100;
 export const MAX_VISIBLE_HISTORY = 20;
 

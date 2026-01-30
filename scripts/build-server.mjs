@@ -38,10 +38,10 @@ function getTargetTriple() {
 
 const targetTriple = getTargetTriple();
 const ext = targetTriple.includes("windows") ? ".exe" : "";
-const outputName = `octobot-server-${targetTriple}${ext}`;
+const outputName = `discobot-server-${targetTriple}${ext}`;
 const outputPath = join(binariesDir, outputName);
 
-console.log(`Building octobot-server for ${targetTriple}...`);
+console.log(`Building discobot-server for ${targetTriple}...`);
 
 execSync(`go build -o "${outputPath}" ./cmd/server`, {
 	cwd: serverDir,

@@ -58,16 +58,16 @@ import {
 } from "./files.js";
 
 // Header names for credentials and git config passed from server
-const CREDENTIALS_HEADER = "X-Octobot-Credentials";
-const GIT_USER_NAME_HEADER = "X-Octobot-Git-User-Name";
-const GIT_USER_EMAIL_HEADER = "X-Octobot-Git-User-Email";
+const CREDENTIALS_HEADER = "X-Discobot-Credentials";
+const GIT_USER_NAME_HEADER = "X-Discobot-Git-User-Name";
+const GIT_USER_EMAIL_HEADER = "X-Discobot-Git-User-Email";
 
 export interface AppOptions {
 	agentCommand: string;
 	agentArgs: string[];
 	agentCwd: string;
 	enableLogging?: boolean;
-	/** Salted hash of shared secret (from OCTOBOT_SECRET env var) for auth enforcement */
+	/** Salted hash of shared secret (from DISCOBOT_SECRET env var) for auth enforcement */
 	sharedSecretHash?: string;
 	/**
 	 * Enable message persistence to disk.

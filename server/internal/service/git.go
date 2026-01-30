@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/obot-platform/octobot/server/internal/git"
-	"github.com/obot-platform/octobot/server/internal/store"
+	"github.com/obot-platform/discobot/server/internal/git"
+	"github.com/obot-platform/discobot/server/internal/store"
 )
 
 // GitService provides git operations for workspaces.

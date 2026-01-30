@@ -1,4 +1,4 @@
-# Octobot Proxy Configuration - Docker Registry Caching
+# Discobot Proxy Configuration - Docker Registry Caching
 #
 # This configuration enables caching for Docker registry pulls,
 # dramatically speeding up repeated pulls of the same images.

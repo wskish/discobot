@@ -12,11 +12,11 @@ import (
 
 const (
 	// PostgreSQL container settings
-	postgresContainerName = "octobot-test-postgres"
+	postgresContainerName = "discobot-test-postgres"
 	postgresPort          = "5433" // Non-standard port to avoid conflicts
-	postgresUser          = "octobot"
-	postgresPassword      = "octobot"
-	postgresDB            = "octobot_test"
+	postgresUser          = "discobot"
+	postgresPassword      = "discobot"
+	postgresDB            = "discobot_test"
 	postgresImage         = "postgres:16-alpine"
 )
 

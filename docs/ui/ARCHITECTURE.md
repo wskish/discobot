@@ -1,6 +1,6 @@
 # UI Architecture
 
-This document describes the architecture of the Octobot frontend, a React application built with Vite and React Router 7 that provides an IDE-like chat interface for AI coding agents.
+This document describes the architecture of the Discobot frontend, a React application built with Vite and React Router 7 that provides an IDE-like chat interface for AI coding agents.
 
 ## Overview
 

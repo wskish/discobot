@@ -12,7 +12,7 @@ import (
 
 const (
 	// cacheVolumePrefix is the prefix for project-scoped cache volume names.
-	cacheVolumePrefix = "octobot-cache-"
+	cacheVolumePrefix = "discobot-cache-"
 )
 
 // cacheVolumeName generates a cache volume name from project ID.
@@ -35,9 +35,9 @@ func (p *Provider) ensureCacheVolume(ctx context.Context, projectID string) (str
 	_, err = p.client.VolumeCreate(ctx, volumeTypes.CreateOptions{
 		Name: volName,
 		Labels: map[string]string{
-			"octobot.project.id": projectID,
-			"octobot.managed":    "true",
-			"octobot.type":       "cache",
+			"discobot.project.id": projectID,
+			"discobot.managed":    "true",
+			"discobot.type":       "cache",
 		},
 	})
 	if err != nil {
@@ -67,11 +67,11 @@ func (p *Provider) RemoveCacheVolume(ctx context.Context, projectID string) erro
 // ListCacheVolumes returns all cache volumes, optionally filtered by project ID.
 func (p *Provider) ListCacheVolumes(ctx context.Context, projectID string) ([]*volumeTypes.Volume, error) {
 	filters := filters.NewArgs()
-	filters.Add("label", "octobot.managed=true")
-	filters.Add("label", "octobot.type=cache")
+	filters.Add("label", "discobot.managed=true")
+	filters.Add("label", "discobot.type=cache")
 
 	if projectID != "" {
-		filters.Add("label", fmt.Sprintf("octobot.project.id=%s", projectID))
+		filters.Add("label", fmt.Sprintf("discobot.project.id=%s", projectID))
 	}
 
 	resp, err := p.client.VolumeList(ctx, volumeTypes.ListOptions{

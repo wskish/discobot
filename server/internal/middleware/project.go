@@ -6,8 +6,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/obot-platform/octobot/server/internal/service"
-	"github.com/obot-platform/octobot/server/internal/store"
+	"github.com/obot-platform/discobot/server/internal/service"
+	"github.com/obot-platform/discobot/server/internal/store"
 )
 
 const (

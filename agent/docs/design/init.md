@@ -1,6 +1,6 @@
 # Init Process Design
 
-This document describes the design of the `octobot-agent` init process.
+This document describes the design of the `discobot-agent` init process.
 
 ## Problem Statement
 
@@ -46,7 +46,7 @@ func setupBaseHome(u *userInfo) error {
         return nil
     }
 
-    // Copy /home/octobot to /.data/octobot recursively
+    // Copy /home/discobot to /.data/discobot recursively
     if err := copyDir(mountHome, baseHomeDir); err != nil {
         return err
     }
@@ -111,7 +111,7 @@ The init process supports two filesystem backends for copy-on-write semantics:
 ```go
 func detectFilesystemType(sessionID string) filesystemType {
     // Check for environment variable override
-    if fsOverride := os.Getenv("OCTOBOT_FILESYSTEM"); fsOverride != "" {
+    if fsOverride := os.Getenv("DISCOBOT_FILESYSTEM"); fsOverride != "" {
         switch strings.ToLower(fsOverride) {
         case "agentfs":
             return fsTypeAgentFS
@@ -130,7 +130,7 @@ func detectFilesystemType(sessionID string) filesystemType {
 ```
 
 Detection logic:
-- If `OCTOBOT_FILESYSTEM` env var is set, use that filesystem
+- If `DISCOBOT_FILESYSTEM` env var is set, use that filesystem
 - If `/.data/.agentfs/{SESSION_ID}.db` exists, use AgentFS (backwards compatibility)
 - Otherwise, use OverlayFS (new default)
 
@@ -194,7 +194,7 @@ func initAgentFS(sessionID string, u *userInfo) error {
     return cmd.Run()
 }
 
-// Mount directly over /home/octobot
+// Mount directly over /home/discobot
 func mountAgentFS(sessionID string, u *userInfo) error {
     // -a: auto-unmount on exit
     // --allow-root: allow root to access the FUSE mount
@@ -210,7 +210,7 @@ func mountAgentFS(sessionID string, u *userInfo) error {
 }
 ```
 
-The AgentFS mount runs as the octobot user because:
+The AgentFS mount runs as the discobot user because:
 - FUSE filesystems are owned by the mounting user
 - This allows the agent to read/write files
 - The `--allow-root` flag allows root access (needed for docker exec)
@@ -236,7 +236,7 @@ func createWorkspaceSymlink() error {
 }
 ```
 
-This creates `/workspace -> /home/octobot/workspace` for tools that expect `/workspace`.
+This creates `/workspace -> /home/discobot/workspace` for tools that expect `/workspace`.
 
 ### User Switching
 
@@ -315,21 +315,21 @@ SIGTERM received
 | WORKSPACE_COMMIT | No | Specific commit to checkout |
 | AGENT_BINARY | No | Override agent API binary path |
 | AGENT_USER | No | Override user to run as |
-| OCTOBOT_FILESYSTEM | No | Force filesystem type: `overlayfs` or `agentfs` |
+| DISCOBOT_FILESYSTEM | No | Force filesystem type: `overlayfs` or `agentfs` |
 
 ## Directories Created
 
-The init process creates the following directories with `octobot` ownership:
+The init process creates the following directories with `discobot` ownership:
 
 | Directory | Purpose |
 |-----------|---------|
-| `/.data/octobot` | Base home directory (copied from /home/octobot template) |
-| `/.data/octobot/workspace` | Cloned repository or empty workspace |
+| `/.data/discobot` | Base home directory (copied from /home/discobot template) |
+| `/.data/discobot/workspace` | Cloned repository or empty workspace |
 | `/.data/.overlayfs/{SESSION_ID}/upper` | OverlayFS writable layer (new sessions) |
 | `/.data/.overlayfs/{SESSION_ID}/work` | OverlayFS scratch space (new sessions) |
 | `/.data/.agentfs` | AgentFS SQLite databases (existing sessions) |
 
-Note: Session and message persistence files are stored in `/home/octobot/.config/octobot/` which is managed by the overlay filesystem and created by agent-api on demand.
+Note: Session and message persistence files are stored in `/home/discobot/.config/discobot/` which is managed by the overlay filesystem and created by agent-api on demand.
 
 ## Error Handling
 
@@ -375,21 +375,21 @@ docker run --rm \
     -e SESSION_ID=test123 \
     -e WORKSPACE_PATH=https://github.com/octocat/Hello-World \
     -v /tmp/data:/.data \
-    octobot
+    discobot
 
 # Verify filesystem layout
-docker exec -u octobot <container> ls -la /home/octobot /workspace
+docker exec -u discobot <container> ls -la /home/discobot /workspace
 
 # Test copy-on-write
-docker exec -u octobot <container> touch /home/octobot/workspace/test.txt
-docker exec -u octobot <container> ls /.data/octobot/workspace/  # Should NOT have test.txt
+docker exec -u discobot <container> touch /home/discobot/workspace/test.txt
+docker exec -u discobot <container> ls /.data/discobot/workspace/  # Should NOT have test.txt
 
 # Test signal handling
 docker run --rm -d --name test-agent \
     --cap-add SYS_ADMIN \
     --device /dev/fuse:/dev/fuse:rwm \
     -e SESSION_ID=test123 \
-    octobot
+    discobot
 docker stop test-agent  # Should exit cleanly
 ```
 
@@ -397,13 +397,13 @@ docker stop test-agent  # Should exit cleanly
 
 ```bash
 # Build and test locally
-go build -o octobot-agent ./agent/cmd/agent
+go build -o discobot-agent ./agent/cmd/agent
 
 # Test user lookup
-AGENT_USER=$USER SESSION_ID=test ./octobot-agent --help
+AGENT_USER=$USER SESSION_ID=test ./discobot-agent --help
 
 # Test as PID 1 (requires root)
-sudo unshare -p -f --mount-proc ./octobot-agent
+sudo unshare -p -f --mount-proc ./discobot-agent
 ```
 
 ## Container Requirements
