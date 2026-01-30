@@ -109,12 +109,16 @@ jobs:
           # Windows x64
           - platform: depot-windows-latest
             target: x86_64-pc-windows-msvc
+          # Windows ARM64 (GitHub native runner - no Depot ARM64 Windows)
+          - platform: windows-11-arm
+            target: aarch64-pc-windows-msvc
           # Linux x64
           - platform: depot-ubuntu-24.04
             target: x86_64-unknown-linux-gnu
-          # Linux ARM64
+          # Linux ARM64 (skip AppImage - linuxdeploy issues on ARM64)
           - platform: depot-ubuntu-24.04-arm
             target: aarch64-unknown-linux-gnu
+            bundles: deb,rpm
 
     runs-on: ${{ matrix.platform }}
 
@@ -185,7 +189,6 @@ jobs:
         uses: tauri-apps/tauri-action@v0.6.1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAURI_APP_VERSION: ${{ steps.version.outputs.version }}
           TAURI_TARGET_TRIPLE: ${{ matrix.target }}
           TAURI_BUNDLER_DMG_IGNORE_CI: false
           # macOS code signing
@@ -201,4 +204,7 @@ jobs:
           releaseBody: 'See the assets below for download links.'
           releaseDraft: true
           prerelease: false
-          args: --target ${{ matrix.target }}
+          args: >-
+            --target ${{ matrix.target }}
+            --config '{"version":"${{ steps.version.outputs.version }}"}'
+            ${{ matrix.bundles && format('--bundles {0}', matrix.bundles) || '' }}
