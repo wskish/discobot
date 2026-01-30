@@ -1,6 +1,6 @@
-# Octobot Architecture
+# Discobot Architecture
 
-This document describes the overall architecture of Octobot, an IDE-like chat interface for managing coding sessions with AI agents.
+This document describes the overall architecture of Discobot, an IDE-like chat interface for managing coding sessions with AI agents.
 
 ## Component Documentation
 
@@ -12,7 +12,7 @@ This document describes the overall architecture of Octobot, an IDE-like chat in
 
 ## Overview
 
-Octobot is a web-based development environment that lets users interact with AI coding agents (Claude Code, Gemini CLI, etc.) within isolated workspaces. Each workspace can contain multiple chat sessions, and users can configure different AI agents with custom prompts and MCP servers.
+Discobot is a web-based development environment that lets users interact with AI coding agents (Claude Code, Gemini CLI, etc.) within isolated workspaces. Each workspace can contain multiple chat sessions, and users can configure different AI agents with custom prompts and MCP servers.
 
 ## Core Concepts
 
@@ -133,10 +133,10 @@ Credentials are encrypted with AES-256-GCM before storage.
          │    │   Agent Container    │     │   MITM Proxy         │
          │    │   (per session)      │     │   (per container)    │
          │    │   ┌──────────────┐   │     │   ┌──────────────┐   │
-         │    │   │ octobot-agent   │   │     │   │ HTTP/SOCKS5  │   │
+         │    │   │ discobot-agent   │   │     │   │ HTTP/SOCKS5  │   │
          │    │   │ (PID 1 init) │   │     │   │ + TLS MITM   │   │
          │    │   │      ↓       │   │     │   └──────────────┘   │
-         │    │   │ octobot-agent-  │   │ ──▶ │                      │
+         │    │   │ discobot-agent-  │   │ ──▶ │                      │
          │    │   │ api + AI CLI │   │     │                      │
          │    │   └──────────────┘   │     │                      │
          │    └──────────────────────┘     └──────────────────────┘
@@ -304,7 +304,7 @@ The MITM proxy runs inside each agent container to:
 - **Domain filtering**: Glob-pattern allowlists (e.g., `*.anthropic.com`)
 - **TLS interception**: Dynamic certificate generation signed by container CA
 - **Runtime configuration**: REST API for updating rules without restart
-- **Workspace-aware**: Custom config via `.octobot/proxy/config.yaml`
+- **Workspace-aware**: Custom config via `.discobot/proxy/config.yaml`
 
 ### Data Flow
 

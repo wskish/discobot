@@ -195,7 +195,7 @@ type CommitsErrorResponse struct {
 
 // Service represents a user-defined service in the sandbox.
 type Service struct {
-	ID          string `json:"id"`                    // Filename in .octobot/services/
+	ID          string `json:"id"`                    // Filename in .discobot/services/
 	Name        string `json:"name"`                  // Display name (from config or id)
 	Description string `json:"description,omitempty"` // Description from config
 	HTTP        int    `json:"http,omitempty"`        // HTTP port if http service

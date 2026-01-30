@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!--
-    Octobot API Explorer
+    Discobot API Explorer
 
     Routes are loaded dynamically from /api/routes.
     Route metadata is defined in server/cmd/server/main.go using routes.Register().
@@ -9,7 +9,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Octobot API Explorer</title>
+    <title>Discobot API Explorer</title>
     <style>
         * {
             box-sizing: border-box;
@@ -625,7 +625,7 @@
         <aside class="sidebar" id="sidebar">
             <div class="resize-handle" id="resizeHandle"></div>
             <div class="sidebar-header">
-                <h1>Octobot API</h1>
+                <h1>Discobot API</h1>
                 <input type="text" class="search-input" placeholder="Search endpoints..." id="search">
                 <div class="project-id-section">
                     <label class="project-id-label" for="defaultProjectId">Default Project ID</label>
@@ -678,7 +678,7 @@
         let currentEndpoint = null;
         let _currentUser = null;
         let _paramValues = {};
-        let defaultProjectId = localStorage.getItem('octobot_default_project_id') || 'local';
+        let defaultProjectId = localStorage.getItem('discobot_default_project_id') || 'local';
 
         // Resource cache for comboboxes
         // eslint-disable-next-line no-unused-vars
@@ -774,7 +774,7 @@
             input.value = defaultProjectId;
             input.addEventListener('input', (e) => {
                 defaultProjectId = e.target.value;
-                localStorage.setItem('octobot_default_project_id', defaultProjectId);
+                localStorage.setItem('discobot_default_project_id', defaultProjectId);
             });
         })();
 

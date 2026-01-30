@@ -29,7 +29,7 @@ func signHost(ca tls.Certificate, caCert *x509.Certificate, hosts []string) (tls
 	template := x509.Certificate{
 		SerialNumber: serialNumber,
 		Subject: pkix.Name{
-			Organization: []string{"Octobot Proxy"},
+			Organization: []string{"Discobot Proxy"},
 			CommonName:   hosts[0],
 		},
 		NotBefore:             time.Now().Add(-time.Hour),

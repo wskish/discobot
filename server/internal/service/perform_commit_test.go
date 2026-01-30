@@ -12,15 +12,15 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/obot-platform/octobot/server/internal/config"
-	"github.com/obot-platform/octobot/server/internal/database"
-	"github.com/obot-platform/octobot/server/internal/events"
-	"github.com/obot-platform/octobot/server/internal/git"
-	"github.com/obot-platform/octobot/server/internal/model"
-	"github.com/obot-platform/octobot/server/internal/sandbox"
-	"github.com/obot-platform/octobot/server/internal/sandbox/mock"
-	"github.com/obot-platform/octobot/server/internal/sandbox/sandboxapi"
-	"github.com/obot-platform/octobot/server/internal/store"
+	"github.com/obot-platform/discobot/server/internal/config"
+	"github.com/obot-platform/discobot/server/internal/database"
+	"github.com/obot-platform/discobot/server/internal/events"
+	"github.com/obot-platform/discobot/server/internal/git"
+	"github.com/obot-platform/discobot/server/internal/model"
+	"github.com/obot-platform/discobot/server/internal/sandbox"
+	"github.com/obot-platform/discobot/server/internal/sandbox/mock"
+	"github.com/obot-platform/discobot/server/internal/sandbox/sandboxapi"
+	"github.com/obot-platform/discobot/server/internal/store"
 )
 
 // testEnv holds the test environment for PerformCommit tests.
@@ -439,7 +439,7 @@ index 0000000..def456
 		t.Fatalf("PerformCommit failed: %v", err)
 	}
 
-	// Verify: should NOT have sent /octobot-commit (skipped step 2 due to optimistic path)
+	// Verify: should NOT have sent /discobot-commit (skipped step 2 due to optimistic path)
 	if handler.getChatRequestCount() != 0 {
 		t.Errorf("Expected 0 chat requests (optimistic path should skip prompt), got %d", handler.getChatRequestCount())
 	}
@@ -793,7 +793,7 @@ func TestPerformCommit_NotPendingOrCommitting(t *testing.T) {
 
 // TestPerformCommit_WorkspaceUnchangedWithExistingPatches tests that the optimistic
 // patch check runs even when workspace commit hasn't changed, allowing us to skip
-// the /octobot-commit prompt if the agent already has patches ready.
+// the /discobot-commit prompt if the agent already has patches ready.
 func TestPerformCommit_WorkspaceUnchangedWithExistingPatches(t *testing.T) {
 	env := newTestEnv(t)
 	defer env.cleanup()
@@ -849,7 +849,7 @@ index 0000000..abc123
 		t.Fatalf("PerformCommit failed: %v", err)
 	}
 
-	// KEY ASSERTION: should NOT have sent /octobot-commit because optimistic check
+	// KEY ASSERTION: should NOT have sent /discobot-commit because optimistic check
 	// found existing patches and applied them directly
 	if handler.getChatRequestCount() != 0 {
 		t.Errorf("Expected 0 chat requests (optimistic path should skip prompt), got %d", handler.getChatRequestCount())

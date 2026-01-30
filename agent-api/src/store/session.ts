@@ -7,14 +7,14 @@ import type { UIMessage, UIMessageChunk } from "ai";
 function getSessionFile(): string {
 	return (
 		process.env.SESSION_FILE ||
-		"/home/octobot/.config/octobot/agent-session.json"
+		"/home/discobot/.config/discobot/agent-session.json"
 	);
 }
 
 function getMessagesFile(): string {
 	return (
 		process.env.MESSAGES_FILE ||
-		"/home/octobot/.config/octobot/agent-messages.json"
+		"/home/discobot/.config/discobot/agent-messages.json"
 	);
 }
 

@@ -22,19 +22,19 @@ import (
 	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
 
-	"github.com/obot-platform/octobot/server/internal/config"
-	"github.com/obot-platform/octobot/server/internal/database"
-	"github.com/obot-platform/octobot/server/internal/dispatcher"
-	"github.com/obot-platform/octobot/server/internal/events"
-	"github.com/obot-platform/octobot/server/internal/git"
-	"github.com/obot-platform/octobot/server/internal/handler"
-	"github.com/obot-platform/octobot/server/internal/jobs"
-	"github.com/obot-platform/octobot/server/internal/middleware"
-	"github.com/obot-platform/octobot/server/internal/model"
-	"github.com/obot-platform/octobot/server/internal/sandbox"
-	"github.com/obot-platform/octobot/server/internal/sandbox/mock"
-	"github.com/obot-platform/octobot/server/internal/service"
-	"github.com/obot-platform/octobot/server/internal/store"
+	"github.com/obot-platform/discobot/server/internal/config"
+	"github.com/obot-platform/discobot/server/internal/database"
+	"github.com/obot-platform/discobot/server/internal/dispatcher"
+	"github.com/obot-platform/discobot/server/internal/events"
+	"github.com/obot-platform/discobot/server/internal/git"
+	"github.com/obot-platform/discobot/server/internal/handler"
+	"github.com/obot-platform/discobot/server/internal/jobs"
+	"github.com/obot-platform/discobot/server/internal/middleware"
+	"github.com/obot-platform/discobot/server/internal/model"
+	"github.com/obot-platform/discobot/server/internal/sandbox"
+	"github.com/obot-platform/discobot/server/internal/sandbox/mock"
+	"github.com/obot-platform/discobot/server/internal/service"
+	"github.com/obot-platform/discobot/server/internal/store"
 )
 
 // TestServer wraps a test HTTP server with helpers
@@ -820,7 +820,7 @@ func (tc *TestClient) do(method, path string, body interface{}) *http.Response {
 
 	req.Header.Set("Content-Type", "application/json")
 	req.AddCookie(&http.Cookie{
-		Name:  "octobot_session",
+		Name:  "discobot_session",
 		Value: tc.token,
 	})
 

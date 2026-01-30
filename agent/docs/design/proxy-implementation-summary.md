@@ -12,7 +12,7 @@ All requested features have been implemented and tested:
 - ✅ Uncommon ports (17080 for proxy, 17081 for API)
 - ✅ Automatic startup with agent container
 - ✅ Environment variable configuration (HTTP_PROXY, HTTPS_PROXY, ALL_PROXY)
-- ✅ Workspace-aware configuration (.octobot/proxy/config.yaml)
+- ✅ Workspace-aware configuration (.discobot/proxy/config.yaml)
 - ✅ Built-in default with Docker caching enabled
 - ✅ Comprehensive test coverage (24 tests, all passing)
 - ✅ Complete documentation
@@ -86,12 +86,12 @@ This ensures:
 
 ### 4. Configuration Priority
 
-1. **Workspace config** (highest priority): `.octobot/proxy/config.yaml` in workspace
+1. **Workspace config** (highest priority): `.discobot/proxy/config.yaml` in workspace
 2. **Built-in default** (fallback): Embedded in agent binary with Docker caching enabled
 
 **Workspace Config Example:**
 ```yaml
-# .octobot/proxy/config.yaml
+# .discobot/proxy/config.yaml
 proxy:
   port: 17080
   api_port: 17081
@@ -145,7 +145,7 @@ cache:
 const (
     proxyPort    = 17080
     proxyAPIPort = 17081
-    proxyBinary  = "/opt/octobot/bin/proxy"
+    proxyBinary  = "/opt/discobot/bin/proxy"
     proxyStartupTimeout = 10 * time.Second
 )
 
@@ -180,7 +180,7 @@ func eventLoop(u *userInfo, signalCh <-chan os.Signal, agentCmd, dockerCmd, prox
 **Existing Stages (no changes needed):**
 - Stage 2: Builds proxy binary from source
 - Stage 2b: Builds agent binary (now includes embedded config)
-- Stage 4: Copies binaries to `/opt/octobot/bin/`
+- Stage 4: Copies binaries to `/opt/discobot/bin/`
 
 The proxy was already being built and included in the image.
 
@@ -266,9 +266,9 @@ Response:
 
 Proxy logs are captured in container logs:
 ```
-octobot-agent: found proxy at /opt/octobot/bin/proxy, starting HTTP proxy...
-octobot-agent: proxy started (pid=42), waiting for health check...
-octobot-agent: HTTP proxy ready on port 17080
+discobot-agent: found proxy at /opt/discobot/bin/proxy, starting HTTP proxy...
+discobot-agent: proxy started (pid=42), waiting for health check...
+discobot-agent: HTTP proxy ready on port 17080
 ```
 
 During operation:
@@ -310,16 +310,16 @@ INFO  response   method=GET host=registry-1.docker.io status=200 duration=5ms
 
 **Symptom:**
 ```
-octobot-agent: Proxy daemon not started: proxy binary not found at /opt/octobot/bin/proxy
+discobot-agent: Proxy daemon not started: proxy binary not found at /opt/discobot/bin/proxy
 ```
 
-**Solution:** Verify proxy binary is in container image at `/opt/octobot/bin/proxy`
+**Solution:** Verify proxy binary is in container image at `/opt/discobot/bin/proxy`
 
 ### Proxy Not Ready
 
 **Symptom:**
 ```
-octobot-agent: proxy did not become ready: timeout waiting for proxy health check
+discobot-agent: proxy did not become ready: timeout waiting for proxy health check
 ```
 
 **Solutions:**
@@ -375,7 +375,7 @@ The proxy integration is complete and production-ready:
 ✅ **All builds passing** - Both proxy and agent compile successfully
 ✅ **All tests passing** - 39 tests covering cache, config, and matching logic
 ✅ **Docker caching enabled by default** - 20GB cache with LRU eviction
-✅ **Workspace-aware configuration** - Custom configs via `.octobot/proxy/config.yaml`
+✅ **Workspace-aware configuration** - Custom configs via `.discobot/proxy/config.yaml`
 ✅ **Full environment variable support** - HTTP, HTTPS, and SOCKS5 proxying
 ✅ **Comprehensive documentation** - Architecture, usage, and troubleshooting guides
 

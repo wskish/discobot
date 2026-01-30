@@ -1,12 +1,12 @@
 [package]
-name = "octobot"
+name = "discobot"
 version = "0.1.0"
-description = "Octobot Desktop App"
+description = "Discobot Desktop App"
 authors = ["you"]
 edition = "2021"
 
 [lib]
-name = "octobot_lib"
+name = "discobot_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

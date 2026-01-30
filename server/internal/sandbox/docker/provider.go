@@ -30,13 +30,13 @@ import (
 	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/docker/go-connections/nat"
 
-	"github.com/obot-platform/octobot/server/internal/config"
-	"github.com/obot-platform/octobot/server/internal/sandbox"
+	"github.com/obot-platform/discobot/server/internal/config"
+	"github.com/obot-platform/discobot/server/internal/sandbox"
 )
 
 const (
 	// labelSecret is the label key for storing the raw shared secret.
-	labelSecret = "octobot.secret"
+	labelSecret = "discobot.secret"
 
 	// containerPort is the fixed port exposed by all sandboxes.
 	containerPort = 3002
@@ -48,7 +48,7 @@ const (
 	dataVolumePath = "/.data"
 
 	// dataVolumePrefix is the prefix for data volume names.
-	dataVolumePrefix = "octobot-data-"
+	dataVolumePrefix = "discobot-data-"
 )
 
 // Provider implements the sandbox.Provider interface using Docker.
@@ -95,7 +95,7 @@ func NewProvider(cfg *config.Config) (*Provider, error) {
 
 // containerName generates a consistent container name from session ID.
 func containerName(sessionID string) string {
-	return fmt.Sprintf("octobot-session-%s", sessionID)
+	return fmt.Sprintf("discobot-session-%s", sessionID)
 }
 
 // volumeName returns the Docker volume name for a session's data volume.
@@ -154,8 +154,8 @@ func (p *Provider) Create(ctx context.Context, sessionID string, opts sandbox.Cr
 	_, err := p.client.VolumeCreate(ctx, volumeTypes.CreateOptions{
 		Name: dataVolName,
 		Labels: map[string]string{
-			"octobot.session.id": sessionID,
-			"octobot.managed":    "true",
+			"discobot.session.id": sessionID,
+			"discobot.managed":    "true",
 		},
 	})
 	if err != nil {
@@ -164,8 +164,8 @@ func (p *Provider) Create(ctx context.Context, sessionID string, opts sandbox.Cr
 
 	// Prepare labels - store the raw secret as a label
 	labels := map[string]string{
-		"octobot.session.id": sessionID,
-		"octobot.managed":    "true",
+		"discobot.session.id": sessionID,
+		"discobot.managed":    "true",
 	}
 	if opts.SharedSecret != "" {
 		labels[labelSecret] = opts.SharedSecret
@@ -177,13 +177,13 @@ func (p *Provider) Create(ctx context.Context, sessionID string, opts sandbox.Cr
 	// Build environment variables
 	var env []string
 
-	// Add session ID (required by octobot-agent for AgentFS database naming)
+	// Add session ID (required by discobot-agent for AgentFS database naming)
 	env = append(env, fmt.Sprintf("SESSION_ID=%s", sessionID))
 
-	// Add hashed secret as OCTOBOT_SECRET env var
+	// Add hashed secret as DISCOBOT_SECRET env var
 	if opts.SharedSecret != "" {
 		hashedSecret := hashSecret(opts.SharedSecret)
-		env = append(env, fmt.Sprintf("OCTOBOT_SECRET=%s", hashedSecret))
+		env = append(env, fmt.Sprintf("DISCOBOT_SECRET=%s", hashedSecret))
 	}
 
 	// Handle workspace environment variables
@@ -206,7 +206,7 @@ func (p *Provider) Create(ctx context.Context, sessionID string, opts sandbox.Cr
 		Image:        image,
 		Env:          env,
 		Labels:       labels,
-		Hostname:     "octobot",
+		Hostname:     "discobot",
 		Tty:          true,
 		OpenStdin:    true,
 		AttachStdin:  true,
@@ -268,7 +268,7 @@ func (p *Provider) Create(ctx context.Context, sessionID string, opts sandbox.Cr
 
 	// Add project cache volume mount if enabled and project ID is available
 	if p.cfg.CacheEnabled {
-		projectID := opts.Labels["octobot.project.id"]
+		projectID := opts.Labels["discobot.project.id"]
 		if projectID != "" {
 			// Ensure the cache volume exists
 			cacheVolName, err := p.ensureCacheVolume(ctx, projectID)
@@ -293,7 +293,7 @@ func (p *Provider) Create(ctx context.Context, sessionID string, opts sandbox.Cr
 	}
 
 	// Enable privileged mode for running Docker daemon inside container
-	// The container runs its own Docker daemon (started by octobot-agent if dockerd is available)
+	// The container runs its own Docker daemon (started by discobot-agent if dockerd is available)
 	hostConfig.Privileged = true
 
 	// Always expose port 3002 with a random host port
@@ -851,13 +851,13 @@ func (p *Provider) ExecStream(ctx context.Context, sessionID string, cmd []strin
 	}, nil
 }
 
-// List returns all sandboxes managed by octobot.
+// List returns all sandboxes managed by discobot.
 func (p *Provider) List(ctx context.Context) ([]*sandbox.Sandbox, error) {
 	// List all containers with our label
 	containers, err := p.client.ContainerList(ctx, containerTypes.ListOptions{
 		All: true, // Include stopped containers
 		Filters: filters.NewArgs(
-			filters.Arg("label", "octobot.managed=true"),
+			filters.Arg("label", "discobot.managed=true"),
 		),
 	})
 	if err != nil {
@@ -867,7 +867,7 @@ func (p *Provider) List(ctx context.Context) ([]*sandbox.Sandbox, error) {
 	result := make([]*sandbox.Sandbox, 0, len(containers))
 	for _, c := range containers {
 		// Extract session ID from labels
-		sessionID := c.Labels["octobot.session.id"]
+		sessionID := c.Labels["discobot.session.id"]
 		if sessionID == "" {
 			continue
 		}
@@ -1166,7 +1166,7 @@ func (p *Provider) Watch(ctx context.Context) (<-chan sandbox.StateEvent, error)
 		// Set up Docker events filter for our managed containers
 		filterArgs := filters.NewArgs(
 			filters.Arg("type", string(events.ContainerEventType)),
-			filters.Arg("label", "octobot.managed=true"),
+			filters.Arg("label", "discobot.managed=true"),
 		)
 
 		// Watch Docker events
@@ -1243,7 +1243,7 @@ func (p *Provider) processDockerEvents(ctx context.Context, eventCh chan<- sandb
 // Returns nil if the event should be ignored.
 func (p *Provider) translateDockerEvent(msg events.Message) *sandbox.StateEvent {
 	// Extract session ID from container labels
-	sessionID := msg.Actor.Attributes["octobot.session.id"]
+	sessionID := msg.Actor.Attributes["discobot.session.id"]
 	if sessionID == "" {
 		// Not one of our containers or missing session ID
 		return nil

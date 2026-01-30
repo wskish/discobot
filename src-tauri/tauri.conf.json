@@ -1,6 +1,6 @@
 {
 	"$schema": "https://schema.tauri.app/config/2",
-	"productName": "octobot",
+	"productName": "discobot",
 	"version": "../package.json",
 	"identifier": "ai.obot.oct",
 	"build": {
@@ -11,7 +11,7 @@
 	"app": {
 		"windows": [
 			{
-				"title": "Octobot",
+				"title": "Discobot",
 				"width": 1200,
 				"height": 800,
 				"decorations": false
@@ -31,6 +31,6 @@
 			"icons/icon.icns",
 			"icons/icon.ico"
 		],
-		"externalBin": ["binaries/octobot-server"]
+		"externalBin": ["binaries/discobot-server"]
 	}
 }

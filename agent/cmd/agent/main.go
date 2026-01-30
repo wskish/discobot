@@ -1,9 +1,9 @@
-// Package main is the entry point for the octobot-agent init process.
+// Package main is the entry point for the discobot-agent init process.
 // This binary runs as PID 1 in the container and handles:
 // - Home directory initialization and workspace cloning
 // - Filesystem setup (OverlayFS for new sessions, AgentFS for existing)
 // - Process reaping (zombie collection)
-// - User switching from root to octobot
+// - User switching from root to discobot
 // - Child process management with pdeathsig
 // - Signal forwarding for graceful shutdown
 package main
@@ -37,10 +37,10 @@ var defaultProxyConfig []byte
 
 const (
 	// Default binary to execute
-	defaultAgentBinary = "/opt/octobot/bin/octobot-agent-api"
+	defaultAgentBinary = "/opt/discobot/bin/discobot-agent-api"
 
 	// Default user to run as
-	defaultUser = "octobot"
+	defaultUser = "discobot"
 
 	// Shutdown timeout before forcing child termination
 	shutdownTimeout = 10 * time.Second
@@ -55,7 +55,7 @@ const (
 	proxyStartupTimeout = 10 * time.Second
 
 	// Proxy binary path
-	proxyBinary = "/opt/octobot/bin/proxy"
+	proxyBinary = "/opt/discobot/bin/proxy"
 
 	// Proxy ports
 	proxyPort    = 17080
@@ -63,13 +63,13 @@ const (
 
 	// Paths
 	dataDir         = "/.data"
-	baseHomeDir     = "/.data/octobot"           // Base home directory (copied from /home/octobot)
-	workspaceDir    = "/.data/octobot/workspace" // Workspace inside home
-	stagingDir      = "/.data/octobot/workspace.staging"
+	baseHomeDir     = "/.data/discobot"           // Base home directory (copied from /home/discobot)
+	workspaceDir    = "/.data/discobot/workspace" // Workspace inside home
+	stagingDir      = "/.data/discobot/workspace.staging"
 	agentFSDir      = "/.data/.agentfs"
 	overlayFSDir    = "/.data/.overlayfs"
-	mountHome       = "/home/octobot"     // Where agentfs/overlayfs mounts
-	symlinkPath     = "/workspace"        // Symlink to /home/octobot/workspace
+	mountHome       = "/home/discobot"     // Where agentfs/overlayfs mounts
+	symlinkPath     = "/workspace"        // Symlink to /home/discobot/workspace
 	tempMigrationFS = "/.data/.migration" // Temporary mount point for migration
 )
 
@@ -97,13 +97,13 @@ func (f filesystemType) String() string {
 // Otherwise, use overlayfs for new sessions.
 func detectFilesystemType(sessionID string) filesystemType {
 	// Check for environment variable override
-	if fsOverride := os.Getenv("OCTOBOT_FILESYSTEM"); fsOverride != "" {
+	if fsOverride := os.Getenv("DISCOBOT_FILESYSTEM"); fsOverride != "" {
 		switch strings.ToLower(fsOverride) {
 		case "agentfs":
-			fmt.Printf("octobot-agent: filesystem override: agentfs\n")
+			fmt.Printf("discobot-agent: filesystem override: agentfs\n")
 			return fsTypeAgentFS
 		case "overlayfs":
-			fmt.Printf("octobot-agent: filesystem override: overlayfs\n")
+			fmt.Printf("discobot-agent: filesystem override: overlayfs\n")
 			return fsTypeOverlayFS
 		}
 	}
@@ -111,7 +111,7 @@ func detectFilesystemType(sessionID string) filesystemType {
 	// Check if migration marker exists (session has already been migrated)
 	migrationMarker := filepath.Join(overlayFSDir, sessionID, ".migrated")
 	if _, err := os.Stat(migrationMarker); err == nil {
-		fmt.Printf("octobot-agent: session already migrated to overlayfs\n")
+		fmt.Printf("discobot-agent: session already migrated to overlayfs\n")
 		return fsTypeOverlayFS
 	}
 
@@ -127,7 +127,7 @@ func detectFilesystemType(sessionID string) filesystemType {
 // It mounts agentfs at a temporary location, creates overlayfs at the target,
 // rsyncs the data, and marks the migration as complete.
 func migrateAgentFSToOverlayFS(sessionID string, userInfo *userInfo) error {
-	fmt.Printf("octobot-agent: starting migration from agentfs to overlayfs for session %s\n", sessionID)
+	fmt.Printf("discobot-agent: starting migration from agentfs to overlayfs for session %s\n", sessionID)
 
 	// Ensure migration directory exists with correct ownership
 	if err := os.MkdirAll(tempMigrationFS, 0755); err != nil {
@@ -138,31 +138,31 @@ func migrateAgentFSToOverlayFS(sessionID string, userInfo *userInfo) error {
 	}
 
 	// Step 1: Mount agentfs at temporary location
-	fmt.Printf("octobot-agent: mounting agentfs at temporary location %s\n", tempMigrationFS)
+	fmt.Printf("discobot-agent: mounting agentfs at temporary location %s\n", tempMigrationFS)
 	if err := mountAgentFSAtPath(sessionID, tempMigrationFS, userInfo); err != nil {
 		return fmt.Errorf("failed to mount agentfs for migration: %w", err)
 	}
 
 	// Ensure cleanup on error
 	defer func() {
-		fmt.Printf("octobot-agent: unmounting temporary agentfs\n")
+		fmt.Printf("discobot-agent: unmounting temporary agentfs\n")
 		if err := syscall.Unmount(tempMigrationFS, 0); err != nil {
-			fmt.Fprintf(os.Stderr, "octobot-agent: warning: failed to unmount %s: %v\n", tempMigrationFS, err)
+			fmt.Fprintf(os.Stderr, "discobot-agent: warning: failed to unmount %s: %v\n", tempMigrationFS, err)
 		}
 	}()
 
 	// Step 2: Setup overlayfs directories at target location
-	fmt.Printf("octobot-agent: setting up overlayfs for migration\n")
+	fmt.Printf("discobot-agent: setting up overlayfs for migration\n")
 	if err := setupOverlayFS(sessionID, userInfo); err != nil {
 		return fmt.Errorf("failed to setup overlayfs for migration: %w", err)
 	}
 
 	// Step 3: Mount overlayfs at target
-	fmt.Printf("octobot-agent: mounting overlayfs at %s\n", mountHome)
+	fmt.Printf("discobot-agent: mounting overlayfs at %s\n", mountHome)
 	if err := mountOverlayFS(sessionID); err != nil {
 		// Clean up overlayfs directories if mount fails
 		if cleanErr := os.RemoveAll(filepath.Join(overlayFSDir, sessionID)); cleanErr != nil {
-			fmt.Fprintf(os.Stderr, "octobot-agent: warning: failed to cleanup overlayfs directory: %v\n", cleanErr)
+			fmt.Fprintf(os.Stderr, "discobot-agent: warning: failed to cleanup overlayfs directory: %v\n", cleanErr)
 		}
 		return fmt.Errorf("failed to mount overlayfs for migration: %w", err)
 	}
@@ -171,16 +171,16 @@ func migrateAgentFSToOverlayFS(sessionID string, userInfo *userInfo) error {
 	defer func() {
 		// Only unmount if we're returning an error (normal path will keep it mounted)
 		if r := recover(); r != nil {
-			fmt.Printf("octobot-agent: unmounting overlayfs due to panic\n")
+			fmt.Printf("discobot-agent: unmounting overlayfs due to panic\n")
 			if unmountErr := syscall.Unmount(mountHome, 0); unmountErr != nil {
-				fmt.Fprintf(os.Stderr, "octobot-agent: warning: failed to unmount overlayfs: %v\n", unmountErr)
+				fmt.Fprintf(os.Stderr, "discobot-agent: warning: failed to unmount overlayfs: %v\n", unmountErr)
 			}
 			panic(r)
 		}
 	}()
 
 	// Step 4: Rsync from temp agentfs to target overlayfs
-	fmt.Printf("octobot-agent: syncing data from agentfs to overlayfs (this may take a while)\n")
+	fmt.Printf("discobot-agent: syncing data from agentfs to overlayfs (this may take a while)\n")
 	rsyncCmd := exec.Command("rsync",
 		"-a",                // archive mode (preserve permissions, timestamps, etc.)
 		"--delete",          // delete files in destination that don't exist in source
@@ -191,33 +191,33 @@ func migrateAgentFSToOverlayFS(sessionID string, userInfo *userInfo) error {
 	rsyncCmd.Stderr = os.Stderr
 	if err := rsyncCmd.Run(); err != nil {
 		if unmountErr := syscall.Unmount(mountHome, 0); unmountErr != nil {
-			fmt.Fprintf(os.Stderr, "octobot-agent: warning: failed to unmount overlayfs: %v\n", unmountErr)
+			fmt.Fprintf(os.Stderr, "discobot-agent: warning: failed to unmount overlayfs: %v\n", unmountErr)
 		}
 		if cleanErr := os.RemoveAll(filepath.Join(overlayFSDir, sessionID)); cleanErr != nil {
-			fmt.Fprintf(os.Stderr, "octobot-agent: warning: failed to cleanup overlayfs directory: %v\n", cleanErr)
+			fmt.Fprintf(os.Stderr, "discobot-agent: warning: failed to cleanup overlayfs directory: %v\n", cleanErr)
 		}
 		return fmt.Errorf("rsync failed: %w", err)
 	}
 
-	fmt.Printf("octobot-agent: data sync completed successfully\n")
+	fmt.Printf("discobot-agent: data sync completed successfully\n")
 
 	// Step 5: Unmount temporary agentfs
-	fmt.Printf("octobot-agent: unmounting temporary agentfs\n")
+	fmt.Printf("discobot-agent: unmounting temporary agentfs\n")
 	if err := syscall.Unmount(tempMigrationFS, 0); err != nil {
-		fmt.Fprintf(os.Stderr, "octobot-agent: warning: failed to unmount temporary agentfs: %v\n", err)
+		fmt.Fprintf(os.Stderr, "discobot-agent: warning: failed to unmount temporary agentfs: %v\n", err)
 		// Continue anyway - this is not fatal
 	}
 
 	// Step 6: Create migration marker
 	migrationMarker := filepath.Join(overlayFSDir, sessionID, ".migrated")
-	fmt.Printf("octobot-agent: creating migration marker at %s\n", migrationMarker)
+	fmt.Printf("discobot-agent: creating migration marker at %s\n", migrationMarker)
 	if err := os.WriteFile(migrationMarker, []byte(time.Now().Format(time.RFC3339)), 0644); err != nil {
-		fmt.Fprintf(os.Stderr, "octobot-agent: warning: failed to create migration marker: %v\n", err)
+		fmt.Fprintf(os.Stderr, "discobot-agent: warning: failed to create migration marker: %v\n", err)
 		// Continue anyway - the migration is complete
 	}
 
-	fmt.Printf("octobot-agent: migration completed successfully\n")
-	fmt.Printf("octobot-agent: note: agentfs database is preserved at %s for backup\n", filepath.Join(agentFSDir, sessionID+".db"))
+	fmt.Printf("discobot-agent: migration completed successfully\n")
+	fmt.Printf("discobot-agent: note: agentfs database is preserved at %s for backup\n", filepath.Join(agentFSDir, sessionID+".db"))
 
 	return nil
 }
@@ -228,7 +228,7 @@ func mountAgentFSAtPath(sessionID, mountPath string, u *userInfo) error {
 
 	var lastErr error
 	for attempt := 1; attempt <= maxRetries; attempt++ {
-		fmt.Printf("octobot-agent: mounting agentfs %s at %s (attempt %d/%d)\n", sessionID, mountPath, attempt, maxRetries)
+		fmt.Printf("discobot-agent: mounting agentfs %s at %s (attempt %d/%d)\n", sessionID, mountPath, attempt, maxRetries)
 
 		cmd := exec.Command("agentfs", "mount", "-a", "--allow-root", sessionID, mountPath)
 		cmd.Dir = dataDir
@@ -244,14 +244,14 @@ func mountAgentFSAtPath(sessionID, mountPath string, u *userInfo) error {
 
 		if err := cmd.Run(); err != nil {
 			lastErr = err
-			fmt.Fprintf(os.Stderr, "octobot-agent: agentfs mount attempt %d failed: %v\n", attempt, err)
+			fmt.Fprintf(os.Stderr, "discobot-agent: agentfs mount attempt %d failed: %v\n", attempt, err)
 			if attempt < maxRetries {
 				time.Sleep(time.Second)
 			}
 			continue
 		}
 
-		fmt.Printf("octobot-agent: agentfs mounted successfully at %s\n", mountPath)
+		fmt.Printf("discobot-agent: agentfs mounted successfully at %s\n", mountPath)
 		return nil
 	}
 
@@ -260,9 +260,9 @@ func mountAgentFSAtPath(sessionID, mountPath string, u *userInfo) error {
 
 func main() {
 	if err := run(); err != nil {
-		fmt.Fprintf(os.Stderr, "octobot-agent: %v\n", err)
+		fmt.Fprintf(os.Stderr, "discobot-agent: %v\n", err)
 		// Sleep forever to allow debugging via docker exec
-		fmt.Fprintf(os.Stderr, "octobot-agent: sleeping for debug (docker exec to investigate)\n")
+		fmt.Fprintf(os.Stderr, "discobot-agent: sleeping for debug (docker exec to investigate)\n")
 		sig := make(chan os.Signal, 1)
 		signal.Notify(sig)
 		<-sig
@@ -271,10 +271,10 @@ func main() {
 
 func run() error {
 	startupStart := time.Now()
-	fmt.Printf("octobot-agent: container startup beginning at %s\n", startupStart.Format(time.RFC3339))
+	fmt.Printf("discobot-agent: container startup beginning at %s\n", startupStart.Format(time.RFC3339))
 
 	// Change to root directory to avoid issues with overlayfs mounting
-	// The current directory might be inside /home/octobot which will be mounted over
+	// The current directory might be inside /home/discobot which will be mounted over
 	if err := os.Chdir("/"); err != nil {
 		return fmt.Errorf("failed to chdir to /: %w", err)
 	}
@@ -283,7 +283,7 @@ func run() error {
 	// This prevents IPv4/IPv6 mismatches where servers bind to ::1 but clients connect to 127.0.0.1
 	if err := fixLocalhostResolution(); err != nil {
 		// Log but don't fail - this is a best-effort fix
-		fmt.Printf("octobot-agent: warning: failed to fix localhost resolution: %v\n", err)
+		fmt.Printf("discobot-agent: warning: failed to fix localhost resolution: %v\n", err)
 	}
 
 	// Determine configuration from environment
@@ -310,23 +310,23 @@ func run() error {
 	if err := setupGitSafeDirectories(workspacePath); err != nil {
 		return fmt.Errorf("git safe.directory setup failed: %w", err)
 	}
-	fmt.Printf("octobot-agent: [%.3fs] git safe.directory setup completed\n", time.Since(stepStart).Seconds())
+	fmt.Printf("discobot-agent: [%.3fs] git safe.directory setup completed\n", time.Since(stepStart).Seconds())
 
-	// Step 1: Setup base home directory (copy from /home/octobot if needed)
+	// Step 1: Setup base home directory (copy from /home/discobot if needed)
 	stepStart = time.Now()
 	if err := setupBaseHome(userInfo); err != nil {
 		return fmt.Errorf("base home setup failed: %w", err)
 	}
-	fmt.Printf("octobot-agent: [%.3fs] base home setup completed\n", time.Since(stepStart).Seconds())
+	fmt.Printf("discobot-agent: [%.3fs] base home setup completed\n", time.Since(stepStart).Seconds())
 
 	// Step 2: Clone workspace (must complete before overlayfs mount)
 	// The overlayfs captures the lower layer state at mount time, so the workspace
-	// must be fully cloned into /.data/octobot/workspace before we mount overlayfs.
+	// must be fully cloned into /.data/discobot/workspace before we mount overlayfs.
 	stepStart = time.Now()
 	if err := setupWorkspace(workspacePath, workspaceCommit, userInfo); err != nil {
 		return fmt.Errorf("workspace setup failed: %w", err)
 	}
-	fmt.Printf("octobot-agent: [%.3fs] workspace setup completed\n", time.Since(stepStart).Seconds())
+	fmt.Printf("discobot-agent: [%.3fs] workspace setup completed\n", time.Since(stepStart).Seconds())
 
 	// Step 3: Detect filesystem type (overlayfs for new sessions, agentfs for existing)
 	fsType := detectFilesystemType(sessionID)
@@ -335,7 +335,7 @@ func run() error {
 	stepStart = time.Now()
 	switch fsType {
 	case fsTypeAgentFS:
-		fmt.Printf("octobot-agent: agentfs session detected, migrating to overlayfs\n")
+		fmt.Printf("discobot-agent: agentfs session detected, migrating to overlayfs\n")
 
 		// Ensure agentfs directory exists with correct ownership
 		if err := os.MkdirAll(agentFSDir, 0755); err != nil {
@@ -345,7 +345,7 @@ func run() error {
 			return fmt.Errorf("failed to chown agentfs directory: %w", err)
 		}
 
-		// Initialize agentfs database if needed (as octobot user)
+		// Initialize agentfs database if needed (as discobot user)
 		if err := initAgentFS(sessionID, userInfo); err != nil {
 			return fmt.Errorf("agentfs init failed: %w", err)
 		}
@@ -356,19 +356,19 @@ func run() error {
 		}
 
 	case fsTypeOverlayFS:
-		fmt.Printf("octobot-agent: using OverlayFS (new session)\n")
+		fmt.Printf("discobot-agent: using OverlayFS (new session)\n")
 
 		// Setup overlayfs directory structure
 		if err := setupOverlayFS(sessionID, userInfo); err != nil {
 			return fmt.Errorf("overlayfs setup failed: %w", err)
 		}
 
-		// Mount overlayfs over /home/octobot
+		// Mount overlayfs over /home/discobot
 		if err := mountOverlayFS(sessionID); err != nil {
 			// Fallback to agentfs if overlayfs fails
-			fmt.Printf("octobot-agent: overlayfs failed, falling back to agentfs: %v\n", err)
+			fmt.Printf("discobot-agent: overlayfs failed, falling back to agentfs: %v\n", err)
 			if cleanErr := os.RemoveAll(filepath.Join(overlayFSDir, sessionID)); cleanErr != nil {
-				fmt.Fprintf(os.Stderr, "octobot-agent: warning: failed to cleanup overlayfs directory: %v\n", cleanErr)
+				fmt.Fprintf(os.Stderr, "discobot-agent: warning: failed to cleanup overlayfs directory: %v\n", cleanErr)
 			}
 
 			if err := os.MkdirAll(agentFSDir, 0755); err != nil {
@@ -385,38 +385,38 @@ func run() error {
 			}
 		}
 	}
-	fmt.Printf("octobot-agent: [%.3fs] filesystem setup completed (%s)\n", time.Since(stepStart).Seconds(), fsType)
+	fmt.Printf("discobot-agent: [%.3fs] filesystem setup completed (%s)\n", time.Since(stepStart).Seconds(), fsType)
 
 	// Step 4.5: Mount cache directories on top of the overlay
 	stepStart = time.Now()
 	if err := mountCacheDirectories(); err != nil {
 		// Log but don't fail - cache mounting is optional
-		fmt.Printf("octobot-agent: Cache mount failed: %v\n", err)
+		fmt.Printf("discobot-agent: Cache mount failed: %v\n", err)
 	}
-	fmt.Printf("octobot-agent: [%.3fs] cache directories mounted\n", time.Since(stepStart).Seconds())
+	fmt.Printf("discobot-agent: [%.3fs] cache directories mounted\n", time.Since(stepStart).Seconds())
 
-	// Step 5: Create /workspace symlink to /home/octobot/workspace
+	// Step 5: Create /workspace symlink to /home/discobot/workspace
 	stepStart = time.Now()
 	if err := createWorkspaceSymlink(); err != nil {
 		return fmt.Errorf("symlink creation failed: %w", err)
 	}
-	fmt.Printf("octobot-agent: [%.3fs] workspace symlink created\n", time.Since(stepStart).Seconds())
+	fmt.Printf("discobot-agent: [%.3fs] workspace symlink created\n", time.Since(stepStart).Seconds())
 
 	// Step 6: Setup proxy configuration (uses embedded defaults only for security)
 	stepStart = time.Now()
 	if err := setupProxyConfig(userInfo); err != nil {
 		// Log but don't fail - proxy config is optional
-		fmt.Printf("octobot-agent: Proxy config setup failed: %v\n", err)
+		fmt.Printf("discobot-agent: Proxy config setup failed: %v\n", err)
 	}
-	fmt.Printf("octobot-agent: [%.3fs] proxy config setup completed\n", time.Since(stepStart).Seconds())
+	fmt.Printf("discobot-agent: [%.3fs] proxy config setup completed\n", time.Since(stepStart).Seconds())
 
 	// Step 7: Generate CA certificate and install in system trust store
 	stepStart = time.Now()
 	if err := setupProxyCertificate(); err != nil {
 		// Log but don't fail - proxy cert is optional
-		fmt.Printf("octobot-agent: Proxy certificate setup failed: %v\n", err)
+		fmt.Printf("discobot-agent: Proxy certificate setup failed: %v\n", err)
 	}
-	fmt.Printf("octobot-agent: [%.3fs] CA certificate setup completed\n", time.Since(stepStart).Seconds())
+	fmt.Printf("discobot-agent: [%.3fs] CA certificate setup completed\n", time.Since(stepStart).Seconds())
 
 	// Step 8: Start proxy daemon with embedded defaults
 	stepStart = time.Now()
@@ -424,9 +424,9 @@ func run() error {
 	proxyEnabled := (err == nil && proxyCmd != nil)
 	if err != nil {
 		// Log but don't fail - Proxy is optional
-		fmt.Printf("octobot-agent: Proxy daemon not started: %v\n", err)
+		fmt.Printf("discobot-agent: Proxy daemon not started: %v\n", err)
 	} else {
-		fmt.Printf("octobot-agent: [%.3fs] proxy daemon started\n", time.Since(stepStart).Seconds())
+		fmt.Printf("discobot-agent: [%.3fs] proxy daemon started\n", time.Since(stepStart).Seconds())
 	}
 
 	// Step 9: Start Docker daemon if available (after proxy so Docker can use it)
@@ -434,14 +434,14 @@ func run() error {
 	dockerCmd, err := startDockerDaemon(proxyEnabled)
 	if err != nil {
 		// Log but don't fail - Docker is optional
-		fmt.Printf("octobot-agent: Docker daemon not started: %v\n", err)
+		fmt.Printf("discobot-agent: Docker daemon not started: %v\n", err)
 	} else {
-		fmt.Printf("octobot-agent: [%.3fs] Docker daemon started\n", time.Since(stepStart).Seconds())
+		fmt.Printf("discobot-agent: [%.3fs] Docker daemon started\n", time.Since(stepStart).Seconds())
 	}
 
 	// Step 10: Run the agent API
-	fmt.Printf("octobot-agent: [%.3fs] total startup time\n", time.Since(startupStart).Seconds())
-	fmt.Printf("octobot-agent: starting agent API\n")
+	fmt.Printf("discobot-agent: [%.3fs] total startup time\n", time.Since(startupStart).Seconds())
+	fmt.Printf("discobot-agent: starting agent API\n")
 	return runAgent(agentBinary, userInfo, dockerCmd, proxyCmd)
 }
 
@@ -517,7 +517,7 @@ func fixLocalhostResolution() error {
 			}
 			// If no remaining hostnames, the line is dropped entirely
 			modified = true
-			fmt.Printf("octobot-agent: removed 'localhost' from ::1 line in /etc/hosts\n")
+			fmt.Printf("discobot-agent: removed 'localhost' from ::1 line in /etc/hosts\n")
 		} else {
 			// Some other IP with localhost, keep it
 			newLines = append(newLines, line)
@@ -528,11 +528,11 @@ func fixLocalhostResolution() error {
 	if !hasIPv4Localhost {
 		newLines = append([]string{"127.0.0.1\tlocalhost"}, newLines...)
 		modified = true
-		fmt.Printf("octobot-agent: added '127.0.0.1 localhost' to /etc/hosts\n")
+		fmt.Printf("discobot-agent: added '127.0.0.1 localhost' to /etc/hosts\n")
 	}
 
 	if !modified {
-		fmt.Printf("octobot-agent: /etc/hosts already configured correctly for localhost\n")
+		fmt.Printf("discobot-agent: /etc/hosts already configured correctly for localhost\n")
 		return nil
 	}
 
@@ -542,20 +542,20 @@ func fixLocalhostResolution() error {
 		return fmt.Errorf("failed to write %s: %w", hostsPath, err)
 	}
 
-	fmt.Printf("octobot-agent: /etc/hosts updated to ensure localhost resolves to 127.0.0.1\n")
+	fmt.Printf("discobot-agent: /etc/hosts updated to ensure localhost resolves to 127.0.0.1\n")
 	return nil
 }
 
 // setupGitSafeDirectories configures git safe.directory for all workspace paths.
-// Uses --system to write to /etc/gitconfig so all users (including octobot) can see it.
+// Uses --system to write to /etc/gitconfig so all users (including discobot) can see it.
 func setupGitSafeDirectories(workspacePath string) error {
 	// Paths that need to be marked as safe for git operations
 	dirs := []string{
 		"/.workspace",                         // Source workspace mount point
 		"/.workspace/.git",                    // Git directory (some operations check .git specifically)
-		workspaceDir,                          // /.data/octobot/workspace
-		stagingDir,                            // /.data/octobot/workspace.staging (used during clone)
-		filepath.Join(mountHome, "workspace"), // /home/octobot/workspace (after agentfs mount)
+		workspaceDir,                          // /.data/discobot/workspace
+		stagingDir,                            // /.data/discobot/workspace.staging (used during clone)
+		filepath.Join(mountHome, "workspace"), // /home/discobot/workspace (after agentfs mount)
 		symlinkPath,                           // /workspace symlink
 	}
 
@@ -564,27 +564,27 @@ func setupGitSafeDirectories(workspacePath string) error {
 		dirs = append([]string{workspacePath}, dirs...)
 	}
 
-	fmt.Printf("octobot-agent: configuring git safe.directory for workspace paths\n")
+	fmt.Printf("discobot-agent: configuring git safe.directory for workspace paths\n")
 	for _, dir := range dirs {
 		cmd := exec.Command("git", "config", "--system", "--add", "safe.directory", dir)
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		if err := cmd.Run(); err != nil {
 			// Log but don't fail - some paths may not exist yet
-			fmt.Printf("octobot-agent: warning: git config safe.directory %s: %v\n", dir, err)
+			fmt.Printf("discobot-agent: warning: git config safe.directory %s: %v\n", dir, err)
 		}
 	}
 
 	return nil
 }
 
-// setupBaseHome copies /home/octobot to /.data/octobot if it doesn't exist,
+// setupBaseHome copies /home/discobot to /.data/discobot if it doesn't exist,
 // or syncs new files if it already exists
 func setupBaseHome(u *userInfo) error {
 	// Check if base home already exists
 	if _, err := os.Stat(baseHomeDir); err == nil {
-		fmt.Printf("octobot-agent: base home already exists at %s, syncing new files\n", baseHomeDir)
-		// Sync any new files from /home/octobot to /.data/octobot
+		fmt.Printf("discobot-agent: base home already exists at %s, syncing new files\n", baseHomeDir)
+		// Sync any new files from /home/discobot to /.data/discobot
 		// This ensures new files added to the container image get propagated
 		if err := syncNewFiles(mountHome, baseHomeDir, u); err != nil {
 			return fmt.Errorf("failed to sync new files: %w", err)
@@ -592,14 +592,14 @@ func setupBaseHome(u *userInfo) error {
 		return nil
 	}
 
-	fmt.Printf("octobot-agent: copying /home/octobot to %s\n", baseHomeDir)
+	fmt.Printf("discobot-agent: copying /home/discobot to %s\n", baseHomeDir)
 
 	// Create parent directory
 	if err := os.MkdirAll(filepath.Dir(baseHomeDir), 0755); err != nil {
 		return fmt.Errorf("failed to create parent directory: %w", err)
 	}
 
-	// Copy /home/octobot to /.data/octobot recursively with permissions
+	// Copy /home/discobot to /.data/discobot recursively with permissions
 	if err := copyDir(mountHome, baseHomeDir); err != nil {
 		return fmt.Errorf("failed to copy home directory: %w", err)
 	}
@@ -609,7 +609,7 @@ func setupBaseHome(u *userInfo) error {
 		return fmt.Errorf("failed to chown base home: %w", err)
 	}
 
-	fmt.Printf("octobot-agent: base home created successfully\n")
+	fmt.Printf("discobot-agent: base home created successfully\n")
 	return nil
 }
 
@@ -641,7 +641,7 @@ func syncNewFiles(src, dst string, u *userInfo) error {
 
 		// Destination doesn't exist, copy it
 		if info.IsDir() {
-			fmt.Printf("octobot-agent: syncing new directory %s\n", relPath)
+			fmt.Printf("discobot-agent: syncing new directory %s\n", relPath)
 			if err := os.MkdirAll(dstPath, info.Mode().Perm()); err != nil {
 				return err
 			}
@@ -654,7 +654,7 @@ func syncNewFiles(src, dst string, u *userInfo) error {
 			if err != nil {
 				return err
 			}
-			fmt.Printf("octobot-agent: syncing new symlink %s\n", relPath)
+			fmt.Printf("discobot-agent: syncing new symlink %s\n", relPath)
 			if err := os.Symlink(link, dstPath); err != nil {
 				return err
 			}
@@ -662,7 +662,7 @@ func syncNewFiles(src, dst string, u *userInfo) error {
 				return err
 			}
 		} else if info.Mode().IsRegular() {
-			fmt.Printf("octobot-agent: syncing new file %s\n", relPath)
+			fmt.Printf("discobot-agent: syncing new file %s\n", relPath)
 			if err := copyFile(srcPath, dstPath); err != nil {
 				return err
 			}
@@ -728,7 +728,7 @@ func copyFile(src, dst string) error {
 	}
 	defer func() {
 		if closeErr := srcFile.Close(); closeErr != nil {
-			fmt.Fprintf(os.Stderr, "octobot-agent: warning: failed to close source file %s: %v\n", src, closeErr)
+			fmt.Fprintf(os.Stderr, "discobot-agent: warning: failed to close source file %s: %v\n", src, closeErr)
 		}
 	}()
 
@@ -743,7 +743,7 @@ func copyFile(src, dst string) error {
 	}
 	defer func() {
 		if closeErr := dstFile.Close(); closeErr != nil {
-			fmt.Fprintf(os.Stderr, "octobot-agent: warning: failed to close destination file %s: %v\n", dst, closeErr)
+			fmt.Fprintf(os.Stderr, "discobot-agent: warning: failed to close destination file %s: %v\n", dst, closeErr)
 		}
 	}()
 
@@ -755,13 +755,13 @@ func copyFile(src, dst string) error {
 func setupWorkspace(workspacePath, workspaceCommit string, u *userInfo) error {
 	// If workspace already exists, nothing to do
 	if _, err := os.Stat(workspaceDir); err == nil {
-		fmt.Printf("octobot-agent: workspace already exists at %s\n", workspaceDir)
+		fmt.Printf("discobot-agent: workspace already exists at %s\n", workspaceDir)
 		return nil
 	}
 
 	// If no workspace path specified, create empty workspace owned by user
 	if workspacePath == "" {
-		fmt.Println("octobot-agent: no WORKSPACE_PATH specified, creating empty workspace")
+		fmt.Println("discobot-agent: no WORKSPACE_PATH specified, creating empty workspace")
 		if err := os.MkdirAll(workspaceDir, 0755); err != nil {
 			return fmt.Errorf("failed to create workspace directory: %w", err)
 		}
@@ -771,7 +771,7 @@ func setupWorkspace(workspacePath, workspaceCommit string, u *userInfo) error {
 		return nil
 	}
 
-	fmt.Printf("octobot-agent: cloning workspace from %s\n", workspacePath)
+	fmt.Printf("discobot-agent: cloning workspace from %s\n", workspacePath)
 
 	// Clean up any existing staging directory
 	if err := os.RemoveAll(stagingDir); err != nil {
@@ -786,7 +786,7 @@ func setupWorkspace(workspacePath, workspaceCommit string, u *userInfo) error {
 	cmd := exec.Command("git", cloneArgs...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	fmt.Printf("octobot-agent: running: git %v\n", cloneArgs)
+	fmt.Printf("discobot-agent: running: git %v\n", cloneArgs)
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("git clone failed: %w", err)
 	}
@@ -794,18 +794,18 @@ func setupWorkspace(workspacePath, workspaceCommit string, u *userInfo) error {
 	// If specific commit requested, create a branch at that commit to avoid detached HEAD
 	if workspaceCommit != "" {
 		// Create a temporary branch at the target commit
-		branchName := "octobot-session"
+		branchName := "discobot-session"
 		cmd = exec.Command("git", "-C", stagingDir, "checkout", "-B", branchName, workspaceCommit)
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
-		fmt.Printf("octobot-agent: creating branch %s at commit %s\n", branchName, workspaceCommit)
+		fmt.Printf("discobot-agent: creating branch %s at commit %s\n", branchName, workspaceCommit)
 		if err := cmd.Run(); err != nil {
 			return fmt.Errorf("git checkout -B %s %s failed: %w", branchName, workspaceCommit, err)
 		}
 	}
 
 	// Change ownership of all files to the target user
-	fmt.Printf("octobot-agent: changing workspace ownership to %s\n", u.username)
+	fmt.Printf("discobot-agent: changing workspace ownership to %s\n", u.username)
 	if err := chownRecursive(stagingDir, u.uid, u.gid); err != nil {
 		return fmt.Errorf("failed to chown workspace: %w", err)
 	}
@@ -815,7 +815,7 @@ func setupWorkspace(workspacePath, workspaceCommit string, u *userInfo) error {
 		return fmt.Errorf("failed to move staging to workspace: %w", err)
 	}
 
-	fmt.Printf("octobot-agent: workspace cloned successfully\n")
+	fmt.Printf("discobot-agent: workspace cloned successfully\n")
 	return nil
 }
 
@@ -835,11 +835,11 @@ func initAgentFS(sessionID string, u *userInfo) error {
 
 	// Check if database already exists
 	if _, err := os.Stat(dbPath); err == nil {
-		fmt.Printf("octobot-agent: agentfs database already exists at %s\n", dbPath)
+		fmt.Printf("discobot-agent: agentfs database already exists at %s\n", dbPath)
 		return nil
 	}
 
-	fmt.Printf("octobot-agent: initializing agentfs for session %s\n", sessionID)
+	fmt.Printf("discobot-agent: initializing agentfs for session %s\n", sessionID)
 
 	cmd := exec.Command("agentfs", "init", "--base", baseHomeDir, sessionID)
 	cmd.Dir = dataDir
@@ -856,11 +856,11 @@ func initAgentFS(sessionID string, u *userInfo) error {
 		return fmt.Errorf("agentfs init failed: %w", err)
 	}
 
-	fmt.Printf("octobot-agent: agentfs initialized successfully\n")
+	fmt.Printf("discobot-agent: agentfs initialized successfully\n")
 	return nil
 }
 
-// mountAgentFS mounts the agentfs database over /home/octobot
+// mountAgentFS mounts the agentfs database over /home/discobot
 // It retries up to 10 times, then attempts foreground mode for debug output
 func mountAgentFS(sessionID string, u *userInfo) error {
 	const maxRetries = 10
@@ -868,7 +868,7 @@ func mountAgentFS(sessionID string, u *userInfo) error {
 	// Try mounting in daemon mode (with -a flag) up to maxRetries times
 	var lastErr error
 	for attempt := 1; attempt <= maxRetries; attempt++ {
-		fmt.Printf("octobot-agent: mounting agentfs %s at %s (attempt %d/%d)\n", sessionID, mountHome, attempt, maxRetries)
+		fmt.Printf("discobot-agent: mounting agentfs %s at %s (attempt %d/%d)\n", sessionID, mountHome, attempt, maxRetries)
 
 		// -a: auto-unmount on exit (daemon mode)
 		// --allow-root: allow root to access the FUSE mount
@@ -886,20 +886,20 @@ func mountAgentFS(sessionID string, u *userInfo) error {
 
 		if err := cmd.Run(); err != nil {
 			lastErr = err
-			fmt.Fprintf(os.Stderr, "octobot-agent: agentfs mount attempt %d failed: %v\n", attempt, err)
+			fmt.Fprintf(os.Stderr, "discobot-agent: agentfs mount attempt %d failed: %v\n", attempt, err)
 			if attempt < maxRetries {
 				time.Sleep(time.Second) // Brief delay before retry
 			}
 			continue
 		}
 
-		fmt.Printf("octobot-agent: agentfs mounted successfully\n")
+		fmt.Printf("discobot-agent: agentfs mounted successfully\n")
 		return nil
 	}
 
 	// All retries failed - try foreground mode to capture debug output
-	fmt.Fprintf(os.Stderr, "octobot-agent: ERROR: agentfs mount failed %d times\n", maxRetries)
-	fmt.Fprintf(os.Stderr, "octobot-agent: attempting foreground mount to capture debug logs...\n")
+	fmt.Fprintf(os.Stderr, "discobot-agent: ERROR: agentfs mount failed %d times\n", maxRetries)
+	fmt.Fprintf(os.Stderr, "discobot-agent: attempting foreground mount to capture debug logs...\n")
 
 	// Run with -f flag for foreground mode to capture debug output
 	cmd := exec.Command("agentfs", "mount", "-a", "-f", "--allow-root", sessionID, mountHome)
@@ -915,8 +915,8 @@ func mountAgentFS(sessionID string, u *userInfo) error {
 	}
 
 	if err := cmd.Run(); err != nil {
-		fmt.Fprintf(os.Stderr, "octobot-agent: foreground mount also failed: %v\n", err)
-		fmt.Fprintf(os.Stderr, "octobot-agent: sleeping forever for debug (docker exec to investigate)\n")
+		fmt.Fprintf(os.Stderr, "discobot-agent: foreground mount also failed: %v\n", err)
+		fmt.Fprintf(os.Stderr, "discobot-agent: sleeping forever for debug (docker exec to investigate)\n")
 		sig := make(chan os.Signal, 1)
 		signal.Notify(sig)
 		<-sig
@@ -925,7 +925,7 @@ func mountAgentFS(sessionID string, u *userInfo) error {
 	}
 
 	// Foreground mount succeeded (unexpected but handle it)
-	fmt.Printf("octobot-agent: agentfs foreground mount succeeded\n")
+	fmt.Printf("discobot-agent: agentfs foreground mount succeeded\n")
 	return nil
 }
 
@@ -935,7 +935,7 @@ func setupOverlayFS(sessionID string, u *userInfo) error {
 	upperDir := filepath.Join(sessionDir, "upper")
 	workDir := filepath.Join(sessionDir, "work")
 
-	fmt.Printf("octobot-agent: setting up overlayfs directories at %s\n", sessionDir)
+	fmt.Printf("discobot-agent: setting up overlayfs directories at %s\n", sessionDir)
 
 	// Create all directories
 	for _, dir := range []string{overlayFSDir, sessionDir, upperDir, workDir} {
@@ -951,11 +951,11 @@ func setupOverlayFS(sessionID string, u *userInfo) error {
 		}
 	}
 
-	fmt.Printf("octobot-agent: overlayfs directories created successfully\n")
+	fmt.Printf("discobot-agent: overlayfs directories created successfully\n")
 	return nil
 }
 
-// mountOverlayFS mounts the overlayfs filesystem over /home/octobot
+// mountOverlayFS mounts the overlayfs filesystem over /home/discobot
 func mountOverlayFS(sessionID string) error {
 	sessionDir := filepath.Join(overlayFSDir, sessionID)
 	upperDir := filepath.Join(sessionDir, "upper")
@@ -967,18 +967,18 @@ func mountOverlayFS(sessionID string) error {
 	// workdir = scratch space for overlayfs internal use
 	opts := fmt.Sprintf("lowerdir=%s,upperdir=%s,workdir=%s", baseHomeDir, upperDir, workDir)
 
-	fmt.Printf("octobot-agent: mounting overlayfs at %s\n", mountHome)
-	fmt.Printf("octobot-agent: overlayfs options: %s\n", opts)
+	fmt.Printf("discobot-agent: mounting overlayfs at %s\n", mountHome)
+	fmt.Printf("discobot-agent: overlayfs options: %s\n", opts)
 
 	if err := syscall.Mount("overlay", mountHome, "overlay", 0, opts); err != nil {
 		return fmt.Errorf("overlayfs mount failed: %w", err)
 	}
 
-	fmt.Printf("octobot-agent: overlayfs mounted successfully\n")
+	fmt.Printf("discobot-agent: overlayfs mounted successfully\n")
 	return nil
 }
 
-// createWorkspaceSymlink creates /workspace -> /home/octobot/workspace symlink
+// createWorkspaceSymlink creates /workspace -> /home/discobot/workspace symlink
 func createWorkspaceSymlink() error {
 	target := filepath.Join(mountHome, "workspace")
 
@@ -989,7 +989,7 @@ func createWorkspaceSymlink() error {
 		}
 	}
 
-	fmt.Printf("octobot-agent: creating symlink %s -> %s\n", symlinkPath, target)
+	fmt.Printf("discobot-agent: creating symlink %s -> %s\n", symlinkPath, target)
 	if err := os.Symlink(target, symlinkPath); err != nil {
 		return fmt.Errorf("failed to create symlink: %w", err)
 	}
@@ -1017,7 +1017,7 @@ func getProxyEnvVars() []string {
 	}
 }
 
-// setProxyInProfile writes proxy environment variables to /etc/profile.d/octobot-proxy.sh
+// setProxyInProfile writes proxy environment variables to /etc/profile.d/discobot-proxy.sh
 // so that login shells automatically inherit the proxy configuration.
 func setProxyInProfile() error {
 	profileDir := "/etc/profile.d"
@@ -1028,13 +1028,13 @@ func setProxyInProfile() error {
 		return setProxyInEtcProfile()
 	}
 
-	// Write proxy settings to /etc/profile.d/octobot-proxy.sh
-	profilePath := filepath.Join(profileDir, "octobot-proxy.sh")
+	// Write proxy settings to /etc/profile.d/discobot-proxy.sh
+	profilePath := filepath.Join(profileDir, "discobot-proxy.sh")
 	proxyURL := fmt.Sprintf("http://localhost:%d", proxyPort)
 	caCertPath := filepath.Join(dataDir, "proxy", "certs", "ca.crt")
 
-	content := fmt.Sprintf(`# Octobot Proxy Configuration
-# Automatically generated by octobot-agent
+	content := fmt.Sprintf(`# Discobot Proxy Configuration
+# Automatically generated by discobot-agent
 # This file sets proxy environment variables for all login shells
 
 export HTTP_PROXY=%s
@@ -1056,7 +1056,7 @@ export NODE_EXTRA_CA_CERTS=%s
 		return fmt.Errorf("failed to write %s: %w", profilePath, err)
 	}
 
-	fmt.Printf("octobot-agent: proxy settings written to %s\n", profilePath)
+	fmt.Printf("discobot-agent: proxy settings written to %s\n", profilePath)
 	return nil
 }
 
@@ -1074,7 +1074,7 @@ func setProxyInEtcProfile() error {
 
 	content := fmt.Sprintf(`
 
-# Octobot Proxy Configuration (added by octobot-agent)
+# Discobot Proxy Configuration (added by discobot-agent)
 export HTTP_PROXY=%s
 export HTTPS_PROXY=%s
 export http_proxy=%s
@@ -1097,7 +1097,7 @@ export NODE_EXTRA_CA_CERTS=%s
 		return fmt.Errorf("failed to write to %s: %w", profilePath, err)
 	}
 
-	fmt.Printf("octobot-agent: proxy settings appended to %s\n", profilePath)
+	fmt.Printf("discobot-agent: proxy settings appended to %s\n", profilePath)
 	return nil
 }
 
@@ -1108,7 +1108,7 @@ func startDockerDaemon(proxyEnabled bool) (*exec.Cmd, error) {
 		return nil, fmt.Errorf("dockerd not found on PATH: %w", err)
 	}
 
-	fmt.Printf("octobot-agent: found dockerd at %s, starting Docker daemon...\n", dockerdPath)
+	fmt.Printf("discobot-agent: found dockerd at %s, starting Docker daemon...\n", dockerdPath)
 
 	// Ensure /var/run exists for the socket
 	if err := os.MkdirAll("/var/run", 0755); err != nil {
@@ -1136,14 +1136,14 @@ func startDockerDaemon(proxyEnabled bool) (*exec.Cmd, error) {
 	// This allows Docker to use the proxy for image pulls
 	if proxyEnabled {
 		cmd.Env = append(os.Environ(), getProxyEnvVars()...)
-		fmt.Printf("octobot-agent: Docker daemon configured to use proxy at http://localhost:%d\n", proxyPort)
+		fmt.Printf("discobot-agent: Docker daemon configured to use proxy at http://localhost:%d\n", proxyPort)
 	}
 
 	if err := cmd.Start(); err != nil {
 		return nil, fmt.Errorf("failed to start dockerd: %w", err)
 	}
 
-	fmt.Printf("octobot-agent: dockerd started (pid=%d), waiting for socket...\n", cmd.Process.Pid)
+	fmt.Printf("discobot-agent: dockerd started (pid=%d), waiting for socket...\n", cmd.Process.Pid)
 
 	// Wait for the Docker socket to become available
 	if err := waitForDockerSocket(); err != nil {
@@ -1154,12 +1154,12 @@ func startDockerDaemon(proxyEnabled bool) (*exec.Cmd, error) {
 
 	// Make the socket world-readable and writable
 	if err := os.Chmod(dockerSocketPath, 0666); err != nil {
-		fmt.Printf("octobot-agent: warning: failed to chmod docker socket: %v\n", err)
+		fmt.Printf("discobot-agent: warning: failed to chmod docker socket: %v\n", err)
 	} else {
-		fmt.Printf("octobot-agent: docker socket permissions set to 0666\n")
+		fmt.Printf("discobot-agent: docker socket permissions set to 0666\n")
 	}
 
-	fmt.Printf("octobot-agent: Docker daemon ready\n")
+	fmt.Printf("discobot-agent: Docker daemon ready\n")
 	return cmd, nil
 }
 
@@ -1192,7 +1192,7 @@ func startProxyDaemon(userInfo *userInfo) (*exec.Cmd, error) {
 		return nil, fmt.Errorf("proxy binary not found at %s: %w", proxyBinary, err)
 	}
 
-	fmt.Printf("octobot-agent: found proxy at %s, starting HTTP proxy...\n", proxyBinary)
+	fmt.Printf("discobot-agent: found proxy at %s, starting HTTP proxy...\n", proxyBinary)
 
 	// Create proxy directory (session-scoped at /.data/proxy)
 	proxyDir := filepath.Join(dataDir, "proxy")
@@ -1200,7 +1200,7 @@ func startProxyDaemon(userInfo *userInfo) (*exec.Cmd, error) {
 		return nil, fmt.Errorf("failed to create proxy dir: %w", err)
 	}
 	if err := os.Chown(proxyDir, userInfo.uid, userInfo.gid); err != nil {
-		fmt.Printf("octobot-agent: warning: failed to chown proxy dir: %v\n", err)
+		fmt.Printf("discobot-agent: warning: failed to chown proxy dir: %v\n", err)
 	}
 
 	// Create certs subdirectory (session-scoped)
@@ -1209,7 +1209,7 @@ func startProxyDaemon(userInfo *userInfo) (*exec.Cmd, error) {
 		return nil, fmt.Errorf("failed to create proxy certs dir: %w", err)
 	}
 	if err := os.Chown(certsDir, userInfo.uid, userInfo.gid); err != nil {
-		fmt.Printf("octobot-agent: warning: failed to chown proxy certs dir: %v\n", err)
+		fmt.Printf("discobot-agent: warning: failed to chown proxy certs dir: %v\n", err)
 	}
 
 	// Create cache directory (project-scoped at /.data/cache/proxy)
@@ -1218,7 +1218,7 @@ func startProxyDaemon(userInfo *userInfo) (*exec.Cmd, error) {
 		return nil, fmt.Errorf("failed to create proxy cache dir: %w", err)
 	}
 	if err := os.Chown(cacheDir, userInfo.uid, userInfo.gid); err != nil {
-		fmt.Printf("octobot-agent: warning: failed to chown proxy cache dir: %v\n", err)
+		fmt.Printf("discobot-agent: warning: failed to chown proxy cache dir: %v\n", err)
 	}
 
 	// Start proxy with config file (config is session-scoped)
@@ -1231,7 +1231,7 @@ func startProxyDaemon(userInfo *userInfo) (*exec.Cmd, error) {
 		return nil, fmt.Errorf("failed to start proxy: %w", err)
 	}
 
-	fmt.Printf("octobot-agent: proxy started (pid=%d), waiting for health check...\n", cmd.Process.Pid)
+	fmt.Printf("discobot-agent: proxy started (pid=%d), waiting for health check...\n", cmd.Process.Pid)
 
 	// Wait for proxy to be ready
 	if err := waitForProxyReady(); err != nil {
@@ -1240,12 +1240,12 @@ func startProxyDaemon(userInfo *userInfo) (*exec.Cmd, error) {
 		return nil, fmt.Errorf("proxy did not become ready: %w", err)
 	}
 
-	fmt.Printf("octobot-agent: HTTP proxy ready on port %d\n", proxyPort)
+	fmt.Printf("discobot-agent: HTTP proxy ready on port %d\n", proxyPort)
 
 	// Set proxy environment in /etc/profile.d for login shells
 	if err := setProxyInProfile(); err != nil {
 		// Log but don't fail - this is optional
-		fmt.Printf("octobot-agent: warning: failed to set proxy in /etc/profile.d: %v\n", err)
+		fmt.Printf("discobot-agent: warning: failed to set proxy in /etc/profile.d: %v\n", err)
 	}
 
 	return cmd, nil
@@ -1282,12 +1282,12 @@ func setupProxyCertificate() error {
 
 	// Check if certificate already exists
 	if _, err := os.Stat(certPath); err == nil {
-		fmt.Printf("octobot-agent: proxy CA certificate already exists at %s\n", certPath)
+		fmt.Printf("discobot-agent: proxy CA certificate already exists at %s\n", certPath)
 		// Certificate exists, ensure it's installed in system trust store
 		return installCertificateInSystemTrust(certPath)
 	}
 
-	fmt.Printf("octobot-agent: generating proxy CA certificate...\n")
+	fmt.Printf("discobot-agent: generating proxy CA certificate...\n")
 
 	// Generate CA certificate using the proxy's cert package
 	// We'll call the proxy binary with a special flag to generate the cert
@@ -1296,7 +1296,7 @@ func setupProxyCertificate() error {
 		return fmt.Errorf("failed to generate CA certificate: %w", err)
 	}
 
-	fmt.Printf("octobot-agent: proxy CA certificate generated at %s\n", certPath)
+	fmt.Printf("discobot-agent: proxy CA certificate generated at %s\n", certPath)
 
 	// Install certificate in system trust store
 	return installCertificateInSystemTrust(certPath)
@@ -1322,8 +1322,8 @@ func generateCACertificate(certPath, keyPath string) error {
 	template := x509.Certificate{
 		SerialNumber: serialNumber,
 		Subject: pkix.Name{
-			Organization: []string{"Octobot Proxy"},
-			CommonName:   "Octobot Proxy CA",
+			Organization: []string{"Discobot Proxy"},
+			CommonName:   "Discobot Proxy CA",
 		},
 		NotBefore:             time.Now(),
 		NotAfter:              time.Now().Add(10 * 365 * 24 * time.Hour), // 10 years
@@ -1373,7 +1373,7 @@ func generateCACertificate(certPath, keyPath string) error {
 // installCertificateInSystemTrust installs the CA certificate in the system trust store.
 // Supports Debian/Ubuntu, Fedora/RHEL, and Alpine Linux.
 func installCertificateInSystemTrust(certPath string) error {
-	fmt.Printf("octobot-agent: installing proxy CA certificate in system trust store...\n")
+	fmt.Printf("discobot-agent: installing proxy CA certificate in system trust store...\n")
 
 	// Detect which certificate update method to use
 	// Try in order: update-ca-certificates (Debian/Alpine), update-ca-trust (Fedora)
@@ -1389,9 +1389,9 @@ func installCertificateInSystemTrust(certPath string) error {
 	}
 
 	// If no cert update tool found, warn but don't fail
-	fmt.Printf("octobot-agent: warning: no certificate update tool found (update-ca-certificates or update-ca-trust)\n")
-	fmt.Printf("octobot-agent: warning: proxy CA certificate not installed in system trust store\n")
-	fmt.Printf("octobot-agent: warning: HTTPS interception may not work for some clients\n")
+	fmt.Printf("discobot-agent: warning: no certificate update tool found (update-ca-certificates or update-ca-trust)\n")
+	fmt.Printf("discobot-agent: warning: proxy CA certificate not installed in system trust store\n")
+	fmt.Printf("discobot-agent: warning: HTTPS interception may not work for some clients\n")
 	return nil
 }
 
@@ -1403,7 +1403,7 @@ func installCertDebianStyle(certPath string) error {
 		return fmt.Errorf("failed to create ca-certificates dir: %w", err)
 	}
 
-	destPath := filepath.Join(destDir, "octobot-proxy-ca.crt")
+	destPath := filepath.Join(destDir, "discobot-proxy-ca.crt")
 
 	// Read source certificate
 	data, err := os.ReadFile(certPath)
@@ -1425,7 +1425,7 @@ func installCertDebianStyle(certPath string) error {
 		return fmt.Errorf("failed to run update-ca-certificates: %w", err)
 	}
 
-	fmt.Printf("octobot-agent: proxy CA certificate installed in system trust store (Debian/Ubuntu/Alpine)\n")
+	fmt.Printf("discobot-agent: proxy CA certificate installed in system trust store (Debian/Ubuntu/Alpine)\n")
 	return nil
 }
 
@@ -1437,7 +1437,7 @@ func installCertFedoraStyle(certPath string) error {
 		return fmt.Errorf("failed to create ca-trust dir: %w", err)
 	}
 
-	destPath := filepath.Join(destDir, "octobot-proxy-ca.crt")
+	destPath := filepath.Join(destDir, "discobot-proxy-ca.crt")
 
 	// Read source certificate
 	data, err := os.ReadFile(certPath)
@@ -1459,7 +1459,7 @@ func installCertFedoraStyle(certPath string) error {
 		return fmt.Errorf("failed to run update-ca-trust: %w", err)
 	}
 
-	fmt.Printf("octobot-agent: proxy CA certificate installed in system trust store (Fedora/RHEL)\n")
+	fmt.Printf("discobot-agent: proxy CA certificate installed in system trust store (Fedora/RHEL)\n")
 	return nil
 }
 
@@ -1477,10 +1477,10 @@ func setupProxyConfig(userInfo *userInfo) error {
 
 	// Always use built-in defaults (with Docker caching enabled)
 	// Security: Never read workspace config during init as it's untrusted code
-	fmt.Printf("octobot-agent: using default proxy config with Docker caching enabled\n")
+	fmt.Printf("discobot-agent: using default proxy config with Docker caching enabled\n")
 
 	// Write config with restrictive permissions (0644) and keep as root-owned
-	// This prevents the octobot user from modifying the proxy configuration
+	// This prevents the discobot user from modifying the proxy configuration
 	if err := os.WriteFile(configDest, defaultProxyConfig, 0644); err != nil {
 		return fmt.Errorf("failed to write default proxy config: %w", err)
 	}
@@ -1495,7 +1495,7 @@ func runAgent(agentBinary string, u *userInfo, dockerCmd, proxyCmd *exec.Cmd) er
 	// Check if we're running as PID 1
 	isPID1 := os.Getpid() == 1
 
-	// Working directory is now /home/octobot/workspace
+	// Working directory is now /home/discobot/workspace
 	workDir := filepath.Join(mountHome, "workspace")
 
 	// Create the child process command
@@ -1526,7 +1526,7 @@ func runAgent(agentBinary string, u *userInfo, dockerCmd, proxyCmd *exec.Cmd) er
 		return fmt.Errorf("failed to start %s: %w", agentBinary, err)
 	}
 
-	fmt.Printf("octobot-agent: started %s as user %s (pid=%d)\n", agentBinary, u.username, cmd.Process.Pid)
+	fmt.Printf("discobot-agent: started %s as user %s (pid=%d)\n", agentBinary, u.username, cmd.Process.Pid)
 
 	// Set up signal handling
 	signals := make(chan os.Signal, 10)
@@ -1564,7 +1564,7 @@ func eventLoop(cmd *exec.Cmd, dockerCmd, proxyCmd *exec.Cmd, signals chan os.Sig
 			case syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT:
 				if !shuttingDown {
 					shuttingDown = true
-					fmt.Printf("octobot-agent: received %v, shutting down...\n", sig)
+					fmt.Printf("discobot-agent: received %v, shutting down...\n", sig)
 
 					// Forward signal to child process group
 					if cmd.Process != nil {
@@ -1575,7 +1575,7 @@ func eventLoop(cmd *exec.Cmd, dockerCmd, proxyCmd *exec.Cmd, signals chan os.Sig
 					// Start shutdown timer
 					go func() {
 						time.Sleep(shutdownTimeout)
-						fmt.Fprintf(os.Stderr, "octobot-agent: shutdown timeout, forcing termination\n")
+						fmt.Fprintf(os.Stderr, "discobot-agent: shutdown timeout, forcing termination\n")
 						if cmd.Process != nil {
 							_ = cmd.Process.Kill()
 						}
@@ -1600,18 +1600,18 @@ func eventLoop(cmd *exec.Cmd, dockerCmd, proxyCmd *exec.Cmd, signals chan os.Sig
 				var exitErr *exec.ExitError
 				if errors.As(err, &exitErr) {
 					exitCode = exitErr.ExitCode()
-					fmt.Printf("octobot-agent: child exited with code %d\n", exitCode)
+					fmt.Printf("discobot-agent: child exited with code %d\n", exitCode)
 				} else {
-					fmt.Fprintf(os.Stderr, "octobot-agent: child error: %v\n", err)
+					fmt.Fprintf(os.Stderr, "discobot-agent: child error: %v\n", err)
 					exitCode = 1
 				}
 			} else {
-				fmt.Printf("octobot-agent: child exited successfully\n")
+				fmt.Printf("discobot-agent: child exited successfully\n")
 			}
 
 			// Stop proxy daemon if running
 			if proxyCmd != nil && proxyCmd.Process != nil {
-				fmt.Printf("octobot-agent: stopping proxy daemon...\n")
+				fmt.Printf("discobot-agent: stopping proxy daemon...\n")
 				_ = proxyCmd.Process.Signal(syscall.SIGTERM)
 				// Give it a moment to shut down gracefully
 				done := make(chan struct{})
@@ -1621,16 +1621,16 @@ func eventLoop(cmd *exec.Cmd, dockerCmd, proxyCmd *exec.Cmd, signals chan os.Sig
 				}()
 				select {
 				case <-done:
-					fmt.Printf("octobot-agent: proxy daemon stopped\n")
+					fmt.Printf("discobot-agent: proxy daemon stopped\n")
 				case <-time.After(5 * time.Second):
-					fmt.Printf("octobot-agent: proxy daemon did not stop, killing...\n")
+					fmt.Printf("discobot-agent: proxy daemon did not stop, killing...\n")
 					_ = proxyCmd.Process.Kill()
 				}
 			}
 
 			// Stop Docker daemon if running
 			if dockerCmd != nil && dockerCmd.Process != nil {
-				fmt.Printf("octobot-agent: stopping Docker daemon...\n")
+				fmt.Printf("discobot-agent: stopping Docker daemon...\n")
 				_ = dockerCmd.Process.Signal(syscall.SIGTERM)
 				// Give it a moment to shut down gracefully
 				done := make(chan struct{})
@@ -1640,9 +1640,9 @@ func eventLoop(cmd *exec.Cmd, dockerCmd, proxyCmd *exec.Cmd, signals chan os.Sig
 				}()
 				select {
 				case <-done:
-					fmt.Printf("octobot-agent: Docker daemon stopped\n")
+					fmt.Printf("discobot-agent: Docker daemon stopped\n")
 				case <-time.After(5 * time.Second):
-					fmt.Printf("octobot-agent: Docker daemon did not stop, killing...\n")
+					fmt.Printf("discobot-agent: Docker daemon did not stop, killing...\n")
 					_ = dockerCmd.Process.Kill()
 				}
 			}
@@ -1776,57 +1776,57 @@ type cacheConfig struct {
 func wellKnownCachePaths() []string {
 	return []string{
 		// Universal cache directory - all subdirectories will be cached
-		"/home/octobot/.cache",
+		"/home/discobot/.cache",
 
 		// Package managers that don't use .cache
-		"/home/octobot/.npm",
-		"/home/octobot/.pnpm-store",
-		"/home/octobot/.yarn",
+		"/home/discobot/.npm",
+		"/home/discobot/.pnpm-store",
+		"/home/discobot/.yarn",
 
 		// Python
-		"/home/octobot/.local/share/uv",
+		"/home/discobot/.local/share/uv",
 
 		// Go
-		"/home/octobot/go/pkg/mod",
+		"/home/discobot/go/pkg/mod",
 
 		// Rust / Cargo
-		"/home/octobot/.cargo/registry",
-		"/home/octobot/.cargo/git",
+		"/home/discobot/.cargo/registry",
+		"/home/discobot/.cargo/git",
 
 		// Ruby
-		"/home/octobot/.bundle",
-		"/home/octobot/.gem",
+		"/home/discobot/.bundle",
+		"/home/discobot/.gem",
 
 		// Java / Maven / Gradle
-		"/home/octobot/.m2/repository",
-		"/home/octobot/.gradle/caches",
-		"/home/octobot/.gradle/wrapper",
+		"/home/discobot/.m2/repository",
+		"/home/discobot/.gradle/caches",
+		"/home/discobot/.gradle/wrapper",
 
 		// .NET
-		"/home/octobot/.nuget/packages",
+		"/home/discobot/.nuget/packages",
 
 		// PHP
-		"/home/octobot/.composer/cache",
+		"/home/discobot/.composer/cache",
 
 		// Bun
-		"/home/octobot/.bun/install/cache",
+		"/home/discobot/.bun/install/cache",
 
 		// Docker build cache (if Docker-in-Docker)
-		"/home/octobot/.docker/buildx",
+		"/home/discobot/.docker/buildx",
 
 		// Build caches
-		"/home/octobot/.ccache",
+		"/home/discobot/.ccache",
 
 		// IDE caches
-		"/home/octobot/.vscode-server",
-		"/home/octobot/.cursor-server",
+		"/home/discobot/.vscode-server",
+		"/home/discobot/.cursor-server",
 	}
 }
 
 // loadCacheConfig loads the cache configuration from the workspace.
 // If the file doesn't exist or can't be read, returns default config.
 func loadCacheConfig() *cacheConfig {
-	configPath := filepath.Join(mountHome, "workspace", ".octobot", "cache.json")
+	configPath := filepath.Join(mountHome, "workspace", ".discobot", "cache.json")
 
 	data, err := os.ReadFile(configPath)
 	if err != nil {
@@ -1836,7 +1836,7 @@ func loadCacheConfig() *cacheConfig {
 
 	var cfg cacheConfig
 	if err := json.Unmarshal(data, &cfg); err != nil {
-		fmt.Printf("octobot-agent: warning: failed to parse cache config: %v\n", err)
+		fmt.Printf("discobot-agent: warning: failed to parse cache config: %v\n", err)
 		return &cacheConfig{}
 	}
 
@@ -1844,7 +1844,7 @@ func loadCacheConfig() *cacheConfig {
 }
 
 // getAllCachePaths returns all cache paths (well-known + additional from config).
-// Additional paths are validated to ensure they're within /home/octobot for security.
+// Additional paths are validated to ensure they're within /home/discobot for security.
 func getAllCachePaths(cfg *cacheConfig) []string {
 	paths := make([]string, 0, len(wellKnownCachePaths())+len(cfg.AdditionalPaths))
 	paths = append(paths, wellKnownCachePaths()...)
@@ -1854,7 +1854,7 @@ func getAllCachePaths(cfg *cacheConfig) []string {
 		if isValidCachePath(p) {
 			paths = append(paths, p)
 		} else {
-			fmt.Printf("octobot-agent: warning: ignoring invalid cache path from config: %s\n", p)
+			fmt.Printf("discobot-agent: warning: ignoring invalid cache path from config: %s\n", p)
 		}
 	}
 
@@ -1862,7 +1862,7 @@ func getAllCachePaths(cfg *cacheConfig) []string {
 }
 
 // isValidCachePath checks if a path is safe to use as a cache directory.
-// Only paths within /home/octobot are allowed for security.
+// Only paths within /home/discobot are allowed for security.
 func isValidCachePath(path string) bool {
 	// Clean the path to resolve any .. or . components
 	cleanPath := filepath.Clean(path)
@@ -1872,14 +1872,14 @@ func isValidCachePath(path string) bool {
 		return false
 	}
 
-	// Must be within /home/octobot (not equal to it, must be a subdirectory)
-	homePrefix := "/home/octobot/"
+	// Must be within /home/discobot (not equal to it, must be a subdirectory)
+	homePrefix := "/home/discobot/"
 	if !strings.HasPrefix(cleanPath+"/", homePrefix) {
 		return false
 	}
 
 	// Must not contain any suspicious components
-	// This prevents paths like /home/octobot/../etc
+	// This prevents paths like /home/discobot/../etc
 	if strings.Contains(cleanPath, "..") {
 		return false
 	}
@@ -1887,19 +1887,19 @@ func isValidCachePath(path string) bool {
 	return true
 }
 
-// mountCacheDirectories bind-mounts cache directories from /.data/cache to /home/octobot/*.
+// mountCacheDirectories bind-mounts cache directories from /.data/cache to /home/discobot/*.
 // This is called after the overlay filesystem is mounted, so cache mounts sit on top of the overlay.
 func mountCacheDirectories() error {
 	// Check if CACHE_ENABLED environment variable is set
 	if cacheEnabled := os.Getenv("CACHE_ENABLED"); cacheEnabled == "false" {
-		fmt.Printf("octobot-agent: cache volumes disabled via CACHE_ENABLED=false\n")
+		fmt.Printf("discobot-agent: cache volumes disabled via CACHE_ENABLED=false\n")
 		return nil
 	}
 
 	// Check if /.data/cache exists (created by Docker provider)
 	cacheVolumeBase := filepath.Join(dataDir, "cache")
 	if _, err := os.Stat(cacheVolumeBase); os.IsNotExist(err) {
-		fmt.Printf("octobot-agent: cache volume not found at %s, skipping cache mounts\n", cacheVolumeBase)
+		fmt.Printf("discobot-agent: cache volume not found at %s, skipping cache mounts\n", cacheVolumeBase)
 		return nil
 	}
 
@@ -1912,7 +1912,7 @@ func mountCacheDirectories() error {
 	mounted := 0
 	for _, cachePath := range cachePaths {
 		// Clean the path to create a safe subdirectory name in the cache volume
-		// e.g., "/home/octobot/.npm" -> "home/octobot/.npm"
+		// e.g., "/home/discobot/.npm" -> "home/discobot/.npm"
 		subDir := filepath.Clean(cachePath)
 		if subDir[0] == '/' {
 			subDir = subDir[1:]
@@ -1924,7 +1924,7 @@ func mountCacheDirectories() error {
 		// Ensure the source directory exists in the cache volume with world-writable permissions
 		// This allows all users/processes to write to cache directories
 		if err := os.MkdirAll(source, 0777); err != nil {
-			fmt.Printf("octobot-agent: warning: failed to create cache dir %s: %v\n", source, err)
+			fmt.Printf("discobot-agent: warning: failed to create cache dir %s: %v\n", source, err)
 			continue
 		}
 		// Explicitly set permissions to 0777 on the entire tree (umask may have restricted MkdirAll)
@@ -1932,15 +1932,15 @@ func mountCacheDirectories() error {
 
 		// Ensure the target directory exists in the overlay with world-writable permissions
 		if err := os.MkdirAll(cachePath, 0777); err != nil {
-			fmt.Printf("octobot-agent: warning: failed to create target dir %s: %v\n", cachePath, err)
+			fmt.Printf("discobot-agent: warning: failed to create target dir %s: %v\n", cachePath, err)
 			continue
 		}
 		// Explicitly set permissions to 0777 on the entire tree (umask may have restricted MkdirAll)
-		chmodPathToRoot(cachePath, "/home/octobot", 0777)
+		chmodPathToRoot(cachePath, "/home/discobot", 0777)
 
 		// Bind mount the cache directory
 		if err := syscall.Mount(source, cachePath, "none", syscall.MS_BIND, ""); err != nil {
-			fmt.Printf("octobot-agent: warning: failed to bind mount %s to %s: %v\n", source, cachePath, err)
+			fmt.Printf("discobot-agent: warning: failed to bind mount %s to %s: %v\n", source, cachePath, err)
 			continue
 		}
 
@@ -1948,7 +1948,7 @@ func mountCacheDirectories() error {
 	}
 
 	if mounted > 0 {
-		fmt.Printf("octobot-agent: mounted %d cache directories\n", mounted)
+		fmt.Printf("discobot-agent: mounted %d cache directories\n", mounted)
 	}
 
 	return nil

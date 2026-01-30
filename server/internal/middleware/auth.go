@@ -4,10 +4,10 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/obot-platform/octobot/server/internal/config"
-	"github.com/obot-platform/octobot/server/internal/model"
-	"github.com/obot-platform/octobot/server/internal/service"
-	"github.com/obot-platform/octobot/server/internal/store"
+	"github.com/obot-platform/discobot/server/internal/config"
+	"github.com/obot-platform/discobot/server/internal/model"
+	"github.com/obot-platform/discobot/server/internal/service"
+	"github.com/obot-platform/discobot/server/internal/store"
 )
 
 type contextKey string
@@ -18,7 +18,7 @@ const (
 	UserEmailKey contextKey = "userEmail"
 )
 
-const sessionCookieName = "octobot_session"
+const sessionCookieName = "discobot_session"
 
 // Auth middleware validates user authentication.
 // If auth is disabled (cfg.AuthEnabled == false), it uses the anonymous user.

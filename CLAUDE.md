@@ -1,4 +1,4 @@
-# Octobot - Coding Agent Guidelines
+# Discobot - Coding Agent Guidelines
 
 This document provides essential context for AI coding agents working on this project.
 
@@ -31,7 +31,7 @@ This document provides essential context for AI coding agents working on this pr
 
 ## Project Overview
 
-Octobot is an IDE-like chat interface for managing coding sessions with AI agents. It features:
+Discobot is an IDE-like chat interface for managing coding sessions with AI agents. It features:
 - Workspaces (local folders or git repos) containing sessions (chat threads)
 - Multiple AI agent configurations (Claude Code, OpenCode, Gemini CLI, etc.)
 - File diff viewer with tabbed browser

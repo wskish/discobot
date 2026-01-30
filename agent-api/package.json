@@ -12,7 +12,7 @@
 		"test": "npm run test:unit && npm run test:integration",
 		"test:unit": "node --import tsx --test src/**/*.test.ts",
 		"test:integration": "node --import tsx --test test/integration/**/*.test.ts",
-		"docker:build": "docker build -t ghcr.io/obot-platform/octobot:main -f ../Dockerfile .."
+		"docker:build": "docker build -t ghcr.io/obot-platform/discobot:main -f ../Dockerfile .."
 	},
 	"keywords": [],
 	"author": "",

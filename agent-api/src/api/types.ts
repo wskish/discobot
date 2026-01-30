@@ -273,11 +273,11 @@ export type ServiceStatus = "running" | "stopped" | "starting" | "stopping";
 
 /**
  * Service definition with runtime state.
- * The `id` is ALWAYS the filename in .octobot/services/ and is used in all API routes.
+ * The `id` is ALWAYS the filename in .discobot/services/ and is used in all API routes.
  * The `name` field from front matter is for display purposes only.
  */
 export interface Service {
-	/** Filename in .octobot/services/ (immutable identifier used in routes) */
+	/** Filename in .discobot/services/ (immutable identifier used in routes) */
 	id: string;
 	/** Display name (from config, defaults to id) */
 	name: string;

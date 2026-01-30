@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/obot-platform/octobot/server/internal/sandbox/mock"
+	"github.com/obot-platform/discobot/server/internal/sandbox/mock"
 )
 
 // sharedTestKeyPath is a pre-generated SSH host key for tests that don't

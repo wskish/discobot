@@ -83,7 +83,7 @@ Implementation details:
 
 Top navigation containing:
 - Sidebar toggle button
-- Octobot logo and breadcrumb navigation
+- Discobot logo and breadcrumb navigation
 - API Credentials button
 - Theme toggle
 - Window controls (Tauri only)
@@ -94,43 +94,43 @@ The header implements a dynamic breadcrumb navigation system with workspace and 
 
 **Breadcrumb Structure:**
 ```
-Octobot / [Workspace] / [Session] / [New Session]
+Discobot / [Workspace] / [Session] / [New Session]
 ```
 
 **Conditional Rendering Logic:**
 
 1. **When `isSessionLoading = true`:**
    - Shows "Loading..." placeholder
-   - Breadcrumb: `Octobot / Loading...`
+   - Breadcrumb: `Discobot / Loading...`
 
 2. **When `workspaces.length === 0`:**
    - Shows "Add Workspace" button instead of dropdown
    - Clicking opens the workspace creation dialog
-   - Breadcrumb: `Octobot / [Add Workspace]`
+   - Breadcrumb: `Discobot / [Add Workspace]`
 
 3. **When workspaces exist but none selected:**
    - Shows workspace dropdown with "Select Workspace" placeholder
    - Shows "New Session" button at end (passes undefined workspace)
-   - Breadcrumb: `Octobot / [Select Workspace] / [New Session]`
+   - Breadcrumb: `Discobot / [Select Workspace] / [New Session]`
 
 4. **When workspace selected, no sessions:**
    - Shows workspace dropdown with workspace name
    - No session dropdown visible
    - Shows "New Session" button at end
-   - Breadcrumb: `Octobot / [WorkspaceName] / [New Session]`
+   - Breadcrumb: `Discobot / [WorkspaceName] / [New Session]`
 
 5. **When workspace selected, sessions exist, none selected:**
    - Shows workspace dropdown with workspace name
    - Shows session dropdown with "Select Session" placeholder
    - Shows "New Session" button at end
-   - Breadcrumb: `Octobot / [WorkspaceName] / [Select Session] / [New Session]`
+   - Breadcrumb: `Discobot / [WorkspaceName] / [Select Session] / [New Session]`
 
 6. **When both workspace and session selected:**
    - Shows workspace dropdown with workspace name
    - Shows session dropdown with session name
    - Session shows status indicator
    - Shows "New Session" button at end
-   - Breadcrumb: `Octobot / [WorkspaceName] / [SessionName] / [New Session]`
+   - Breadcrumb: `Discobot / [WorkspaceName] / [SessionName] / [New Session]`
 
 **Workspace Dropdown Features:**
 - Lists all workspaces

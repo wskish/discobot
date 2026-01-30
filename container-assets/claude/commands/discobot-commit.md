@@ -1,5 +1,5 @@
 ---
-name: octobot-commit
+name: discobot-commit
 description: Commit session changes back to the parent workspace at a target commit
 argument-hint: <commit-id>
 disable-model-invocation: true

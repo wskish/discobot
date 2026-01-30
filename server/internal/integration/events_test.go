@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/obot-platform/octobot/server/internal/events"
+	"github.com/obot-platform/discobot/server/internal/events"
 )
 
 func TestEvents_SSE_Connection(t *testing.T) {
@@ -24,7 +24,7 @@ func TestEvents_SSE_Connection(t *testing.T) {
 		t.Fatalf("Failed to create request: %v", err)
 	}
 	req.Header.Set("Accept", "text/event-stream")
-	req.AddCookie(&http.Cookie{Name: "octobot_session", Value: user.Token})
+	req.AddCookie(&http.Cookie{Name: "discobot_session", Value: user.Token})
 
 	// Use a context with timeout
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -74,7 +74,7 @@ func TestEvents_ReceivesSessionUpdates(t *testing.T) {
 		t.Fatalf("Failed to create request: %v", err)
 	}
 	req.Header.Set("Accept", "text/event-stream")
-	req.AddCookie(&http.Cookie{Name: "octobot_session", Value: user.Token})
+	req.AddCookie(&http.Cookie{Name: "discobot_session", Value: user.Token})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -157,7 +157,7 @@ func TestEvents_FiltersEventsByProject(t *testing.T) {
 		t.Fatalf("Failed to create request: %v", err)
 	}
 	req.Header.Set("Accept", "text/event-stream")
-	req.AddCookie(&http.Cookie{Name: "octobot_session", Value: user.Token})
+	req.AddCookie(&http.Cookie{Name: "discobot_session", Value: user.Token})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -285,7 +285,7 @@ func TestEvents_SessionCreationEmitsEvents(t *testing.T) {
 		t.Fatalf("Failed to create request: %v", err)
 	}
 	req.Header.Set("Accept", "text/event-stream")
-	req.AddCookie(&http.Cookie{Name: "octobot_session", Value: user.Token})
+	req.AddCookie(&http.Cookie{Name: "discobot_session", Value: user.Token})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()

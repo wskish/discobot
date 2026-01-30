@@ -1,6 +1,6 @@
-# Octobot Agent API
+# Discobot Agent API
 
-The Octobot Agent API is a Bun-based container service that bridges the IDE chat interface with AI coding agents via the Agent Client Protocol (ACP).
+The Discobot Agent API is a Bun-based container service that bridges the IDE chat interface with AI coding agents via the Agent Client Protocol (ACP).
 
 ## Overview
 
@@ -74,22 +74,22 @@ npm start
 | `AGENT_ARGS` | (empty) | Space-separated arguments |
 | `AGENT_CWD` | `process.cwd()` | Working directory for agent |
 | `PERSIST_MESSAGES` | `true` | Enable message persistence to disk (set to `false` for agents that replay messages) |
-| `SESSION_BASE_DIR` | `/home/octobot/.config/octobot/sessions` | Base directory for per-session storage (creates `{base}/{sessionId}/session.json` and `messages.json`) |
+| `SESSION_BASE_DIR` | `/home/discobot/.config/discobot/sessions` | Base directory for per-session storage (creates `{base}/{sessionId}/session.json` and `messages.json`) |
 
 ### Docker
 
 ```bash
 # Build image (from project root)
-docker build -t octobot-agent-api .
+docker build -t discobot-agent-api .
 
 # Or from agent-api directory
-docker build -t octobot-agent-api -f ../Dockerfile ..
+docker build -t discobot-agent-api -f ../Dockerfile ..
 
 # Run container
 docker run -p 8080:3002 \
   -e ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY \
   -v /path/to/workspace:/workspace \
-  octobot-agent-api
+  discobot-agent-api
 ```
 
 ## API Endpoints
@@ -114,7 +114,7 @@ docker run -p 8080:3002 \
 
 The agent API supports multiple independent chat sessions. Each session maintains its own message history and state. The default endpoints (`/chat`) use a session ID of `"default"` for backwards compatibility.
 
-**Migration from older versions:** If you have existing session data from before multi-session support, it will be automatically migrated to the new format on first load. Old files at `/home/octobot/.config/octobot/agent-session.json` and `agent-messages.json` will be moved to `/home/octobot/.config/octobot/sessions/default/` and the old files will be removed.
+**Migration from older versions:** If you have existing session data from before multi-session support, it will be automatically migrated to the new format on first load. Old files at `/home/discobot/.config/discobot/agent-session.json` and `agent-messages.json` will be moved to `/home/discobot/.config/discobot/sessions/default/` and the old files will be removed.
 
 ### POST /chat
 

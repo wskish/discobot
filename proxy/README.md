@@ -1,4 +1,4 @@
-# Octobot Proxy
+# Discobot Proxy
 
 A multi-protocol proxy server with HTTP interception, header injection, and dynamic configuration.
 
@@ -104,7 +104,7 @@ golangci-lint run
 ### Building
 
 ```bash
-go build -o octobot-proxy ./cmd/proxy
+go build -o discobot-proxy ./cmd/proxy
 ```
 
 ### Configuration File
@@ -132,7 +132,7 @@ headers:
       "X-Custom-Header": "value1"
   "*.openai.com":
     set:
-      "X-Request-Source": "octobot-proxy"
+      "X-Request-Source": "discobot-proxy"
     append:
       "X-Forwarded-For": "proxy.internal"
 
@@ -200,7 +200,7 @@ curl -X PATCH http://localhost:17081/api/config \
 
 # Add append-style headers
 curl -X PATCH http://localhost:17081/api/config \
-  -d '{"headers": {"*": {"append": {"Via": "1.1 octobot-proxy"}}}}'
+  -d '{"headers": {"*": {"append": {"Via": "1.1 discobot-proxy"}}}}'
 
 # Delete a domain's headers
 curl -X PATCH http://localhost:17081/api/config \
@@ -309,7 +309,7 @@ For HTTPS interception, the proxy generates a CA certificate on first run. Insta
 sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain ./certs/ca.crt
 
 # Linux (Ubuntu/Debian)
-sudo cp ./certs/ca.crt /usr/local/share/ca-certificates/octobot-proxy.crt
+sudo cp ./certs/ca.crt /usr/local/share/ca-certificates/discobot-proxy.crt
 sudo update-ca-certificates
 
 # Windows (PowerShell as Admin)

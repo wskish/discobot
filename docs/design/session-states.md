@@ -72,7 +72,7 @@ This separation allows a session to be `ready` and `committing` at the same time
 ### State Diagram
 
 ```
-    ┌─────────┐     commit()     ┌──────────┐  /octobot-commit   ┌────────────┐
+    ┌─────────┐     commit()     ┌──────────┐  /discobot-commit   ┌────────────┐
     │  none   │ ───────────────► │ pending  │ ──────────────────► │ committing │
     └─────────┘                  └──────────┘                     └──────┬─────┘
          ▲                                                               │
@@ -91,7 +91,7 @@ This separation allows a session to be `ready` and `committing` at the same time
 |--------|-------------|
 | `""` (empty) | No commit in progress (default state) |
 | `pending` | Commit requested, job enqueued, waiting to send to agent |
-| `committing` | `/octobot-commit` sent to agent, waiting for patches or applying |
+| `committing` | `/discobot-commit` sent to agent, waiting for patches or applying |
 | `completed` | Commit completed successfully |
 | `failed` | Commit failed. Check `commitError` for details. |
 
@@ -137,9 +137,9 @@ func PerformCommit(ctx, projectID, sessionID) error {
         return nil
     }
 
-    // Step 1: Send /octobot-commit to agent (if pending)
+    // Step 1: Send /discobot-commit to agent (if pending)
     if session.CommitStatus == "pending" {
-        err := sendChatMessage(sessionID, "/octobot-commit " + session.BaseCommit)
+        err := sendChatMessage(sessionID, "/discobot-commit " + session.BaseCommit)
         if err != nil {
             setCommitFailed(session, "Failed to send commit command: " + err.Error())
             return nil
@@ -247,7 +247,7 @@ The job is designed to handle server restarts safely:
 
 | Job restarts when... | State | Action |
 |---------------------|-------|--------|
-| Before sending to agent | `pending`, `appliedCommit=""` | Check baseCommit matches, send `/octobot-commit` |
+| Before sending to agent | `pending`, `appliedCommit=""` | Check baseCommit matches, send `/discobot-commit` |
 | After sending, before apply | `committing`, `appliedCommit=""` | Check baseCommit matches, fetch patches, apply |
 | After apply, before complete | `committing`, `appliedCommit` set | Verify commit exists, mark `completed` |
 | Already done | `completed` | No-op |
@@ -256,7 +256,7 @@ The job is designed to handle server restarts safely:
 **Key idempotency checks**:
 1. Always verify `baseCommit` matches current workspace commit before proceeding
 2. `appliedCommit` being set indicates patches were applied
-3. Agent is idempotent: `/octobot-commit` sent twice returns same patches
+3. Agent is idempotent: `/discobot-commit` sent twice returns same patches
 
 ---
 

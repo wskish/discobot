@@ -204,7 +204,7 @@ Integration tests in `integration/ssh_test.go` cover:
 ## Dependencies
 
 - `golang.org/x/crypto/ssh` - SSH protocol implementation
-- `github.com/obot-platform/octobot/server/internal/sandbox` - Sandbox provider interface
+- `github.com/obot-platform/discobot/server/internal/sandbox` - Sandbox provider interface
 
 ### Container Requirements
 

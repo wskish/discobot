@@ -1,6 +1,6 @@
 # Agent API Architecture
 
-This document describes the architecture of the Octobot Agent API service, a Bun application that bridges the IDE with AI coding agents via the Agent Client Protocol (ACP).
+This document describes the architecture of the Discobot Agent API service, a Bun application that bridges the IDE with AI coding agents via the Agent Client Protocol (ACP).
 
 ## Overview
 
@@ -35,7 +35,7 @@ The agent service runs inside a Docker container and provides:
 │             │                                       │              │
 │             │ HTTP :3002                           │ File         │
 │             ▼                                       ▼              │
-│        Go Server                 ~/.config/octobot/*.json        │
+│        Go Server                 ~/.config/discobot/*.json        │
 │                                                                    │
 │                         /workspace (bind mount)                    │
 └────────────────────────────────────────────────────────────────────┘
@@ -47,7 +47,7 @@ The agent service runs inside a Docker container and provides:
 - [ACP Module](./design/acp.md) - Agent Client Protocol client
 - [Store Module](./design/store.md) - Session and message storage
 - [File System Layout](./design/filesystem.md) - Container paths and mount points
-- [Agent Integrations](./design/agent-integrations.md) - Octobot-specific agent integration points
+- [Agent Integrations](./design/agent-integrations.md) - Discobot-specific agent integration points
 
 ## Data Flow
 
@@ -151,12 +151,12 @@ Multi-stage build producing multiple binaries:
 
 | Binary | Description | Linking |
 |--------|-------------|---------|
-| `octobot-agent-api` | Agent API server (glibc) | Dynamic (glibc) |
-| `octobot-agent-api.musl` | Agent API server (musl) | Dynamic (musl) |
+| `discobot-agent-api` | Agent API server (glibc) | Dynamic (glibc) |
+| `discobot-agent-api.musl` | Agent API server (musl) | Dynamic (musl) |
 | `agentfs` | Filesystem tool | Static (musl) |
 | `proxy` | HTTP/SOCKS5 proxy | Static (CGO_ENABLED=0) |
 
-**Note**: All binaries except `octobot-agent-api` are fully statically linked. The agent API binary is built with Bun's `--compile` flag, which produces a self-contained executable that still requires libc (either glibc or musl depending on the build environment).
+**Note**: All binaries except `discobot-agent-api` are fully statically linked. The agent API binary is built with Bun's `--compile` flag, which produces a self-contained executable that still requires libc (either glibc or musl depending on the build environment).
 
 ```dockerfile
 # Stage 1: Build agentfs (Rust/musl - static)
@@ -165,10 +165,10 @@ FROM rust:alpine AS agentfs-builder
 # Stage 2: Build proxy (Go - static)
 FROM golang:1.25 AS proxy-builder
 
-# Stage 3: Build octobot-agent-api (Bun/glibc - dynamic)
+# Stage 3: Build discobot-agent-api (Bun/glibc - dynamic)
 FROM oven/bun:1 AS bun-builder
 
-# Stage 3b: Build octobot-agent-api.musl (Bun/musl - dynamic)
+# Stage 3b: Build discobot-agent-api.musl (Bun/musl - dynamic)
 FROM oven/bun:1-alpine AS bun-builder-musl
 
 # Stage 4: Ubuntu runtime
@@ -183,8 +183,8 @@ FROM ubuntu:24.04 AS runtime
 | `AGENT_COMMAND` | `claude-code-acp` | Agent binary |
 | `AGENT_ARGS` | (empty) | Additional arguments |
 | `AGENT_CWD` | `cwd()` | Working directory |
-| `SESSION_FILE` | `/home/octobot/.config/octobot/agent-session.json` | Persistence path |
-| `MESSAGES_FILE` | `/home/octobot/.config/octobot/agent-messages.json` | Messages persistence path |
+| `SESSION_FILE` | `/home/discobot/.config/discobot/agent-session.json` | Persistence path |
+| `MESSAGES_FILE` | `/home/discobot/.config/discobot/agent-messages.json` | Messages persistence path |
 
 ## Error Handling
 

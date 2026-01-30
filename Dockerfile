@@ -67,7 +67,7 @@ COPY agent/ ./agent/
 
 # Build the agent binary (static for portability)
 # The go:embed directive will include agent/internal/proxy/default-config.yaml
-RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /octobot-agent ./agent/cmd/agent
+RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /discobot-agent ./agent/cmd/agent
 
 # Stage 3: Build the Bun standalone binary (glibc)
 FROM oven/bun:1 AS bun-builder
@@ -89,7 +89,7 @@ COPY agent-api/src ./src
 RUN bun build ./src/index.ts \
     --compile \
     --minify \
-    --outfile=octobot-agent-api
+    --outfile=discobot-agent-api
 
 # Stage 3b: Build the Bun standalone binary (musl)
 FROM oven/bun:1-alpine AS bun-builder-musl
@@ -111,7 +111,7 @@ COPY agent-api/src ./src
 RUN bun build ./src/index.ts \
     --compile \
     --minify \
-    --outfile=octobot-agent-api.musl
+    --outfile=discobot-agent-api.musl
 
 # Stage 4: Minimal Ubuntu runtime
 FROM ubuntu:24.04 AS runtime
@@ -150,58 +150,58 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     # Enable user_allow_other in fuse.conf (required for --allow-root mount option)
     && echo 'user_allow_other' >> /etc/fuse.conf
 
-# Create octobot user (UID 1000)
+# Create discobot user (UID 1000)
 # Handle case where UID 1000 might already be taken by another user
-RUN (useradd -m -s /bin/bash -u 1000 octobot 2>/dev/null \
-        || (userdel -r $(getent passwd 1000 | cut -d: -f1) 2>/dev/null; useradd -m -s /bin/bash -u 1000 octobot) \
-        || useradd -m -s /bin/bash octobot)
+RUN (useradd -m -s /bin/bash -u 1000 discobot 2>/dev/null \
+        || (userdel -r $(getent passwd 1000 | cut -d: -f1) 2>/dev/null; useradd -m -s /bin/bash -u 1000 discobot) \
+        || useradd -m -s /bin/bash discobot)
 
-# Configure npm global directory in /home/octobot/.npm-global
-# This allows npm install -g to work without root for the octobot user
-# Environment is set system-wide via /etc/profile.d so both root and octobot can use it
-RUN mkdir -p /home/octobot/.npm-global/bin \
-    && chown -R octobot:octobot /home/octobot/.npm-global \
+# Configure npm global directory in /home/discobot/.npm-global
+# This allows npm install -g to work without root for the discobot user
+# Environment is set system-wide via /etc/profile.d so both root and discobot can use it
+RUN mkdir -p /home/discobot/.npm-global/bin \
+    && chown -R discobot:discobot /home/discobot/.npm-global \
     && printf '%s\n' \
         '# npm global packages directory' \
-        'export NPM_CONFIG_PREFIX="/home/octobot/.npm-global"' \
-        'export PATH="/home/octobot/.npm-global/bin:$PATH"' \
+        'export NPM_CONFIG_PREFIX="/home/discobot/.npm-global"' \
+        'export PATH="/home/discobot/.npm-global/bin:$PATH"' \
         > /etc/profile.d/npm-global.sh \
     && chmod 644 /etc/profile.d/npm-global.sh
 
 # Copy container-specific agent configuration (Claude Code commands, etc.)
-# These are placed in /home/octobot/.claude/ for user-level availability
-COPY --chown=octobot:octobot container-assets/claude /home/octobot/.claude
+# These are placed in /home/discobot/.claude/ for user-level availability
+COPY --chown=discobot:discobot container-assets/claude /home/discobot/.claude
 
 # Create directory structure per filesystem design
 # /.data      - persistent storage (Docker volume or VZ disk)
 # /.workspace - base workspace (read-only)
 # /workspace  - project root (writable)
-RUN mkdir -p /.data /.workspace /workspace /opt/octobot/bin \
-    && chown octobot:octobot /.data /workspace
+RUN mkdir -p /.data /.workspace /workspace /opt/discobot/bin \
+    && chown discobot:discobot /.data /workspace
 
-# Copy binaries to /opt/octobot/bin
+# Copy binaries to /opt/discobot/bin
 # (placed after apt-get so code changes don't invalidate apt cache)
-COPY --from=bun-builder /app/octobot-agent-api /opt/octobot/bin/octobot-agent-api
-COPY --from=bun-builder-musl /app/octobot-agent-api.musl /opt/octobot/bin/octobot-agent-api.musl
-COPY --from=proxy-builder /proxy /opt/octobot/bin/proxy
-COPY --from=agent-builder /octobot-agent /opt/octobot/bin/octobot-agent
-RUN chmod +x /opt/octobot/bin/*
+COPY --from=bun-builder /app/discobot-agent-api /opt/discobot/bin/discobot-agent-api
+COPY --from=bun-builder-musl /app/discobot-agent-api.musl /opt/discobot/bin/discobot-agent-api.musl
+COPY --from=proxy-builder /proxy /opt/discobot/bin/proxy
+COPY --from=agent-builder /discobot-agent /opt/discobot/bin/discobot-agent
+RUN chmod +x /opt/discobot/bin/*
 
-# Add octobot binaries and npm global bin to PATH
+# Add discobot binaries and npm global bin to PATH
 # Also set NPM_CONFIG_PREFIX for non-login shell contexts
 # Set PNPM_HOME to use persistent storage for pnpm cache/store
-ENV NPM_CONFIG_PREFIX="/home/octobot/.npm-global"
+ENV NPM_CONFIG_PREFIX="/home/discobot/.npm-global"
 ENV PNPM_HOME="/.data/pnpm"
-ENV PATH="/usr/local/go/bin:/home/octobot/.npm-global/bin:/opt/octobot/bin:${PATH}"
+ENV PATH="/usr/local/go/bin:/home/discobot/.npm-global/bin:/opt/discobot/bin:${PATH}"
 
 WORKDIR /workspace
 
 EXPOSE 3002
 
-# Use octobot-agent as PID 1 init process
+# Use discobot-agent as PID 1 init process
 # It handles signal forwarding, process reaping, and user switching
-# Container starts as root; octobot-agent switches to octobot user for the API
-CMD ["/opt/octobot/bin/octobot-agent"]
+# Container starts as root; discobot-agent switches to discobot user for the API
+CMD ["/opt/discobot/bin/discobot-agent"]
 
 # Stage 5: VZ disk image builder (non-default target)
 # Build with: docker build --target vz-disk-image --output type=local,dest=. .
@@ -223,7 +223,7 @@ RUN set -ex \
     # Create essential mount points (empty dirs)
     && mkdir -p /rootfs/proc /rootfs/sys /rootfs/dev /rootfs/run /rootfs/tmp \
     # Create VirtioFS mount point for metadata
-    && mkdir -p /rootfs/run/octobot/metadata \
+    && mkdir -p /rootfs/run/discobot/metadata \
     # Create simple init script for VZ VMs
     && printf '#!/bin/sh\n\
 set -e\n\
@@ -238,21 +238,21 @@ mount -t tmpfs tmpfs /run\n\
 # Mount writable directories as tmpfs (root is read-only)\n\
 mount -t tmpfs tmpfs /data\n\
 mount -t tmpfs tmpfs /workspace\n\
-mount -t tmpfs tmpfs /home/octobot\n\
+mount -t tmpfs tmpfs /home/discobot\n\
 \n\
 # Mount VirtioFS metadata (shared from host)\n\
-mkdir -p /run/octobot/metadata\n\
-mount -t virtiofs octobot-meta /run/octobot/metadata 2>/dev/null || true\n\
+mkdir -p /run/discobot/metadata\n\
+mount -t virtiofs discobot-meta /run/discobot/metadata 2>/dev/null || true\n\
 \n\
 # Mount persistent data disk at /.data\n\
-mount -t virtiofs octobot-data /.data 2>/dev/null || true\n\
+mount -t virtiofs discobot-data /.data 2>/dev/null || true\n\
 \n\
 # Mount workspace from host at /.workspace (read-only)\n\
-mount -t virtiofs octobot-workspace /.workspace 2>/dev/null || true\n\
+mount -t virtiofs discobot-workspace /.workspace 2>/dev/null || true\n\
 \n\
-# Start the agent (octobot-agent handles user switching and process reaping)\n\
+# Start the agent (discobot-agent handles user switching and process reaping)\n\
 cd /workspace\n\
-exec /opt/octobot/bin/octobot-agent\n\
+exec /opt/discobot/bin/discobot-agent\n\
 ' > /rootfs/init \
     && chmod +x /rootfs/init
 
@@ -267,7 +267,7 @@ RUN set -ex \
 
 # Final stage for VZ: just the compressed disk image
 FROM scratch AS vz-disk-image
-COPY --from=vz-disk-image-builder /disk.img.zst /octobot-rootfs.img.zst
+COPY --from=vz-disk-image-builder /disk.img.zst /discobot-rootfs.img.zst
 
 # Stage 6: Linux kernel builder for VZ
 # Build with: docker build --target vz-kernel --output type=local,dest=. .

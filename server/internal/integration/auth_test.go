@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/obot-platform/octobot/server/internal/model"
+	"github.com/obot-platform/discobot/server/internal/model"
 )
 
 func TestAuthMe_Unauthenticated(t *testing.T) {

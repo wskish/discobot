@@ -1,10 +1,10 @@
 # React DevTools Integration
 
-This document explains how to enable React DevTools integration in Octobot.
+This document explains how to enable React DevTools integration in Discobot.
 
 ## Overview
 
-Octobot supports conditionally loading the React DevTools script in the browser by setting an environment variable.
+Discobot supports conditionally loading the React DevTools script in the browser by setting an environment variable.
 
 **Note**: For regular web browser development, you should use the [React Developer Tools browser extension](https://react.dev/learn/react-developer-tools) (available for Chrome, Firefox, and Edge). The standalone React DevTools setup described here is **specifically for Tauri desktop app development**, where browser extensions cannot be used.
 
@@ -60,7 +60,7 @@ cp .env.local.example .env.local
 
 The `VITE_REACT_DEVTOOLS_URL` is already set to `http://localhost:8097` in the example file. You can modify it if your DevTools server is running on a different port.
 
-### 4. Start Octobot
+### 4. Start Discobot
 
 ```bash
 pnpm dev

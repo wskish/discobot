@@ -94,7 +94,7 @@ Returns information about the current sandbox user. Used by the server to determ
 **Response:**
 ```json
 {
-  "username": "octobot",
+  "username": "discobot",
   "uid": 1000,
   "gid": 1000
 }

@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/obot-platform/octobot/server/internal/model"
+	"github.com/obot-platform/discobot/server/internal/model"
 )
 
 // mockPreferenceStore implements the methods needed for preference testing

@@ -1,4 +1,4 @@
-# Octobot Server API Documentation
+# Discobot Server API Documentation
 
 ## Quick Start
 
@@ -16,7 +16,7 @@ export ENCRYPTION_KEY="0123456789abcdef0123456789abcdef0123456789abcdef012345678
 go run ./cmd/server/main.go
 
 # Run with PostgreSQL
-export DATABASE_DSN="postgres://user:pass@localhost:5432/octobot?sslmode=disable"
+export DATABASE_DSN="postgres://user:pass@localhost:5432/discobot?sslmode=disable"
 go run ./cmd/server/main.go
 ```
 
@@ -68,7 +68,7 @@ server/
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `PORT` | No | 8080 | Server port |
-| `DATABASE_DSN` | No | sqlite3://./octobot.db | Database connection string |
+| `DATABASE_DSN` | No | sqlite3://./discobot.db | Database connection string |
 | `AUTH_ENABLED` | No | false | Enable authentication (requires OAuth setup) |
 | `SESSION_SECRET` | When auth enabled | dev default | Secret for session tokens (min 32 chars) |
 | `ENCRYPTION_KEY` | When auth enabled | dev default | 32-byte hex-encoded key for credential encryption |
@@ -134,7 +134,7 @@ The database schema does NOT use cascading deletes (`ON DELETE CASCADE`). All re
 3. Provider redirects back to `/auth/callback/{provider}` with code
 4. Server exchanges code for token, fetches user info
 5. Server creates/updates user in DB, creates session
-6. Session token stored in `octobot_session` cookie (HttpOnly, 30 days)
+6. Session token stored in `discobot_session` cookie (HttpOnly, 30 days)
 7. Session token is hashed (SHA256) before storage in DB
 
 ### Multi-tenancy
@@ -179,7 +179,7 @@ The database schema does NOT use cascading deletes (`ON DELETE CASCADE`). All re
 
 ## API Routes
 
-All API routes require authentication via session cookie (`octobot_session`) unless noted.
+All API routes require authentication via session cookie (`discobot_session`) unless noted.
 
 ### Auth Routes (No Auth Required)
 
@@ -362,7 +362,7 @@ TEST_POSTGRES=1 go test ./internal/handler/...
 ```
 
 This will:
-1. Remove any existing `octobot-test-postgres` container
+1. Remove any existing `discobot-test-postgres` container
 2. Start a fresh PostgreSQL 16 container on port 5433
 3. Run all tests
 4. On success: remove the container
@@ -370,12 +370,12 @@ This will:
 
 To connect to a failed test database:
 ```bash
-psql postgres://octobot:octobot@localhost:5433/octobot_test?sslmode=disable
+psql postgres://discobot:discobot@localhost:5433/discobot_test?sslmode=disable
 ```
 
 To manually remove the container:
 ```bash
-docker rm -f octobot-test-postgres
+docker rm -f discobot-test-postgres
 ```
 
 ### Test Architecture

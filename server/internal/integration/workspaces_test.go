@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/obot-platform/octobot/server/internal/model"
+	"github.com/obot-platform/discobot/server/internal/model"
 )
 
 // createWorkspaceTestGitRepo creates a test git repository for workspace initialization tests

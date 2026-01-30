@@ -19,7 +19,7 @@ import {
 } from "./session.js";
 
 // Test directory for message persistence tests
-const TEST_DATA_DIR = join(tmpdir(), `octobot-test-${process.pid}`);
+const TEST_DATA_DIR = join(tmpdir(), `discobot-test-${process.pid}`);
 
 describe("Completion State", () => {
 	// Reset state before each test

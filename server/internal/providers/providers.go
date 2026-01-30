@@ -6,7 +6,7 @@ import (
 	"sort"
 	"sync"
 
-	"github.com/obot-platform/octobot/server/static"
+	"github.com/obot-platform/discobot/server/static"
 )
 
 // Icon represents an icon with theme support

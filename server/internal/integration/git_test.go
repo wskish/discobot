@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/obot-platform/octobot/server/internal/git"
+	"github.com/obot-platform/discobot/server/internal/git"
 )
 
 // createTestGitRepo creates a test git repository with some initial content

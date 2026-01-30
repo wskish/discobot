@@ -27,7 +27,7 @@
 			"identifier": "shell:allow-spawn",
 			"allow": [
 				{
-					"name": "binaries/octobot-server",
+					"name": "binaries/discobot-server",
 					"sidecar": true
 				}
 			]

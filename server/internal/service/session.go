@@ -11,12 +11,12 @@ import (
 	"regexp"
 	"time"
 
-	"github.com/obot-platform/octobot/server/internal/events"
-	"github.com/obot-platform/octobot/server/internal/git"
-	"github.com/obot-platform/octobot/server/internal/model"
-	"github.com/obot-platform/octobot/server/internal/sandbox"
-	"github.com/obot-platform/octobot/server/internal/sandbox/sandboxapi"
-	"github.com/obot-platform/octobot/server/internal/store"
+	"github.com/obot-platform/discobot/server/internal/events"
+	"github.com/obot-platform/discobot/server/internal/git"
+	"github.com/obot-platform/discobot/server/internal/model"
+	"github.com/obot-platform/discobot/server/internal/sandbox"
+	"github.com/obot-platform/discobot/server/internal/sandbox/sandboxapi"
+	"github.com/obot-platform/discobot/server/internal/store"
 )
 
 // SessionIDMaxLength is the maximum allowed length for a session ID.
@@ -589,9 +589,9 @@ func (s *SessionService) initializeSync(
 		opts := sandbox.CreateOptions{
 			SharedSecret: sandboxSecret,
 			Labels: map[string]string{
-				"octobot.session.id":   sessionID,
-				"octobot.workspace.id": workspace.ID,
-				"octobot.project.id":   projectID,
+				"discobot.session.id":   sessionID,
+				"discobot.workspace.id": workspace.ID,
+				"discobot.project.id":   projectID,
 			},
 			WorkspacePath:   workspacePath,
 			WorkspaceSource: workspace.Path, // Original source (git URL or local path) for WORKSPACE_PATH env var
@@ -657,7 +657,7 @@ func ptrString(s string) *string {
 //
 // Flow:
 // 1. If workspace commit changed, update baseCommit and check for existing patches
-// 2. If pending: send /octobot-commit to agent, transition to committing
+// 2. If pending: send /discobot-commit to agent, transition to committing
 // 3. If appliedCommit not set: fetch patches from agent-api, apply to workspace
 // 4. Transition to completed
 func (s *SessionService) PerformCommit(ctx context.Context, projectID, sessionID string) error {
@@ -696,7 +696,7 @@ func (s *SessionService) PerformCommit(ctx context.Context, projectID, sessionID
 
 	// Step 1.5: Optimistically check if agent already has patches ready
 	// This runs regardless of whether baseCommit changed, in case the agent
-	// already created patches that we can apply without sending /octobot-commit
+	// already created patches that we can apply without sending /discobot-commit
 	if sess.CommitStatus == model.CommitStatusPending && (sess.AppliedCommit == nil || *sess.AppliedCommit == "") {
 		if err := s.tryApplyExistingPatches(ctx, projectID, sess); err != nil {
 			return err
@@ -706,7 +706,7 @@ func (s *SessionService) PerformCommit(ctx context.Context, projectID, sessionID
 		}
 	}
 
-	// Step 2: Send /octobot-commit to agent (if pending)
+	// Step 2: Send /discobot-commit to agent (if pending)
 	if sess.CommitStatus == model.CommitStatusPending {
 		if err := s.sendCommitPrompt(ctx, projectID, sess); err != nil {
 			return err
@@ -763,7 +763,7 @@ func (s *SessionService) syncBaseCommit(ctx context.Context, projectID string, s
 }
 
 // tryApplyExistingPatches checks if the agent already has patches ready and applies them.
-// This is called optimistically before sending /octobot-commit in case patches are already available.
+// This is called optimistically before sending /discobot-commit in case patches are already available.
 func (s *SessionService) tryApplyExistingPatches(ctx context.Context, projectID string, sess *model.Session) error {
 	if s.sandboxClient == nil {
 		return nil
@@ -790,16 +790,16 @@ func (s *SessionService) tryApplyExistingPatches(ctx context.Context, projectID 
 	return s.applyPatches(ctx, projectID, sess, commitsResp.Patches, commitsResp.CommitCount)
 }
 
-// sendCommitPrompt sends the /octobot-commit command to the agent.
+// sendCommitPrompt sends the /discobot-commit command to the agent.
 func (s *SessionService) sendCommitPrompt(ctx context.Context, projectID string, sess *model.Session) error {
 	if s.sandboxClient == nil {
 		s.setCommitFailed(ctx, projectID, sess, "Sandbox client not available")
 		return nil
 	}
 
-	log.Printf("Session %s: sending /octobot-commit %s to agent", sess.ID, *sess.BaseCommit)
+	log.Printf("Session %s: sending /discobot-commit %s to agent", sess.ID, *sess.BaseCommit)
 
-	commitMessage := fmt.Sprintf("/octobot-commit %s", *sess.BaseCommit)
+	commitMessage := fmt.Sprintf("/discobot-commit %s", *sess.BaseCommit)
 	messages, err := buildCommitMessage(sess.ID+"-commit", commitMessage)
 	if err != nil {
 		s.setCommitFailed(ctx, projectID, sess, fmt.Sprintf("Failed to build commit message: %v", err))
@@ -831,7 +831,7 @@ func (s *SessionService) sendCommitPrompt(ctx context.Context, projectID string,
 		}
 	}
 
-	log.Printf("Session %s: /octobot-commit message completed, transitioning to committing", sess.ID)
+	log.Printf("Session %s: /discobot-commit message completed, transitioning to committing", sess.ID)
 
 	sess.CommitStatus = model.CommitStatusCommitting
 	if err := s.store.UpdateSession(ctx, sess); err != nil {
@@ -962,7 +962,7 @@ func withSessionSandboxReconciliation[T any](
 	return zero, err
 }
 
-// buildCommitMessage creates a UIMessage array for the /octobot-commit command.
+// buildCommitMessage creates a UIMessage array for the /discobot-commit command.
 // Returns json.RawMessage that can be passed to SendMessages.
 func buildCommitMessage(msgID, text string) (json.RawMessage, error) {
 	// Build the text part

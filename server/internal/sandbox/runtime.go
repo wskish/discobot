@@ -45,7 +45,7 @@ type Provider interface {
 	// This is the raw secret stored during creation, not the hashed version.
 	GetSecret(ctx context.Context, sessionID string) (string, error)
 
-	// List returns all sandboxes managed by octobot.
+	// List returns all sandboxes managed by discobot.
 	// This includes sandboxes in any state (running, stopped, failed).
 	List(ctx context.Context) ([]*Sandbox, error)
 
@@ -114,7 +114,7 @@ func ParseRemoveOptions(opts []RemoveOption) RemoveConfig {
 // Sandbox represents a running or stopped sandbox instance.
 type Sandbox struct {
 	ID        string            // Runtime-specific sandbox ID
-	SessionID string            // Octobot session ID (1:1 mapping)
+	SessionID string            // Discobot session ID (1:1 mapping)
 	Status    Status            // created, running, stopped, failed
 	Image     string            // Sandbox image used
 	CreatedAt time.Time         // When the sandbox was created
@@ -169,7 +169,7 @@ type CreateOptions struct {
 
 	// SharedSecret is the secret used for authenticating requests to the sandbox.
 	// The provider stores this secret and makes a salted+hashed version available
-	// to the sandbox via the OCTOBOT_SECRET environment variable.
+	// to the sandbox via the DISCOBOT_SECRET environment variable.
 	SharedSecret string
 
 	// WorkspacePath is the local directory to mount inside the sandbox at /.workspace.

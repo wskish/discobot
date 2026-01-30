@@ -2,7 +2,7 @@
  * Service Output Storage
  *
  * File-based output storage for service logs.
- * Events are written to ${HOME}/.config/octobot/services/output/${id}.out
+ * Events are written to ${HOME}/.config/discobot/services/output/${id}.out
  * in JSONL (newline-delimited JSON) format for easy streaming and replay.
  */
 
@@ -14,7 +14,7 @@ import type { ServiceOutputEvent } from "../api/types.js";
 /**
  * Output directory under user's config
  */
-const OUTPUT_DIR = join(homedir(), ".config", "octobot", "services", "output");
+const OUTPUT_DIR = join(homedir(), ".config", "discobot", "services", "output");
 
 /**
  * Maximum file size before truncation (1MB)

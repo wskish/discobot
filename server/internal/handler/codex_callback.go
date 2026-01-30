@@ -9,8 +9,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/obot-platform/octobot/server/internal/oauth"
-	"github.com/obot-platform/octobot/server/internal/service"
+	"github.com/obot-platform/discobot/server/internal/oauth"
+	"github.com/obot-platform/discobot/server/internal/service"
 )
 
 const (
@@ -227,7 +227,7 @@ func (s *CodexCallbackServer) renderSuccess(w http.ResponseWriter) {
 <body>
     <div class="container">
         <h1>✓ Authorization Successful!</h1>
-        <p>You can close this window and return to Octobot.</p>
+        <p>You can close this window and return to Discobot.</p>
         <p>Your ChatGPT credentials have been saved.</p>
     </div>
 </body>
@@ -286,7 +286,7 @@ func (s *CodexCallbackServer) renderCodeForCopy(w http.ResponseWriter, code stri
 <body>
     <div class="container">
         <h1>Authorization Code</h1>
-        <p>Copy this code and paste it in Octobot:</p>
+        <p>Copy this code and paste it in Discobot:</p>
         <div class="code">%s</div>
         <button id="copyBtn" onclick="copyCode()">Copy Code</button>
         <p style="margin-top: 1rem; font-size: 0.875rem;">You can close this window after copying.</p>

@@ -10,7 +10,7 @@ The cache volume system provides persistent, project-scoped cache storage that i
 
 ### Cache Volume Scoping
 
-- **One cache volume per project**: `octobot-cache-{projectID}`
+- **One cache volume per project**: `discobot-cache-{projectID}`
 - **Shared across all containers**: Every container in the same project mounts the same cache volume
 - **Persistent across container rebuilds**: Cache survives container deletion and recreation
 
@@ -19,11 +19,11 @@ The cache volume system provides persistent, project-scoped cache storage that i
 Each cache path gets its own subdirectory within the volume to prevent conflicts:
 
 ```
-octobot-cache-abc123/
-├── home/octobot/.npm/
-├── home/octobot/.pnpm-store/
-├── home/octobot/.cache/pip/
-├── home/octobot/go/pkg/mod/
+discobot-cache-abc123/
+├── home/discobot/.npm/
+├── home/discobot/.pnpm-store/
+├── home/discobot/.cache/pip/
+├── home/discobot/go/pkg/mod/
 └── ... (other cache directories)
 ```
 
@@ -32,7 +32,7 @@ octobot-cache-abc123/
 The cache system uses a two-stage mounting approach:
 
 1. **Docker Provider (Host)**: Mounts the cache volume at `/.data/cache` inside the container
-2. **Agent (Container)**: After setting up the overlay filesystem for `/home/octobot`, bind-mounts individual cache directories from `/.data/cache` on top of the overlay
+2. **Agent (Container)**: After setting up the overlay filesystem for `/home/discobot`, bind-mounts individual cache directories from `/.data/cache` on top of the overlay
 
 This approach ensures cache directories don't write to the container's overlay layer, improving performance and reducing disk usage.
 
@@ -48,15 +48,15 @@ CACHE_ENABLED=false  # Default: true
 
 ### Workspace Configuration
 
-Users can define additional cache paths by creating `.octobot/cache.json` in their workspace repository:
+Users can define additional cache paths by creating `.discobot/cache.json` in their workspace repository:
 
-**Location:** `<user-workspace>/.octobot/cache.json` (inside the container at `/home/octobot/workspace/.octobot/cache.json`)
+**Location:** `<user-workspace>/.discobot/cache.json` (inside the container at `/home/discobot/workspace/.discobot/cache.json`)
 
 ```json
 {
   "additionalPaths": [
-    "/home/octobot/.custom-cache",
-    "/home/octobot/.local/share/my-tool"
+    "/home/discobot/.custom-cache",
+    "/home/discobot/.local/share/my-tool"
   ]
 }
 ```
@@ -64,7 +64,7 @@ Users can define additional cache paths by creating `.octobot/cache.json` in the
 The agent reads this file during container startup and merges the additional paths with well-known cache directories.
 
 **Security Validation:**
-- All paths must be within `/home/octobot/` (not equal to it)
+- All paths must be within `/home/discobot/` (not equal to it)
 - Paths must be absolute and not contain `..` components
 - Invalid paths are logged and ignored
 - This prevents malicious workspaces from mounting sensitive system directories
@@ -79,44 +79,44 @@ The agent reads this file during container startup and merges the additional pat
 The agent automatically mounts the following well-known cache directories:
 
 ### Universal Cache Directory
-- `/home/octobot/.cache` - Universal cache directory (includes pip, yarn, go-build, pypoetry, uv, deno, bazel, sccache, git-lfs, and many others)
+- `/home/discobot/.cache` - Universal cache directory (includes pip, yarn, go-build, pypoetry, uv, deno, bazel, sccache, git-lfs, and many others)
 
 ### Package Managers (not in .cache)
-- `/home/octobot/.npm` - npm cache
-- `/home/octobot/.pnpm-store` - pnpm store
-- `/home/octobot/.yarn` - yarn cache
+- `/home/discobot/.npm` - npm cache
+- `/home/discobot/.pnpm-store` - pnpm store
+- `/home/discobot/.yarn` - yarn cache
 
 ### Python
-- `/home/octobot/.local/share/uv` - uv data directory
+- `/home/discobot/.local/share/uv` - uv data directory
 
 ### Go
-- `/home/octobot/go/pkg/mod` - Go module cache
+- `/home/discobot/go/pkg/mod` - Go module cache
 
 ### Rust / Cargo
-- `/home/octobot/.cargo/registry` - Cargo registry
-- `/home/octobot/.cargo/git` - Cargo git dependencies
+- `/home/discobot/.cargo/registry` - Cargo registry
+- `/home/discobot/.cargo/git` - Cargo git dependencies
 
 ### Ruby
-- `/home/octobot/.bundle` - Bundler cache
-- `/home/octobot/.gem` - Gem cache
+- `/home/discobot/.bundle` - Bundler cache
+- `/home/discobot/.gem` - Gem cache
 
 ### Java / JVM
-- `/home/octobot/.m2/repository` - Maven repository
-- `/home/octobot/.gradle/caches` - Gradle caches
-- `/home/octobot/.gradle/wrapper` - Gradle wrapper
+- `/home/discobot/.m2/repository` - Maven repository
+- `/home/discobot/.gradle/caches` - Gradle caches
+- `/home/discobot/.gradle/wrapper` - Gradle wrapper
 
 ### .NET
-- `/home/octobot/.nuget/packages` - NuGet packages
+- `/home/discobot/.nuget/packages` - NuGet packages
 
 ### PHP
-- `/home/octobot/.composer/cache` - Composer cache
+- `/home/discobot/.composer/cache` - Composer cache
 
 ### Other Tools
-- `/home/octobot/.bun/install/cache` - Bun cache
-- `/home/octobot/.docker/buildx` - Docker buildx cache
-- `/home/octobot/.ccache` - ccache
-- `/home/octobot/.vscode-server` - VS Code Server
-- `/home/octobot/.cursor-server` - Cursor Server
+- `/home/discobot/.bun/install/cache` - Bun cache
+- `/home/discobot/.docker/buildx` - Docker buildx cache
+- `/home/discobot/.ccache` - ccache
+- `/home/discobot/.vscode-server` - VS Code Server
+- `/home/discobot/.cursor-server` - Cursor Server
 
 ## API Endpoints
 
@@ -133,14 +133,14 @@ Returns all cache volumes for the project.
 {
   "volumes": [
     {
-      "Name": "octobot-cache-abc123",
+      "Name": "discobot-cache-abc123",
       "Driver": "local",
-      "Mountpoint": "/var/lib/docker/volumes/octobot-cache-abc123/_data",
+      "Mountpoint": "/var/lib/docker/volumes/discobot-cache-abc123/_data",
       "CreatedAt": "2024-01-15T10:30:00Z",
       "Labels": {
-        "octobot.project.id": "abc123",
-        "octobot.managed": "true",
-        "octobot.type": "cache"
+        "discobot.project.id": "abc123",
+        "discobot.managed": "true",
+        "discobot.type": "cache"
       }
     }
   ]
@@ -165,16 +165,16 @@ Cache volumes are created lazily on first container creation:
 
 1. When creating a container, check if project has a cache volume
 2. If not, create volume with labels:
-   - `octobot.project.id`: projectID
-   - `octobot.managed`: "true"
-   - `octobot.type`: "cache"
+   - `discobot.project.id`: projectID
+   - `discobot.managed`: "true"
+   - `discobot.type`: "cache"
 3. Mount the volume at `/.data/cache` inside the container
 
 ```go
 // In server/internal/sandbox/docker/provider.go
 hostConfig.Mounts = append(hostConfig.Mounts, mount.Mount{
     Type:   mount.TypeVolume,
-    Source: "octobot-cache-abc123",
+    Source: "discobot-cache-abc123",
     Target: "/.data/cache",
 })
 ```
@@ -183,17 +183,17 @@ hostConfig.Mounts = append(hostConfig.Mounts, mount.Mount{
 
 After the overlay filesystem is mounted, the agent bind-mounts cache directories:
 
-1. Load cache configuration from `/.home/octobot/workspace/.octobot/cache.json`
+1. Load cache configuration from `/.home/discobot/workspace/.discobot/cache.json`
 2. Get all cache paths (well-known + additional from config)
 3. For each cache path:
-   - Create subdirectory in `/.data/cache` (e.g., `/.data/cache/home/octobot/.npm`)
-   - Create target directory in overlay (e.g., `/home/octobot/.npm`)
+   - Create subdirectory in `/.data/cache` (e.g., `/.data/cache/home/discobot/.npm`)
+   - Create target directory in overlay (e.g., `/home/discobot/.npm`)
    - Bind mount source to target using `syscall.Mount()`
 
 ```go
 // In agent/cmd/agent/main.go
 source := filepath.Join("/.data/cache", subDir)
-target := "/home/octobot/.npm"
+target := "/home/discobot/.npm"
 syscall.Mount(source, target, "none", syscall.MS_BIND, "")
 ```
 
@@ -227,7 +227,7 @@ Consider adding volume size limits to prevent unbounded growth:
 
 ```json
 {
-  "additionalPaths": ["/home/octobot/.custom-cache"],
+  "additionalPaths": ["/home/discobot/.custom-cache"],
   "sizeLimit": "10GB"
 }
 ```
@@ -251,7 +251,7 @@ Allow fine-grained control over specific tools:
   "tools": {
     "npm": {
       "enabled": true,
-      "path": "/home/octobot/.npm"
+      "path": "/home/discobot/.npm"
     },
     "pip": {
       "enabled": false
@@ -265,7 +265,7 @@ Allow fine-grained control over specific tools:
 ### Cache Not Working
 
 1. Check if cache is enabled: `echo $CACHE_ENABLED`
-2. Verify volume exists: `docker volume ls | grep octobot-cache`
+2. Verify volume exists: `docker volume ls | grep discobot-cache`
 3. Inspect container mounts: `docker inspect <container-id> | jq '.[].Mounts'`
 
 ### Clearing Cache
@@ -277,7 +277,7 @@ To clear cache for a project:
 curl -X DELETE http://localhost:3001/api/projects/local/cache
 
 # Or manually
-docker volume rm octobot-cache-{projectId}
+docker volume rm discobot-cache-{projectId}
 ```
 
 ### Disk Space Issues
@@ -285,11 +285,11 @@ docker volume rm octobot-cache-{projectId}
 Check cache volume sizes:
 
 ```bash
-docker system df -v | grep octobot-cache
+docker system df -v | grep discobot-cache
 ```
 
 Prune old volumes:
 
 ```bash
-docker volume prune -f --filter "label=octobot.type=cache"
+docker volume prune -f --filter "label=discobot.type=cache"
 ```

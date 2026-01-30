@@ -16,23 +16,23 @@ import (
 	"github.com/go-chi/cors"
 	"github.com/joho/godotenv"
 
-	"github.com/obot-platform/octobot/server/internal/config"
-	"github.com/obot-platform/octobot/server/internal/database"
-	"github.com/obot-platform/octobot/server/internal/dispatcher"
-	"github.com/obot-platform/octobot/server/internal/events"
-	"github.com/obot-platform/octobot/server/internal/git"
-	"github.com/obot-platform/octobot/server/internal/handler"
-	"github.com/obot-platform/octobot/server/internal/jobs"
-	"github.com/obot-platform/octobot/server/internal/middleware"
-	"github.com/obot-platform/octobot/server/internal/routes"
-	"github.com/obot-platform/octobot/server/internal/sandbox"
-	"github.com/obot-platform/octobot/server/internal/sandbox/docker"
-	"github.com/obot-platform/octobot/server/internal/sandbox/local"
-	"github.com/obot-platform/octobot/server/internal/sandbox/vz"
-	"github.com/obot-platform/octobot/server/internal/service"
-	"github.com/obot-platform/octobot/server/internal/ssh"
-	"github.com/obot-platform/octobot/server/internal/store"
-	"github.com/obot-platform/octobot/server/static"
+	"github.com/obot-platform/discobot/server/internal/config"
+	"github.com/obot-platform/discobot/server/internal/database"
+	"github.com/obot-platform/discobot/server/internal/dispatcher"
+	"github.com/obot-platform/discobot/server/internal/events"
+	"github.com/obot-platform/discobot/server/internal/git"
+	"github.com/obot-platform/discobot/server/internal/handler"
+	"github.com/obot-platform/discobot/server/internal/jobs"
+	"github.com/obot-platform/discobot/server/internal/middleware"
+	"github.com/obot-platform/discobot/server/internal/routes"
+	"github.com/obot-platform/discobot/server/internal/sandbox"
+	"github.com/obot-platform/discobot/server/internal/sandbox/docker"
+	"github.com/obot-platform/discobot/server/internal/sandbox/local"
+	"github.com/obot-platform/discobot/server/internal/sandbox/vz"
+	"github.com/obot-platform/discobot/server/internal/service"
+	"github.com/obot-platform/discobot/server/internal/ssh"
+	"github.com/obot-platform/discobot/server/internal/store"
+	"github.com/obot-platform/discobot/server/static"
 )
 
 func main() {
@@ -176,7 +176,7 @@ func main() {
 	eventBroker := events.NewBroker(s, eventPoller)
 
 	// Start sandbox watcher to sync session states with sandbox states
-	// This handles external changes (e.g., Docker containers deleted outside Octobot)
+	// This handles external changes (e.g., Docker containers deleted outside Discobot)
 	var sandboxWatcherCancel context.CancelFunc
 	if sandboxProvider != nil {
 		sandboxWatcher := service.NewSandboxWatcher(sandboxProvider, s, eventBroker)

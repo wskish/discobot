@@ -84,8 +84,8 @@ describe("Git user configuration via headers", () => {
 			method: "POST",
 			headers: {
 				"Content-Type": "application/json",
-				"X-Octobot-Git-User-Name": "Test Header User",
-				"X-Octobot-Git-User-Email": "header@example.com",
+				"X-Discobot-Git-User-Name": "Test Header User",
+				"X-Discobot-Git-User-Email": "header@example.com",
 			},
 			body: JSON.stringify({
 				messages: [
@@ -138,7 +138,7 @@ describe("Git user configuration via headers", () => {
 			method: "POST",
 			headers: {
 				"Content-Type": "application/json",
-				"X-Octobot-Git-User-Name": "Name Only User",
+				"X-Discobot-Git-User-Name": "Name Only User",
 			},
 			body: JSON.stringify({
 				messages: [
@@ -160,7 +160,7 @@ describe("Git user configuration via headers", () => {
 			method: "POST",
 			headers: {
 				"Content-Type": "application/json",
-				"X-Octobot-Git-User-Email": "email@only.com",
+				"X-Discobot-Git-User-Email": "email@only.com",
 			},
 			body: JSON.stringify({
 				messages: [

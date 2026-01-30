@@ -9,11 +9,11 @@ import (
 
 	"github.com/elazarl/goproxy"
 
-	"github.com/obot-platform/octobot/proxy/internal/cache"
-	"github.com/obot-platform/octobot/proxy/internal/cert"
-	"github.com/obot-platform/octobot/proxy/internal/filter"
-	"github.com/obot-platform/octobot/proxy/internal/injector"
-	"github.com/obot-platform/octobot/proxy/internal/logger"
+	"github.com/obot-platform/discobot/proxy/internal/cache"
+	"github.com/obot-platform/discobot/proxy/internal/cert"
+	"github.com/obot-platform/discobot/proxy/internal/filter"
+	"github.com/obot-platform/discobot/proxy/internal/injector"
+	"github.com/obot-platform/discobot/proxy/internal/logger"
 )
 
 // HTTPProxy wraps goproxy for HTTP/HTTPS proxying.

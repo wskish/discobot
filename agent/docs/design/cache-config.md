@@ -4,11 +4,11 @@ This document describes how users can configure cache directories in their works
 
 ## Overview
 
-Users can configure additional cache directories to be persisted across container rebuilds by creating a `.octobot/cache.json` file in their workspace repository.
+Users can configure additional cache directories to be persisted across container rebuilds by creating a `.discobot/cache.json` file in their workspace repository.
 
 ## Configuration File
 
-**Location:** `<workspace>/.octobot/cache.json` (inside the user's workspace/repository)
+**Location:** `<workspace>/.discobot/cache.json` (inside the user's workspace/repository)
 
 **Format:** JSON
 
@@ -16,8 +16,8 @@ Users can configure additional cache directories to be persisted across containe
 ```json
 {
   "additionalPaths": [
-    "/home/octobot/.cache/custom-tool",
-    "/home/octobot/.local/share/my-app"
+    "/home/discobot/.cache/custom-tool",
+    "/home/discobot/.local/share/my-app"
   ]
 }
 ```
@@ -26,7 +26,7 @@ Users can configure additional cache directories to be persisted across containe
 
 The agent validates all paths from the user's configuration:
 
-- **Must be within `/home/octobot/`** - Paths outside this directory are ignored
+- **Must be within `/home/discobot/`** - Paths outside this directory are ignored
 - **Must be absolute** - Relative paths are rejected
 - **Must not contain `..`** - Path traversal attempts are blocked
 - **Invalid paths are logged** - Users will see warnings in logs
@@ -49,13 +49,13 @@ All cache directories (both well-known and additional) are created with world-wr
 The agent automatically mounts these cache directories without configuration:
 
 ### Universal Cache Directory
-- `/home/octobot/.cache` - Universal cache directory used by many tools
+- `/home/discobot/.cache` - Universal cache directory used by many tools
 
 ### Package Managers
-- `/home/octobot/.npm` - npm cache
-- `/home/octobot/.pnpm-store` - pnpm store
-- `/home/octobot/.yarn` - yarn cache
-- `/home/octobot/.bun/install/cache` - Bun install cache
+- `/home/discobot/.npm` - npm cache
+- `/home/discobot/.pnpm-store` - pnpm store
+- `/home/discobot/.yarn` - yarn cache
+- `/home/discobot/.bun/install/cache` - Bun install cache
 
 ### Language-Specific
 - **Python**: `.local/share/uv` 
@@ -80,7 +80,7 @@ The agent reads the configuration during container startup:
 
 ```go
 func loadCacheConfig() *cacheConfig {
-    configPath := filepath.Join(mountHome, "workspace", ".octobot", "cache.json")
+    configPath := filepath.Join(mountHome, "workspace", ".discobot", "cache.json")
     
     data, err := os.ReadFile(configPath)
     if err != nil {
@@ -90,7 +90,7 @@ func loadCacheConfig() *cacheConfig {
     
     var cfg cacheConfig
     if err := json.Unmarshal(data, &cfg); err != nil {
-        fmt.Printf("octobot-agent: warning: failed to parse cache config: %v\n", err)
+        fmt.Printf("discobot-agent: warning: failed to parse cache config: %v\n", err)
         return &cacheConfig{}
     }
     
@@ -109,8 +109,8 @@ func isValidCachePath(path string) bool {
         return false
     }
     
-    // Must be within /home/octobot (not equal to it)
-    homePrefix := "/home/octobot/"
+    // Must be within /home/discobot (not equal to it)
+    homePrefix := "/home/discobot/"
     if !strings.HasPrefix(cleanPath+"/", homePrefix) {
         return false
     }
@@ -136,8 +136,8 @@ func isValidCachePath(path string) bool {
 
 Users should be instructed to:
 
-1. Create `.octobot/cache.json` in their repository
-2. Add paths within `/home/octobot/` only
+1. Create `.discobot/cache.json` in their repository
+2. Add paths within `/home/discobot/` only
 3. Use absolute paths
 4. Check agent logs for validation warnings
 

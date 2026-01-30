@@ -76,7 +76,7 @@ Each entry consists of:
 
 ```bash
 # Start the proxy
-./octobot-proxy
+./discobot-proxy
 
 # Use proxy for Docker commands
 export HTTP_PROXY=http://localhost:17080
@@ -320,7 +320,7 @@ tls:
 
 cache:
   enabled: true
-  dir: /var/cache/octobot-proxy
+  dir: /var/cache/discobot-proxy
   max_size: 107374182400  # 100GB
 
 allowlist:
@@ -334,7 +334,7 @@ allowlist:
 logging:
   level: info
   format: json
-  file: /var/log/octobot-proxy.log
+  file: /var/log/discobot-proxy.log
 ```
 
 Team setup:

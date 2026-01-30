@@ -1,14 +1,14 @@
 # Agent Integrations
 
-This document describes Octobot-specific integration points with AI coding agents. These integrations extend beyond the standard ACP protocol to provide tighter workflow integration.
+This document describes Discobot-specific integration points with AI coding agents. These integrations extend beyond the standard ACP protocol to provide tighter workflow integration.
 
 ## Overview
 
-While ACP defines the wire protocol for agent communication, Octobot provides additional integration points that agents can leverage for enhanced functionality. These integrations are agent-specific and must be implemented separately for each supported agent.
+While ACP defines the wire protocol for agent communication, Discobot provides additional integration points that agents can leverage for enhanced functionality. These integrations are agent-specific and must be implemented separately for each supported agent.
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                     Octobot Container                           │
+│                     Discobot Container                           │
 │                                                                 │
 │  ┌─────────────────────────────────────────────────────────┐   │
 │  │                  Agent Configuration                     │   │
@@ -34,13 +34,13 @@ While ACP defines the wire protocol for agent communication, Octobot provides ad
 
 ### Purpose
 
-Custom commands allow Octobot to expose agent-invocable actions that integrate with the container workflow. For example, committing changes back to the parent workspace requires specific knowledge of Octobot's architecture.
+Custom commands allow Discobot to expose agent-invocable actions that integrate with the container workflow. For example, committing changes back to the parent workspace requires specific knowledge of Discobot's architecture.
 
 ### Claude Code Implementation
 
 Claude Code supports custom slash commands via markdown files in `~/.claude/commands/`.
 
-**Location in container:** `/home/octobot/.claude/commands/`
+**Location in container:** `/home/discobot/.claude/commands/`
 
 **Source location:** `container-assets/claude/commands/`
 
@@ -61,13 +61,13 @@ Instructions for the agent when this command is invoked.
 Use $ARGUMENTS to reference the argument passed by the user.
 ```
 
-### Octobot Commands
+### Discobot Commands
 
-#### /octobot-commit
+#### /discobot-commit
 
 Commits session changes back to the parent workspace.
 
-**File:** `container-assets/claude/commands/octobot-commit.md`
+**File:** `container-assets/claude/commands/discobot-commit.md`
 
 **Invoked by:** Go server (`server/internal/service/session.go`) when user clicks the Commit button.
 
@@ -76,9 +76,9 @@ Commits session changes back to the parent workspace.
 2. Rebase onto a target commit if necessary (the parent workspace may have advanced)
 3. Create appropriate git commits with clear messages
 
-**Usage:** `/octobot-commit <target-commit-id>`
+**Usage:** `/discobot-commit <target-commit-id>`
 
-The Go server sends this command as a chat message: `/octobot-commit <baseCommit>` where `baseCommit` is the commit SHA the workspace was at when the session started.
+The Go server sends this command as a chat message: `/discobot-commit <baseCommit>` where `baseCommit` is the commit SHA the workspace was at when the session started.
 
 **Why this is needed:** The container's workspace is a copy/clone of the parent workspace. When committing, the agent needs to handle the case where the parent has received new commits since the session started.
 
@@ -107,7 +107,7 @@ All agents should implement equivalent functionality for:
 
 | Command | Purpose |
 |---------|---------|
-| `octobot-commit` | Commit session changes to parent workspace |
+| `discobot-commit` | Commit session changes to parent workspace |
 
 ### 3. Container Assets Structure
 
@@ -115,7 +115,7 @@ All agents should implement equivalent functionality for:
 container-assets/
 ├── claude/
 │   └── commands/
-│       └── octobot-commit.md
+│       └── discobot-commit.md
 ├── opencode/           # Future
 │   └── commands/
 └── gemini/             # Future
@@ -128,10 +128,10 @@ Each agent's configuration must be copied to the correct location:
 
 ```dockerfile
 # Claude Code
-COPY --chown=octobot:octobot container-assets/claude /home/octobot/.claude
+COPY --chown=discobot:discobot container-assets/claude /home/discobot/.claude
 
 # OpenCode (example)
-COPY --chown=octobot:octobot container-assets/opencode /home/octobot/.opencode
+COPY --chown=discobot:discobot container-assets/opencode /home/discobot/.opencode
 ```
 
 ## Environment Variables
@@ -163,6 +163,6 @@ Integration tests should verify:
 Potential future integration points:
 
 - **Lifecycle hooks**: Agent callbacks for session start/end
-- **Status reporting**: Agent-to-Octobot status updates
+- **Status reporting**: Agent-to-Discobot status updates
 - **Resource limits**: Agent awareness of container constraints
-- **MCP servers**: Pre-configured MCP servers for Octobot tools
+- **MCP servers**: Pre-configured MCP servers for Discobot tools

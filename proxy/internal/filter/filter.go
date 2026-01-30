@@ -5,7 +5,7 @@ import (
 	"net"
 	"sync"
 
-	"github.com/obot-platform/octobot/proxy/internal/injector"
+	"github.com/obot-platform/discobot/proxy/internal/injector"
 )
 
 // Filter manages domain and IP allowlists.

@@ -14,7 +14,7 @@ The vz provider implements the `sandbox.Provider` interface using Apple's Virtua
 
 ```go
 vzCfg := &vz.Config{
-    DataDir:      "/var/lib/octobot/vz",     // VM data directory
+    DataDir:      "/var/lib/discobot/vz",     // VM data directory
     KernelPath:   "/path/to/vmlinuz",         // Linux kernel
     InitrdPath:   "/path/to/initrd",          // Initial ramdisk (optional)
     BaseDiskPath: "/path/to/base.img",        // Base disk to clone (optional)
@@ -44,7 +44,7 @@ provider, err := vz.NewProvider(cfg, vzCfg)
 │                         │   │              │ (Hono)   │ │   │ │
 │                         │   │              └──────────┘ │   │ │
 │                         │   │                           │   │ │
-│                         │   │  /run/octobot/metadata    │   │ │
+│                         │   │  /run/discobot/metadata    │   │ │
 │                         │   │  (VirtioFS mount)         │   │ │
 │                         │   └───────────────────────────┘   │ │
 │                         └───────────────────────────────────┘ │
@@ -79,11 +79,11 @@ Metadata is shared via VirtioFS, mounted read-only in the guest:
 
 ```bash
 # In VM init script
-mkdir -p /run/octobot/metadata
-mount -t virtiofs octobot-meta /run/octobot/metadata
+mkdir -p /run/discobot/metadata
+mount -t virtiofs discobot-meta /run/discobot/metadata
 ```
 
-The agent reads configuration from `/run/octobot/metadata/metadata.json`:
+The agent reads configuration from `/run/discobot/metadata/metadata.json`:
 
 ```json
 {
@@ -118,7 +118,7 @@ The base disk image should include:
    - `mount` - For VirtioFS mounting
 
 3. **Init system** that:
-   - Mounts VirtioFS at `/run/octobot/metadata`
+   - Mounts VirtioFS at `/run/discobot/metadata`
    - Starts the agent (it handles socat automatically)
 
 ### Example Init Script
@@ -128,12 +128,12 @@ The base disk image should include:
 set -e
 
 # Mount VirtioFS metadata (agent reads config from here)
-mkdir -p /run/octobot/metadata
-mount -t virtiofs octobot-meta /run/octobot/metadata || true
+mkdir -p /run/discobot/metadata
+mount -t virtiofs discobot-meta /run/discobot/metadata || true
 
 # Start agent (it will automatically start socat if vsock is configured)
-cd /opt/octobot
-exec ./octobot-agent-api
+cd /opt/discobot
+exec ./discobot-agent-api
 ```
 
 Note: The agent automatically starts socat for vsock forwarding based on the metadata configuration. No manual socat setup is needed.
@@ -151,7 +151,7 @@ VM state is persisted to disk:
 │       ├── metadata.json     # Full config for VirtioFS
 │       ├── session_id        # Plain text session ID
 │       └── secret            # Hashed secret (mode 0600)
-└── octobot-session-<sessionID>.img  # Disk image
+└── discobot-session-<sessionID>.img  # Disk image
 ```
 
 On server restart:
@@ -176,7 +176,7 @@ The binary must be signed with virtualization entitlements:
 ```
 
 ```bash
-codesign --entitlements vz.entitlements -s - ./octobot-server
+codesign --entitlements vz.entitlements -s - ./discobot-server
 ```
 
 ## Limitations

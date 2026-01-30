@@ -1,14 +1,14 @@
-# Octobot Agent - Container Init Process
+# Discobot Agent - Container Init Process
 
-The `octobot-agent` binary is a minimal PID 1 init process for container environments. It handles workspace initialization, AgentFS setup, and process management for Octobot containers.
+The `discobot-agent` binary is a minimal PID 1 init process for container environments. It handles workspace initialization, AgentFS setup, and process management for Discobot containers.
 
 ## Features
 
-- **Home Directory Setup**: Copies `/home/octobot` to persistent storage on first run
+- **Home Directory Setup**: Copies `/home/discobot` to persistent storage on first run
 - **Workspace Cloning**: Clones git repositories to persistent storage with atomic staging
-- **AgentFS Integration**: Initializes and mounts copy-on-write filesystem directly over `/home/octobot`
+- **AgentFS Integration**: Initializes and mounts copy-on-write filesystem directly over `/home/discobot`
 - **PID 1 Process Reaping**: Collects zombie processes to prevent resource leaks
-- **User Switching**: Drops privileges from root to the `octobot` user
+- **User Switching**: Drops privileges from root to the `discobot` user
 - **Signal Forwarding**: Forwards SIGTERM, SIGINT, SIGQUIT, and SIGHUP to child processes
 - **Pdeathsig Support**: Ensures child processes die when the init process terminates
 - **Graceful Shutdown**: 10-second timeout for clean shutdown before force-killing children
@@ -16,12 +16,12 @@ The `octobot-agent` binary is a minimal PID 1 init process for container environ
 ## Startup Sequence
 
 ```
-1. Copy /home/octobot to /.data/octobot (if not exists)
-2. Clone workspace to /.data/octobot/workspace (if WORKSPACE_PATH set)
+1. Copy /home/discobot to /.data/discobot (if not exists)
+2. Clone workspace to /.data/discobot/workspace (if WORKSPACE_PATH set)
 3. Initialize AgentFS database (if not exists)
-4. Mount AgentFS over /home/octobot with -a --allow-root
-5. Create /workspace symlink to /home/octobot/workspace
-6. Run octobot-agent-api as octobot user
+4. Mount AgentFS over /home/discobot with -a --allow-root
+5. Create /workspace symlink to /home/discobot/workspace
+6. Run discobot-agent-api as discobot user
 ```
 
 ## Usage
@@ -30,7 +30,7 @@ The agent is typically invoked as the container's CMD:
 
 ```bash
 # Container starts with required environment variables
-docker run -e SESSION_ID=abc123 -e WORKSPACE_PATH=https://github.com/user/repo octobot
+docker run -e SESSION_ID=abc123 -e WORKSPACE_PATH=https://github.com/user/repo discobot
 ```
 
 ### Environment Variables
@@ -40,8 +40,8 @@ docker run -e SESSION_ID=abc123 -e WORKSPACE_PATH=https://github.com/user/repo o
 | `SESSION_ID` | Yes | - | Unique session identifier for AgentFS database |
 | `WORKSPACE_PATH` | No | - | Git URL or local path to clone |
 | `WORKSPACE_COMMIT` | No | - | Specific commit SHA to checkout |
-| `AGENT_BINARY` | No | `/opt/octobot/bin/octobot-agent-api` | Path to the agent API binary |
-| `AGENT_USER` | No | `octobot` | Username to run the agent API as |
+| `AGENT_BINARY` | No | `/opt/discobot/bin/discobot-agent-api` | Path to the agent API binary |
+| `AGENT_USER` | No | `discobot` | Username to run the agent API as |
 
 ## Filesystem Layout
 
@@ -49,7 +49,7 @@ docker run -e SESSION_ID=abc123 -e WORKSPACE_PATH=https://github.com/user/repo o
 
 ```
 /.data/
-├── octobot/                     # Base home directory (copied from /home/octobot)
+├── discobot/                     # Base home directory (copied from /home/discobot)
 │   ├── .bashrc                  # User shell config
 │   ├── .profile                 # User profile
 │   └── workspace/               # Cloned repository
@@ -63,10 +63,10 @@ After setup, the filesystem is configured as:
 
 | System Path | Source | Description |
 |-------------|--------|-------------|
-| `/home/octobot` | AgentFS mount | COW overlay of `/.data/octobot` |
-| `/workspace` | Symlink | Points to `/home/octobot/workspace` |
+| `/home/discobot` | AgentFS mount | COW overlay of `/.data/discobot` |
+| `/workspace` | Symlink | Points to `/home/discobot/workspace` |
 
-The AgentFS mount provides copy-on-write semantics - reads come from the base layer (`/.data/octobot`), writes are captured in the SQLite database.
+The AgentFS mount provides copy-on-write semantics - reads come from the base layer (`/.data/discobot`), writes are captured in the SQLite database.
 
 ## Building
 
@@ -74,10 +74,10 @@ The agent is built as part of the Docker multi-stage build:
 
 ```bash
 # Build just the agent binary
-go build -o octobot-agent ./agent/cmd/agent
+go build -o discobot-agent ./agent/cmd/agent
 
 # Or via Docker (as part of full build)
-docker build -t octobot .
+docker build -t discobot .
 ```
 
 ## Architecture
@@ -87,7 +87,7 @@ Container Start (root)
         │
         ▼
 ┌───────────────────┐
-│   octobot-agent      │  ← PID 1 (runs as root)
+│   discobot-agent      │  ← PID 1 (runs as root)
 │   (init process)  │
 │                   │
 │   1. Copy home    │
@@ -97,14 +97,14 @@ Container Start (root)
 │   5. Create symlink│
 └─────────┬─────────┘
           │
-          │  fork + setuid(octobot)
+          │  fork + setuid(discobot)
           ▼
 ┌───────────────────┐
-│ octobot-agent-api    │  ← Child process (runs as octobot)
+│ discobot-agent-api    │  ← Child process (runs as discobot)
 │ (agent API)       │
 │                   │
 │ Sees:             │
-│ /home/octobot(COW)│
+│ /home/discobot(COW)│
 │ /workspace (link) │
 └───────────────────┘
 ```
@@ -112,7 +112,7 @@ Container Start (root)
 ### Signal Flow
 
 ```
-SIGTERM/SIGINT → octobot-agent → forwards to child process group
+SIGTERM/SIGINT → discobot-agent → forwards to child process group
                       │
                       └→ Waits up to 10s for graceful shutdown
                       └→ Force-kills child if timeout exceeded
@@ -120,7 +120,7 @@ SIGTERM/SIGINT → octobot-agent → forwards to child process group
 
 ### Process Reaping
 
-As PID 1, `octobot-agent` is responsible for calling `wait()` on orphaned processes. This prevents zombie process accumulation when child processes fork and their parents exit.
+As PID 1, `discobot-agent` is responsible for calling `wait()` on orphaned processes. This prevents zombie process accumulation when child processes fork and their parents exit.
 
 ## AgentFS Mount Flags
 

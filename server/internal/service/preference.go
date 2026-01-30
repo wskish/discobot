@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/obot-platform/octobot/server/internal/model"
-	"github.com/obot-platform/octobot/server/internal/store"
+	"github.com/obot-platform/discobot/server/internal/model"
+	"github.com/obot-platform/discobot/server/internal/store"
 )
 
 // UserPreference represents a user preference (for API responses)

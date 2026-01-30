@@ -10,7 +10,7 @@ import (
 )
 
 // DefaultSandboxImage is the default sandbox image for sessions.
-const DefaultSandboxImage = "ghcr.io/obot-platform/octobot:main"
+const DefaultSandboxImage = "ghcr.io/obot-platform/discobot:main"
 
 // Config holds all configuration for the server
 type Config struct {
@@ -90,7 +90,7 @@ func Load() (*Config, error) {
 	cfg.SuggestionsEnabled = getEnvBool("SUGGESTIONS_ENABLED", false)
 
 	// Database
-	cfg.DatabaseDSN = getEnv("DATABASE_DSN", "sqlite3://./octobot.db")
+	cfg.DatabaseDSN = getEnv("DATABASE_DSN", "sqlite3://./discobot.db")
 	cfg.DatabaseDriver = detectDriver(cfg.DatabaseDSN)
 
 	// Authentication - defaults to disabled (anonymous user mode)
@@ -103,7 +103,7 @@ func Load() (*Config, error) {
 			return nil, fmt.Errorf("SESSION_SECRET is required when AUTH_ENABLED=true")
 		}
 		// Use a default for no-auth mode (sessions still work but aren't secure)
-		sessionSecret = "octobot-dev-session-secret-not-for-production"
+		sessionSecret = "discobot-dev-session-secret-not-for-production"
 	}
 	cfg.SessionSecret = []byte(sessionSecret)
 

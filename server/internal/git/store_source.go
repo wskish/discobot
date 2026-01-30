@@ -3,7 +3,7 @@ package git
 import (
 	"context"
 
-	"github.com/obot-platform/octobot/server/internal/store"
+	"github.com/obot-platform/discobot/server/internal/store"
 )
 
 // StoreWorkspaceSource implements WorkspaceSource using the store.

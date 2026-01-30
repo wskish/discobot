@@ -7,9 +7,9 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/obot-platform/octobot/server/internal/middleware"
-	"github.com/obot-platform/octobot/server/internal/model"
-	"github.com/obot-platform/octobot/server/internal/service"
+	"github.com/obot-platform/discobot/server/internal/middleware"
+	"github.com/obot-platform/discobot/server/internal/model"
+	"github.com/obot-platform/discobot/server/internal/service"
 )
 
 // ChatRequest represents the request body for the chat endpoint.

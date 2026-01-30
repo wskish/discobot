@@ -22,8 +22,8 @@ class LocalStorageMock {
 	}
 }
 
-const HISTORY_KEY = "octobot:prompt-history";
-const DRAFT_PREFIX = "octobot-prompt-draft-";
+const HISTORY_KEY = "discobot:prompt-history";
+const DRAFT_PREFIX = "discobot-prompt-draft-";
 const MAX_HISTORY_SIZE = 100;
 
 describe("usePromptHistory localStorage helpers", () => {

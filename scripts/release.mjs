@@ -155,7 +155,7 @@ async function main() {
 
 	console.log(`\nReleased ${newTag}!`);
 	console.log(
-		`Watch the build at: https://github.com/ibuildthecloud/octobot/actions`,
+		`Watch the build at: https://github.com/ibuildthecloud/discobot/actions`,
 	);
 }
 

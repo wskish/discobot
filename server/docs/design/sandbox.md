@@ -73,7 +73,7 @@ type Provider interface {
 ```go
 type Sandbox struct {
     ID        string            // Docker container ID
-    SessionID string            // Octobot session ID
+    SessionID string            // Discobot session ID
     Status    string            // created, running, stopped
     Address   string            // HTTP address (host:port)
     Labels    map[string]string
@@ -166,7 +166,7 @@ func NewProvider(cfg *config.Config) (*Provider, error) {
 
 ```go
 func (p *Provider) sandboxName(sessionID string) string {
-    return fmt.Sprintf("octobot-session-%s", sessionID)
+    return fmt.Sprintf("discobot-session-%s", sessionID)
 }
 ```
 
@@ -186,7 +186,7 @@ func (p *Provider) Create(
         Cmd:   opts.Cmd,
         Env:   opts.Env,
         Labels: map[string]string{
-            "octobot.session": sessionID,
+            "discobot.session": sessionID,
         },
         ExposedPorts: nat.PortSet{
             "3002/tcp": struct{}{},
@@ -410,13 +410,13 @@ var (
 
 ## Sandbox Labels
 
-Labels are used to identify Octobot sandboxes:
+Labels are used to identify Discobot sandboxes:
 
 ```go
 labels := map[string]string{
-    "octobot":         "true",
-    "octobot.session": sessionID,
-    "octobot.project": projectID,
+    "discobot":         "true",
+    "discobot.session": sessionID,
+    "discobot.project": projectID,
 }
 ```
 
@@ -428,7 +428,7 @@ The sandbox provider's `Remove()` method accepts optional `RemoveOption` paramet
 - **Purpose**: Remove container for rebuild scenarios (e.g., image updates)
 - **Behavior**: Deletes the container but preserves data volumes
 - **Use case**: Image reconciliation, container recreation, failed container recovery
-- **Docker**: Removes container only, leaves `octobot-data-{sessionID}` volume intact
+- **Docker**: Removes container only, leaves `discobot-data-{sessionID}` volume intact
 - **VZ**: Removes VM (always removes disk)
 
 ```go
@@ -443,7 +443,7 @@ if err := provider.Remove(ctx, sessionID); err != nil {
 - **Purpose**: Complete cleanup when deleting a session
 - **Behavior**: Deletes both container and all associated data volumes
 - **Use case**: Session deletion, permanent cleanup
-- **Docker**: Removes container AND explicitly deletes the `octobot-data-{sessionID}` volume
+- **Docker**: Removes container AND explicitly deletes the `discobot-data-{sessionID}` volume
 - **VZ**: Removes VM and all associated storage (same as default)
 
 ```go
@@ -460,7 +460,7 @@ Docker containers use named data volumes for persistent storage:
 
 ```go
 // Volume naming
-dataVolName := fmt.Sprintf("octobot-data-%s", sessionID)
+dataVolName := fmt.Sprintf("discobot-data-%s", sessionID)
 
 // Volume is mounted at /.data inside container
 Mounts: []mount.Mount{
@@ -480,7 +480,7 @@ On server startup, reconcile sandboxes with database state:
 
 ```go
 func (s *SandboxService) ReconcileSandboxes(ctx context.Context) error {
-    // List all octobot sandboxes
+    // List all discobot sandboxes
     sandboxes, err := s.provider.List(ctx)
     if err != nil {
         return err

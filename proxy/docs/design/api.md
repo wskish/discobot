@@ -293,7 +293,7 @@ curl -X PATCH http://localhost:8081/api/config \
       "*.example.com": {
         "append": {
           "X-Forwarded-For": "proxy.internal",
-          "Via": "1.1 octobot-proxy"
+          "Via": "1.1 discobot-proxy"
         }
       }
     }
@@ -414,7 +414,7 @@ curl -X PATCH http://localhost:8081/api/config \
       "*": {
         "append": {
           "X-Forwarded-For": "proxy.internal",
-          "Via": "1.1 octobot-proxy"
+          "Via": "1.1 discobot-proxy"
         }
       }
     }
