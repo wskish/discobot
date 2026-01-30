@@ -95,12 +95,14 @@ func main() {
 		log.Printf("Docker sandbox provider initialized (image: %s)", cfg.SandboxImage)
 	}
 
-	// Initialize local provider
-	if localProvider, localErr := local.NewProvider(cfg); localErr != nil {
-		log.Printf("Warning: Failed to initialize local sandbox provider: %v", localErr)
-	} else {
-		sandboxManager.RegisterProvider("local", localProvider)
-		log.Printf("Local sandbox provider initialized")
+	// Initialize local provider (only if enabled via config)
+	if cfg.LocalProviderEnabled {
+		if localProvider, localErr := local.NewProvider(cfg); localErr != nil {
+			log.Printf("Warning: Failed to initialize local sandbox provider: %v", localErr)
+		} else {
+			sandboxManager.RegisterProvider("local", localProvider)
+			log.Printf("Local sandbox provider initialized")
+		}
 	}
 
 	// On darwin/arm64, try VZ (Virtualization.framework) as well
@@ -516,6 +518,16 @@ func main() {
 			// Workspaces
 			r.Route("/workspaces", func(r chi.Router) {
 				wsReg := projReg.WithPrefix("/workspaces")
+
+				wsReg.Register(r, routes.Route{
+					Method: "GET", Pattern: "/providers",
+					Handler: h.GetSandboxProviders,
+					Meta: routes.Meta{
+						Group:       "Workspaces",
+						Description: "List available sandbox providers",
+						Params:      []routes.Param{{Name: "projectId", Example: "local"}},
+					},
+				})
 
 				wsReg.Register(r, routes.Route{
 					Method: "GET", Pattern: "/",

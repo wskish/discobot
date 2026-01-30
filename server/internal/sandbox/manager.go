@@ -76,6 +76,11 @@ func NewProviderProxy(manager *Manager, providerGetter func(ctx context.Context,
 	}
 }
 
+// ListProviders returns the names of all available providers.
+func (p *ProviderProxy) ListProviders() []string {
+	return p.manager.ListProviders()
+}
+
 // ImageExists checks if the image exists in the default provider.
 func (p *ProviderProxy) ImageExists(ctx context.Context) bool {
 	provider := p.manager.GetDefault()

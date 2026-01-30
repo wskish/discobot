@@ -2,8 +2,9 @@ import useSWR, { mutate } from "swr";
 import { api } from "../api-client";
 import type { CreateWorkspaceRequest } from "../api-types";
 
-// SWR key for workspaces
+// SWR keys
 const WORKSPACES_KEY = "workspaces";
+const SANDBOX_PROVIDERS_KEY = "sandbox-providers";
 
 /**
  * Invalidate the workspaces cache, triggering a refetch.
@@ -46,5 +47,17 @@ export function useWorkspaces() {
 		deleteWorkspace,
 		updateWorkspace,
 		mutate,
+	};
+}
+
+export function useSandboxProviders() {
+	const { data, error, isLoading } = useSWR(SANDBOX_PROVIDERS_KEY, () =>
+		api.getSandboxProviders(),
+	);
+
+	return {
+		providers: data?.providers || [],
+		isLoading,
+		error,
 	};
 }

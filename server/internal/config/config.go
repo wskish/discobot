@@ -49,7 +49,8 @@ type Config struct {
 	VZBaseDiskPath string // Path to base disk image to clone (optional)
 
 	// Local provider settings
-	LocalAgentBinary string // Path to agent API binary for local provider (default: obot-agent-api in PATH)
+	LocalProviderEnabled bool   // Enable local sandbox provider (default: false)
+	LocalAgentBinary     string // Path to agent API binary for local provider (default: obot-agent-api in PATH)
 
 	// SSH server settings
 	SSHEnabled     bool   // Enable SSH server (default: true)
@@ -147,6 +148,7 @@ func Load() (*Config, error) {
 	cfg.VZBaseDiskPath = getEnv("VZ_BASE_DISK_PATH", "")
 
 	// Local provider settings
+	cfg.LocalProviderEnabled = getEnvBool("LOCAL_PROVIDER_ENABLED", false)
 	cfg.LocalAgentBinary = getEnv("LOCAL_AGENT_BINARY", "obot-agent-api")
 
 	// SSH server settings

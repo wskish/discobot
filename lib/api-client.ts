@@ -105,6 +105,10 @@ class ApiClient {
 	}
 
 	// Workspaces
+	async getSandboxProviders(): Promise<{ providers: string[] }> {
+		return this.fetch<{ providers: string[] }>("/workspaces/providers");
+	}
+
 	async getWorkspaces(): Promise<{ workspaces: Workspace[] }> {
 		return this.fetch<{ workspaces: Workspace[] }>("/workspaces");
 	}

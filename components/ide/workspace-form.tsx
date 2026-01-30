@@ -2,6 +2,7 @@ import { SiGithub } from "@icons-pack/react-simple-icons";
 import {
 	AlertCircle,
 	Check,
+	ChevronDown,
 	Container,
 	GitBranch,
 	HardDrive,
@@ -13,6 +14,7 @@ import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import type { CreateWorkspaceRequest } from "@/lib/api-types";
 import { useSuggestions } from "@/lib/hooks/use-suggestions";
+import { useSandboxProviders } from "@/lib/hooks/use-workspaces";
 import { cn } from "@/lib/utils";
 
 type InputType = "unknown" | "local" | "git" | "github";
@@ -189,7 +191,11 @@ export const WorkspaceForm = React.forwardRef<
 	const [provider, setProvider] = React.useState<"docker" | "local">("docker");
 	const [showSuggestions, setShowSuggestions] = React.useState(false);
 	const [selectedIndex, setSelectedIndex] = React.useState(-1);
+	const [showAdvanced, setShowAdvanced] = React.useState(false);
 	const inputRef = React.useRef<HTMLInputElement>(null);
+
+	const { providers } = useSandboxProviders();
+	const hasMultipleProviders = providers.length > 1;
 
 	const inputType = detectInputType(input);
 
@@ -385,48 +391,77 @@ export const WorkspaceForm = React.forwardRef<
 					)}
 				</div>
 			</div>
-			<div className="space-y-3">
-				<Label className="text-sm font-medium">Sandbox Provider</Label>
-				<RadioGroup
-					value={provider}
-					onValueChange={(v) => setProvider(v as "docker" | "local")}
-				>
-					<div className="flex items-start space-x-3 p-3 rounded-lg border hover:bg-accent/50 transition-colors cursor-pointer">
-						<RadioGroupItem
-							value="docker"
-							id="provider-docker"
-							className="mt-0.5"
+
+			{hasMultipleProviders && (
+				<div className="space-y-3">
+					<button
+						type="button"
+						onClick={() => setShowAdvanced(!showAdvanced)}
+						className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+					>
+						<ChevronDown
+							className={cn(
+								"h-4 w-4 transition-transform",
+								showAdvanced && "rotate-180",
+							)}
 						/>
-						<Label htmlFor="provider-docker" className="flex-1 cursor-pointer">
-							<div className="flex items-center gap-2 mb-1">
-								<Container className="h-4 w-4 text-blue-500" />
-								<span className="font-medium">Docker (Recommended)</span>
-							</div>
-							<p className="text-xs text-muted-foreground">
-								Run agent in isolated container with full Docker support. Safer
-								and more compatible.
-							</p>
-						</Label>
-					</div>
-					<div className="flex items-start space-x-3 p-3 rounded-lg border hover:bg-accent/50 transition-colors cursor-pointer">
-						<RadioGroupItem
-							value="local"
-							id="provider-local"
-							className="mt-0.5"
-						/>
-						<Label htmlFor="provider-local" className="flex-1 cursor-pointer">
-							<div className="flex items-center gap-2 mb-1">
-								<Zap className="h-4 w-4 text-amber-500" />
-								<span className="font-medium">Local Process</span>
-							</div>
-							<p className="text-xs text-muted-foreground">
-								Run agent directly in workspace directory without containers.
-								Faster startup but no isolation.
-							</p>
-						</Label>
-					</div>
-				</RadioGroup>
-			</div>
+						<span>Advanced</span>
+					</button>
+
+					{showAdvanced && (
+						<div className="space-y-3 pl-6 border-l-2 border-border">
+							<Label className="text-sm font-medium">Sandbox Provider</Label>
+							<RadioGroup
+								value={provider}
+								onValueChange={(v) => setProvider(v as "docker" | "local")}
+							>
+								{providers.includes("docker") && (
+									<div className="flex items-start space-x-3 p-3 rounded-lg border hover:bg-accent/50 transition-colors cursor-pointer">
+										<RadioGroupItem
+											value="docker"
+											id="provider-docker"
+											className="mt-0.5"
+										/>
+										<Label
+											htmlFor="provider-docker"
+											className="flex-1 cursor-pointer"
+										>
+											<div className="flex items-center gap-2 mb-1">
+												<Container className="h-4 w-4 text-blue-500" />
+												<span className="font-medium">Docker</span>
+											</div>
+											<p className="text-xs text-muted-foreground">
+												Run in isolated container with full Docker support
+											</p>
+										</Label>
+									</div>
+								)}
+								{providers.includes("local") && (
+									<div className="flex items-start space-x-3 p-3 rounded-lg border hover:bg-accent/50 transition-colors cursor-pointer">
+										<RadioGroupItem
+											value="local"
+											id="provider-local"
+											className="mt-0.5"
+										/>
+										<Label
+											htmlFor="provider-local"
+											className="flex-1 cursor-pointer"
+										>
+											<div className="flex items-center gap-2 mb-1">
+												<Zap className="h-4 w-4 text-amber-500" />
+												<span className="font-medium">Local Process</span>
+											</div>
+											<p className="text-xs text-muted-foreground">
+												Run directly in workspace without containers
+											</p>
+										</Label>
+									</div>
+								)}
+							</RadioGroup>
+						</div>
+					)}
+				</div>
+			)}
 
 			{showFormatHints && (
 				<div className="text-xs text-muted-foreground space-y-1">

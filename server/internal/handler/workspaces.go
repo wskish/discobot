@@ -182,3 +182,18 @@ func (h *Handler) DeleteWorkspace(w http.ResponseWriter, r *http.Request) {
 
 	h.JSON(w, http.StatusOK, map[string]bool{"success": true})
 }
+
+// GetSandboxProviders returns the list of available sandbox providers
+func (h *Handler) GetSandboxProviders(w http.ResponseWriter, _ *http.Request) {
+	// Check if sandboxProvider is a ProviderProxy that exposes ListProviders
+	type providerLister interface {
+		ListProviders() []string
+	}
+
+	var providers []string
+	if pl, ok := h.sandboxProvider.(providerLister); ok {
+		providers = pl.ListProviders()
+	}
+
+	h.JSON(w, http.StatusOK, map[string]any{"providers": providers})
+}
