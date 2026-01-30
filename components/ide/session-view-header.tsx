@@ -153,6 +153,14 @@ export function SessionViewHeader() {
 				>
 					Terminal
 				</Button>
+				<Button
+					variant={activeView === "consolidated-diff" ? "secondary" : "ghost"}
+					size="sm"
+					className="h-6 text-xs shrink-0"
+					onClick={() => setActiveView("consolidated-diff")}
+				>
+					All Changes
+				</Button>
 				{selectedSessionId && (
 					<div className="shrink-0">
 						<IDELauncher sessionId={selectedSessionId} />
@@ -345,29 +353,36 @@ export function SessionViewHeader() {
 						{showCommitLoading ? "Committing..." : "Commit"}
 					</Button>
 				)}
-				{onToggleRightSidebar &&
-					(rightSidebarOpen ? (
-						<Button
-							variant="ghost"
-							size="icon"
-							className="h-6 w-6"
-							onClick={onToggleRightSidebar}
-							title="Collapse Files"
-						>
-							<PanelRightClose className="h-3.5 w-3.5" />
-						</Button>
-					) : (
+				{onToggleRightSidebar && (
+					<>
 						<Button
 							variant="ghost"
 							size="sm"
 							className="h-6 text-xs"
-							onClick={onToggleRightSidebar}
+							onClick={() => {
+								setActiveView("consolidated-diff");
+								if (!rightSidebarOpen) {
+									onToggleRightSidebar();
+								}
+							}}
 						>
 							{changedFilesCount > 0
 								? `Changes (${changedFilesCount})`
 								: "Files"}
 						</Button>
-					))}
+						{rightSidebarOpen && (
+							<Button
+								variant="ghost"
+								size="icon"
+								className="h-6 w-6"
+								onClick={onToggleRightSidebar}
+								title="Collapse Files"
+							>
+								<PanelRightClose className="h-3.5 w-3.5" />
+							</Button>
+						)}
+					</>
+				)}
 			</div>
 		</div>
 	);

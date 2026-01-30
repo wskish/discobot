@@ -528,9 +528,10 @@ export interface ServiceOutputEvent {
 // UI Types
 // ============================================================================
 
-/** Active view type in the session view - includes chat, terminal, services, and file paths */
+/** Active view type in the session view - includes chat, terminal, services, file paths, and consolidated diff */
 export type ActiveView =
 	| "chat"
 	| "terminal"
+	| "consolidated-diff"
 	| `service:${string}`
 	| `file:${string}`;

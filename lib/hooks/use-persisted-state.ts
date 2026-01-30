@@ -65,4 +65,7 @@ export const STORAGE_KEYS = {
 	OPEN_FILE_PATHS: "octobot:openFilePaths",
 	ACTIVE_FILE_PATH: "octobot:activeFilePath",
 	FILE_VIEW_MODES: "octobot:fileViewModes",
+	// Consolidated diff view state
+	CONSOLIDATED_DIFF_EXPANDED: "octobot:consolidatedDiffExpanded",
+	CONSOLIDATED_DIFF_REVIEWED: "octobot:consolidatedDiffReviewed",
 } as const;

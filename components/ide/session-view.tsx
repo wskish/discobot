@@ -1,5 +1,6 @@
 import * as React from "react";
 import { ChatPanel } from "@/components/ide/chat-panel";
+import { ConsolidatedDiffView } from "@/components/ide/consolidated-diff-view";
 import { DiffContent } from "@/components/ide/diff-content";
 import { FilePanel } from "@/components/ide/file-panel";
 import { ResizeHandle } from "@/components/ide/resize-handle";
@@ -158,6 +159,18 @@ export function SessionView({ isNew, onSessionCreated }: SessionViewProps) {
 								hideHeader
 								onConnectionStatusChange={setTerminalStatus}
 							/>
+						</div>
+					)}
+					{/* Consolidated diff view - GitHub-style stacked diffs */}
+					{selectedSessionId && (
+						<div
+							className={cn(
+								"absolute inset-0",
+								activeView !== "consolidated-diff" &&
+									"invisible pointer-events-none",
+							)}
+						>
+							<ConsolidatedDiffView />
 						</div>
 					)}
 					{/* Service views - lazy mounted, stay mounted once viewed */}
