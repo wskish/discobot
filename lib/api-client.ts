@@ -203,12 +203,17 @@ class ApiClient {
 	 * Read a file from a session's workspace.
 	 * @param sessionId Session ID
 	 * @param path File path relative to workspace root
+	 * @param options.fromBase If true, read from base commit (for deleted files)
 	 */
 	async readSessionFile(
 		sessionId: string,
 		path: string,
+		options?: { fromBase?: boolean },
 	): Promise<ReadSessionFileResponse> {
 		const params = new URLSearchParams({ path });
+		if (options?.fromBase) {
+			params.set("fromBase", "true");
+		}
 		return this.fetch<ReadSessionFileResponse>(
 			`/sessions/${sessionId}/files/read?${params}`,
 		);

@@ -184,7 +184,7 @@ func (h *Handler) ListSessionFiles(w http.ResponseWriter, r *http.Request) {
 }
 
 // ReadSessionFile reads a file from a session's workspace.
-// GET /api/projects/{projectId}/sessions/{sessionId}/files/read?path=...
+// GET /api/projects/{projectId}/sessions/{sessionId}/files/read?path=...&fromBase=true
 func (h *Handler) ReadSessionFile(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	projectID := middleware.GetProjectID(ctx)
@@ -201,7 +201,17 @@ func (h *Handler) ReadSessionFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := h.chatService.ReadFile(ctx, projectID, sessionID, path)
+	fromBase := r.URL.Query().Get("fromBase") == "true"
+
+	var result *sandboxapi.ReadFileResponse
+	var err error
+
+	if fromBase {
+		result, err = h.chatService.ReadFileFromBase(ctx, projectID, sessionID, path)
+	} else {
+		result, err = h.chatService.ReadFile(ctx, projectID, sessionID, path)
+	}
+
 	if err != nil {
 		status := http.StatusInternalServerError
 		if strings.Contains(err.Error(), "not found") {

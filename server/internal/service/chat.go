@@ -30,10 +30,11 @@ type ChatService struct {
 	jobEnqueuer       SessionInitEnqueuer
 	eventBroker       *events.Broker
 	sandboxClient     *SandboxChatClient
+	gitService        *GitService
 }
 
 // NewChatService creates a new chat service.
-func NewChatService(s *store.Store, sessionService *SessionService, credentialService *CredentialService, jobEnqueuer SessionInitEnqueuer, eventBroker *events.Broker, sandboxProvider sandbox.Provider) *ChatService {
+func NewChatService(s *store.Store, sessionService *SessionService, credentialService *CredentialService, jobEnqueuer SessionInitEnqueuer, eventBroker *events.Broker, sandboxProvider sandbox.Provider, gitService *GitService) *ChatService {
 	var client *SandboxChatClient
 	if sandboxProvider != nil {
 		fetcher := makeCredentialFetcher(s, credentialService)
@@ -46,6 +47,7 @@ func NewChatService(s *store.Store, sessionService *SessionService, credentialSe
 		jobEnqueuer:       jobEnqueuer,
 		eventBroker:       eventBroker,
 		sandboxClient:     client,
+		gitService:        gitService,
 	}
 }
 
@@ -431,6 +433,54 @@ func (c *ChatService) ReadFile(ctx context.Context, projectID, sessionID, path s
 	return withSandboxReconciliation(ctx, c, projectID, sessionID, func() (*sandboxapi.ReadFileResponse, error) {
 		return c.sandboxClient.ReadFile(ctx, sessionID, path)
 	})
+}
+
+// ReadFileFromBase reads a file from the base commit (for deleted files).
+// This is useful for displaying diffs of deleted files.
+func (c *ChatService) ReadFileFromBase(ctx context.Context, projectID, sessionID, path string) (*sandboxapi.ReadFileResponse, error) {
+	// Validate session belongs to project
+	session, err := c.GetSession(ctx, projectID, sessionID)
+	if err != nil {
+		return nil, err
+	}
+
+	if c.gitService == nil {
+		return nil, fmt.Errorf("git service not available")
+	}
+
+	// Get workspace to find base commit
+	workspace, err := c.store.GetWorkspaceByID(ctx, session.WorkspaceID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get workspace: %w", err)
+	}
+
+	if workspace.SourceType != "git" {
+		return nil, fmt.Errorf("workspace is not a git repository")
+	}
+
+	// Use base commit from session if available, otherwise use workspace commit
+	var baseCommit string
+	if session.BaseCommit != nil {
+		baseCommit = *session.BaseCommit
+	} else if workspace.Commit != nil {
+		baseCommit = *workspace.Commit
+	}
+
+	if baseCommit == "" {
+		return nil, fmt.Errorf("no base commit available")
+	}
+
+	// Read file from git at base commit
+	content, err := c.gitService.ReadFile(ctx, workspace.ID, baseCommit, path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read file from base commit: %w", err)
+	}
+
+	return &sandboxapi.ReadFileResponse{
+		Content:  string(content),
+		Encoding: "utf-8",
+		Size:     int64(len(content)),
+	}, nil
 }
 
 // WriteFile writes file content to the sandbox.
