@@ -1,9 +1,26 @@
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
-import { defineConfig } from "vite";
+import { defineConfig, Plugin } from "vite";
 import tsconfigPaths from "vite-tsconfig-paths";
 
 const isTauri = process.env.TAURI_ENV_PLATFORM !== undefined;
+
+// Plugin to inject React DevTools script before React loads
+function reactDevTools(): Plugin {
+	const devToolsUrl = process.env.REACT_DEVTOOLS_URL;
+	return {
+		name: "react-devtools",
+		transformIndexHtml(html) {
+			if (!devToolsUrl) return html;
+
+			// Inject script tag before the closing </head>
+			return html.replace(
+				"<!-- React DevTools - will be injected by Vite plugin -->",
+				`<script src="${devToolsUrl}"></script>`
+			);
+		},
+	};
+}
 
 export default defineConfig({
 	plugins: [
@@ -13,6 +30,7 @@ export default defineConfig({
 			// Only parse root tsconfig, ignore workspace directories
 			projects: ["./tsconfig.json"],
 		}),
+		reactDevTools(),
 	],
 	define: {
 		// Prevent process.env errors in browser
