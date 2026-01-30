@@ -62,7 +62,7 @@ fn generate_secret() -> String {
 fn start_server(app: &tauri::AppHandle, port: u16, secret: &str) -> Result<CommandChild, String> {
     let sidecar = app
         .shell()
-        .sidecar("binaries/discobot-server")
+        .sidecar("discobot-server")
         .map_err(|e| format!("Failed to create sidecar command: {}", e))?
         .env("PORT", port.to_string())
         .env("DISCOBOT_SECRET", secret)

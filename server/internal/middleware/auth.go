@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"context"
+	"crypto/subtle"
 	"net/http"
 
 	"github.com/obot-platform/discobot/server/internal/config"
@@ -19,6 +20,37 @@ const (
 )
 
 const sessionCookieName = "discobot_session"
+const tauriSecretCookieName = "discobot_secret"
+
+// TauriAuth middleware validates the Tauri secret cookie.
+// Only active when cfg.TauriMode is true.
+// Rejects requests without valid secret with 401 Unauthorized.
+func TauriAuth(cfg *config.Config) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Skip if not in Tauri mode
+			if !cfg.TauriMode {
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			// Get the secret cookie
+			cookie, err := r.Cookie(tauriSecretCookieName)
+			if err != nil {
+				http.Error(w, `{"error":"Tauri authentication required"}`, http.StatusUnauthorized)
+				return
+			}
+
+			// Constant-time comparison to prevent timing attacks
+			if subtle.ConstantTimeCompare([]byte(cookie.Value), []byte(cfg.TauriSecret)) != 1 {
+				http.Error(w, `{"error":"Invalid Tauri secret"}`, http.StatusUnauthorized)
+				return
+			}
+
+			next.ServeHTTP(w, r)
+		})
+	}
+}
 
 // Auth middleware validates user authentication.
 // If auth is disabled (cfg.AuthEnabled == false), it uses the anonymous user.

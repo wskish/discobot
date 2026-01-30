@@ -27,7 +27,7 @@
 			"identifier": "shell:allow-spawn",
 			"allow": [
 				{
-					"name": "binaries/discobot-server",
+					"name": "discobot-server",
 					"sidecar": true
 				}
 			]

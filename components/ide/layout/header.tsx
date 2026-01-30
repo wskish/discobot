@@ -6,7 +6,6 @@ import {
 	Plus,
 } from "lucide-react";
 import * as React from "react";
-import { CredentialsDialog } from "@/components/ide/dialogs/credentials-dialog";
 import { DiscobotBrand } from "@/components/ide/discobot-brand";
 import { SessionDropdownItem } from "@/components/ide/session-dropdown-item";
 import { getSessionDisplayName } from "@/components/ide/session-name";
@@ -75,7 +74,6 @@ export function Header({ leftSidebarOpen, onToggleSidebar }: HeaderProps) {
 		}
 	}, [selectedWorkspaceId, setPersistedWorkspaceId]);
 
-	const [credentialsOpen, setCredentialsOpen] = React.useState(false);
 	const [confirmDeleteSessionId, setConfirmDeleteSessionId] = React.useState<
 		string | null
 	>(null);
@@ -344,7 +342,7 @@ export function Header({ leftSidebarOpen, onToggleSidebar }: HeaderProps) {
 				<Button
 					variant="ghost"
 					size="icon"
-					onClick={() => setCredentialsOpen(true)}
+					onClick={() => dialogs.credentialsDialog.open()}
 					title="API Credentials"
 					className="tauri-no-drag"
 				>
@@ -355,11 +353,6 @@ export function Header({ leftSidebarOpen, onToggleSidebar }: HeaderProps) {
 				{/* Windows/Linux window controls on the right */}
 				{IS_TAURI && !isMac && <WindowControls />}
 			</div>
-
-			<CredentialsDialog
-				open={credentialsOpen}
-				onOpenChange={setCredentialsOpen}
-			/>
 		</header>
 	);
 }

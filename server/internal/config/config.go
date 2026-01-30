@@ -78,6 +78,10 @@ type Config struct {
 	AnthropicClientID     string
 	GitHubCopilotClientID string
 	CodexClientID         string
+
+	// Tauri mode settings
+	TauriMode   bool   // Running inside Tauri app (TAURI=true)
+	TauriSecret string // Shared secret for Tauri auth (DISCOBOT_SECRET)
 }
 
 // Load reads configuration from environment variables
@@ -174,6 +178,13 @@ func Load() (*Config, error) {
 	cfg.AnthropicClientID = getEnv("ANTHROPIC_CLIENT_ID", "9d1c250a-e61b-44d9-88ed-5944d1962f5e")
 	cfg.GitHubCopilotClientID = getEnv("GITHUB_COPILOT_CLIENT_ID", "Iv1.b507a08c87ecfe98")
 	cfg.CodexClientID = getEnv("CODEX_CLIENT_ID", "app_EMoamEEZ73f0CkXaXp7hrann")
+
+	// Tauri mode settings
+	cfg.TauriMode = getEnvBool("TAURI", false)
+	cfg.TauriSecret = getEnv("DISCOBOT_SECRET", "")
+	if cfg.TauriMode && cfg.TauriSecret == "" {
+		return nil, fmt.Errorf("DISCOBOT_SECRET is required when TAURI=true")
+	}
 
 	return cfg, nil
 }

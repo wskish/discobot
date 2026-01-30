@@ -250,6 +250,9 @@ func main() {
 	r.Use(chimiddleware.Recoverer)
 	// Note: No global timeout - SSE endpoints need long-lived connections
 
+	// Tauri auth middleware - validates secret cookie when running in Tauri mode
+	r.Use(middleware.TauriAuth(cfg))
+
 	// Service subdomain proxy - intercepts {session-id}-svc-{service-id}.* domains
 	// and proxies to agent-api's HTTP proxy endpoint without credentials.
 	// IMPORTANT: This must run BEFORE CORS middleware so that OPTIONS requests

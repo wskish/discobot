@@ -746,7 +746,8 @@ export class ACPClient implements Agent {
 	// Persistence helpers for per-session files
 	private getSessionDir(sessionId: string): string {
 		const baseDir =
-			process.env.SESSION_BASE_DIR || "/home/discobot/.config/discobot/sessions";
+			process.env.SESSION_BASE_DIR ||
+			"/home/discobot/.config/discobot/sessions";
 		return join(baseDir, sessionId);
 	}
 

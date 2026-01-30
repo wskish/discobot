@@ -1,12 +1,12 @@
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
-import { defineConfig, Plugin } from "vite";
+import { defineConfig, type Plugin } from "vite";
 import tsconfigPaths from "vite-tsconfig-paths";
 import "dotenv/config";
 
 // Plugin to inject React DevTools script before React loads
 function reactDevTools(): Plugin {
-	let devToolsUrl = process.env.REACT_DEVTOOLS_URL;
+	const devToolsUrl = process.env.REACT_DEVTOOLS_URL;
 	return {
 		name: "react-devtools",
 		transformIndexHtml(html) {
@@ -15,7 +15,7 @@ function reactDevTools(): Plugin {
 			// Inject script tag before the closing </head>
 			return html.replace(
 				"<!-- React DevTools - will be injected by Vite plugin -->",
-				`<script src="${devToolsUrl}"></script>`
+				`<script src="${devToolsUrl}"></script>`,
 			);
 		},
 	};
@@ -55,8 +55,11 @@ export default defineConfig({
 				manualChunks: {
 					monaco: ["@monaco-editor/react"],
 					xterm: ["@xterm/xterm", "@xterm/addon-fit", "@xterm/addon-web-links"],
-					"ai-sdk": ["ai", "@ai-sdk/react"],
-					radix: [
+					// Combine ai-sdk and radix into one chunk to avoid circular dependency
+					// (ai-sdk uses radix components internally)
+					"ui-core": [
+						"ai",
+						"@ai-sdk/react",
 						"@radix-ui/react-dialog",
 						"@radix-ui/react-dropdown-menu",
 						"@radix-ui/react-select",
@@ -68,8 +71,8 @@ export default defineConfig({
 				},
 			},
 		},
-		// Increase chunk size warning limit (Monaco is large)
-		chunkSizeWarningLimit: 1000,
+		// Increase chunk size warning limit (main bundle with React, SWR, etc.)
+		chunkSizeWarningLimit: 1500,
 	},
 	// Handle SSE streaming properly
 	optimizeDeps: {
