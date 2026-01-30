@@ -2,12 +2,11 @@ import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig, Plugin } from "vite";
 import tsconfigPaths from "vite-tsconfig-paths";
-
-const isTauri = process.env.TAURI_ENV_PLATFORM !== undefined;
+import "dotenv/config";
 
 // Plugin to inject React DevTools script before React loads
 function reactDevTools(): Plugin {
-	const devToolsUrl = process.env.REACT_DEVTOOLS_URL;
+	let devToolsUrl = process.env.REACT_DEVTOOLS_URL;
 	return {
 		name: "react-devtools",
 		transformIndexHtml(html) {
@@ -48,7 +47,7 @@ export default defineConfig({
 		strictPort: true,
 	},
 	build: {
-		outDir: isTauri ? "dist" : "out",
+		outDir: "dist",
 		emptyOutDir: true,
 		// Optimize chunks
 		rollupOptions: {

@@ -4,8 +4,7 @@
 	"version": "../package.json",
 	"identifier": "ai.obot.oct",
 	"build": {
-		"beforeDevCommand": "pnpm dev:vite",
-		"devUrl": "http://localhost:5173",
+		"devUrl": "http://localhost:3000",
 		"beforeBuildCommand": "pnpm build:server && pnpm build:vite",
 		"frontendDist": "../dist"
 	},

@@ -214,7 +214,7 @@ The terminal uses xterm.js with WebSocket-like API compatibility. Commands are s
 
 ### AI Chat Integration
 
-Chat uses Vercel AI SDK v5:
+Chat uses Vercel AI SDK v6:
 - Route handler at `/api/chat` uses `streamText` with `DefaultChatTransport`
 - Frontend uses `useChat` hook from `ai/react`
 - Custom AI elements in `components/ai-elements/` wrap the SDK components

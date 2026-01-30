@@ -17,7 +17,6 @@ type Config struct {
 	// Server settings
 	Port               int
 	CORSOrigins        []string
-	IsTauri            bool // True when running inside Tauri desktop app
 	SuggestionsEnabled bool // Enable filesystem suggestions API (default: false)
 
 	// Database
@@ -87,13 +86,7 @@ func Load() (*Config, error) {
 
 	// Server
 	cfg.Port = getEnvInt("PORT", 3001)
-	cfg.CORSOrigins = getEnvList("CORS_ORIGINS", []string{
-		"http://localhost:3000",
-		"http://localhost:3001",
-		"http://*.localhost:3000",
-		"http://*.localhost:3001",
-	})
-	cfg.IsTauri = getEnvBool("TAURI", false)
+	cfg.CORSOrigins = getEnvList("CORS_ORIGINS", nil)
 	cfg.SuggestionsEnabled = getEnvBool("SUGGESTIONS_ENABLED", false)
 
 	// Database
