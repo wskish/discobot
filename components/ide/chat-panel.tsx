@@ -17,6 +17,7 @@ import {
 	CommitStatus,
 	SessionStatus as SessionStatusConstants,
 } from "@/lib/api-constants";
+import { useMessages } from "@/lib/hooks/use-messages";
 import { useSession } from "@/lib/hooks/use-sessions";
 import {
 	getSessionHoverText,
@@ -115,6 +116,15 @@ export function ChatPanel({
 
 	// Fetch session data to check if session exists (only for existing sessions)
 	const { session } = useSession(resume ? sessionId : null);
+
+	// Invalidate messages cache when chat panel mounts for existing sessions
+	const { mutate: invalidateMessages } = useMessages(resume ? sessionId : null);
+
+	React.useEffect(() => {
+		if (resume && sessionId) {
+			invalidateMessages();
+		}
+	}, [resume, sessionId, invalidateMessages]);
 
 	// Use refs to store the latest selection values for use in fetch
 	// This ensures sendMessage always uses current values even if useChat caches the transport
