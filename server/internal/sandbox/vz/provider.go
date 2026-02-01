@@ -256,8 +256,8 @@ func (p *Provider) Create(ctx context.Context, sessionID string, opts sandbox.Cr
 	// Prepare metadata
 	metadata := map[string]string{
 		"name":             vmName(sessionID),
-		"discobot.managed":  "true",
-		"discobot.session":  sessionID,
+		"discobot.managed": "true",
+		"discobot.session": sessionID,
 		"workspace.path":   opts.WorkspacePath,
 		"workspace.commit": opts.WorkspaceCommit,
 	}

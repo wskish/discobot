@@ -68,7 +68,7 @@ const (
 	stagingDir      = "/.data/discobot/workspace.staging"
 	agentFSDir      = "/.data/.agentfs"
 	overlayFSDir    = "/.data/.overlayfs"
-	mountHome       = "/home/discobot"     // Where agentfs/overlayfs mounts
+	mountHome       = "/home/discobot"    // Where agentfs/overlayfs mounts
 	symlinkPath     = "/workspace"        // Symlink to /home/discobot/workspace
 	tempMigrationFS = "/.data/.migration" // Temporary mount point for migration
 )
@@ -286,6 +286,13 @@ func run() error {
 		fmt.Printf("discobot-agent: warning: failed to fix localhost resolution: %v\n", err)
 	}
 
+	// Fix MTU for nested Docker to prevent TLS handshake timeouts
+	// This works around MTU blackhole issues where large packets get dropped
+	if err := fixMTUForNestedDocker(); err != nil {
+		// Log but don't fail - this is a best-effort fix
+		fmt.Printf("discobot-agent: warning: failed to fix MTU for nested Docker: %v\n", err)
+	}
+
 	// Determine configuration from environment
 	agentBinary := envOrDefault("AGENT_BINARY", defaultAgentBinary)
 	runAsUser := envOrDefault("AGENT_USER", defaultUser)
@@ -498,11 +505,12 @@ func fixLocalhostResolution() error {
 		}
 
 		// This line has localhost
-		if ip == "127.0.0.1" {
+		switch ip {
+		case "127.0.0.1":
 			// Keep IPv4 localhost line
 			newLines = append(newLines, line)
 			hasIPv4Localhost = true
-		} else if ip == "::1" {
+		case "::1":
 			// Remove localhost from IPv6 line, but keep other hostnames
 			var remainingHostnames []string
 			for _, h := range hostnames {
@@ -518,7 +526,7 @@ func fixLocalhostResolution() error {
 			// If no remaining hostnames, the line is dropped entirely
 			modified = true
 			fmt.Printf("discobot-agent: removed 'localhost' from ::1 line in /etc/hosts\n")
-		} else {
+		default:
 			// Some other IP with localhost, keep it
 			newLines = append(newLines, line)
 		}
@@ -543,6 +551,35 @@ func fixLocalhostResolution() error {
 	}
 
 	fmt.Printf("discobot-agent: /etc/hosts updated to ensure localhost resolves to 127.0.0.1\n")
+	return nil
+}
+
+// fixMTUForNestedDocker configures TCP settings to work around MTU blackhole issues
+// in nested Docker environments where path MTU discovery fails.
+//
+// The fix works by:
+// 1. Disabling PMTU discovery (which relies on ICMP that gets blocked in nested Docker)
+// 2. Enabling TCP MTU probing (ICMP-free mechanism that auto-detects working packet size)
+//
+// With these settings, TCP automatically discovers the optimal MTU without needing to
+// reduce the interface MTU, allowing maximum throughput while avoiding packet drops.
+func fixMTUForNestedDocker() error {
+	// Disable path MTU discovery to prevent relying on ICMP (which may be blocked in nested Docker)
+	// When PMTUD fails, packets are sent at full MTU and silently dropped if too large
+	cmd := exec.Command("sysctl", "-w", "net.ipv4.ip_no_pmtu_disc=1")
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("failed to disable PMTU discovery: %w (output: %s)", err, output)
+	}
+
+	// Enable TCP MTU probing as a fallback mechanism
+	// This allows TCP to discover working MTU by detecting dropped packets and trying smaller sizes
+	// This works without ICMP and is essential for nested Docker where ICMP is unreliable
+	cmd = exec.Command("sysctl", "-w", "net.ipv4.tcp_mtu_probing=1")
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("failed to enable TCP MTU probing: %w (output: %s)", err, output)
+	}
+
+	fmt.Printf("discobot-agent: configured TCP MTU probing for nested Docker (PMTUD disabled, TCP probing enabled)\n")
 	return nil
 }
 
@@ -1091,7 +1128,7 @@ export NODE_EXTRA_CA_CERTS=%s
 	if err != nil {
 		return fmt.Errorf("failed to open %s: %w", profilePath, err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	if _, err := f.WriteString(content); err != nil {
 		return fmt.Errorf("failed to write to %s: %w", profilePath, err)
@@ -1114,6 +1151,42 @@ func startDockerDaemon(proxyEnabled bool) (*exec.Cmd, error) {
 	if err := os.MkdirAll("/var/run", 0755); err != nil {
 		return nil, fmt.Errorf("failed to create /var/run: %w", err)
 	}
+
+	// Create Docker daemon configuration with MTU based on current interface MTU
+	// Docker containers need a lower MTU than the host interface to account for
+	// additional overhead (VXLAN, overlay networks, etc.)
+	if err := os.MkdirAll("/etc/docker", 0755); err != nil {
+		return nil, fmt.Errorf("failed to create /etc/docker: %w", err)
+	}
+
+	// Read current MTU from eth0 to calculate appropriate Docker MTU
+	mtuBytes, err := os.ReadFile("/sys/class/net/eth0/mtu")
+	if err != nil {
+		return nil, fmt.Errorf("failed to read current MTU: %w", err)
+	}
+	currentMTU, err := strconv.Atoi(strings.TrimSpace(string(mtuBytes)))
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse MTU: %w", err)
+	}
+
+	// Subtract overhead for Docker networking (typically 50-100 bytes)
+	// We use 100 to be conservative and ensure packets don't fragment
+	dockerMTU := currentMTU - 100
+	if dockerMTU < 1200 {
+		dockerMTU = 1200 // Ensure minimum viable MTU
+	}
+
+	daemonConfig := map[string]interface{}{
+		"mtu": dockerMTU,
+	}
+	configBytes, err := json.MarshalIndent(daemonConfig, "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal daemon config: %w", err)
+	}
+	if err := os.WriteFile("/etc/docker/daemon.json", configBytes, 0644); err != nil {
+		return nil, fmt.Errorf("failed to write daemon.json: %w", err)
+	}
+	fmt.Printf("discobot-agent: configured Docker daemon with MTU=%d (interface MTU: %d, overhead: 100)\n", dockerMTU, currentMTU)
 
 	// Start dockerd in the background
 	// Use --storage-driver=overlay2 which works well in containers
@@ -1349,7 +1422,7 @@ func generateCACertificate(certPath, keyPath string) error {
 	if err != nil {
 		return fmt.Errorf("create cert file: %w", err)
 	}
-	defer certFile.Close()
+	defer func() { _ = certFile.Close() }()
 
 	if err := pem.Encode(certFile, &pem.Block{Type: "CERTIFICATE", Bytes: certDER}); err != nil {
 		return fmt.Errorf("encode certificate: %w", err)
@@ -1360,7 +1433,7 @@ func generateCACertificate(certPath, keyPath string) error {
 	if err != nil {
 		return fmt.Errorf("create key file: %w", err)
 	}
-	defer keyFile.Close()
+	defer func() { _ = keyFile.Close() }()
 
 	keyDER := x509.MarshalPKCS1PrivateKey(privateKey)
 	if err := pem.Encode(keyFile, &pem.Block{Type: "RSA PRIVATE KEY", Bytes: keyDER}); err != nil {
