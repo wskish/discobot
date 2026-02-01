@@ -117,8 +117,10 @@ export function ChatPanel({
 	// Fetch session data to check if session exists (only for existing sessions)
 	const { session } = useSession(resume ? sessionId : null);
 
-	// Invalidate messages cache when chat panel mounts for existing sessions
-	const { mutate: invalidateMessages } = useMessages(resume ? sessionId : null);
+	// Fetch messages from SWR for existing sessions
+	const { messages: swrMessages, mutate: invalidateMessages } = useMessages(
+		resume ? sessionId : null,
+	);
 
 	React.useEffect(() => {
 		if (resume && sessionId) {
@@ -188,6 +190,7 @@ export function ChatPanel({
 
 	const {
 		messages,
+		setMessages,
 		sendMessage,
 		status: chatStatus,
 		error: chatError,
@@ -199,6 +202,27 @@ export function ChatPanel({
 		messages: initialMessages,
 		onFinish: onChatComplete,
 	});
+
+	// Sync SWR messages with useChat when they change (after refetch)
+	// This ensures that when we invalidate the cache and get fresh messages,
+	// the chat UI updates to show them instead of stale initialMessages
+	const prevSwrMessagesRef = React.useRef<UIMessage[]>([]);
+
+	React.useEffect(() => {
+		if (resume && swrMessages.length > 0) {
+			// Check if swrMessages actually changed by comparing with previous value
+			const swrMessagesChanged =
+				swrMessages.length !== prevSwrMessagesRef.current.length ||
+				swrMessages.some(
+					(msg, i) => msg.id !== prevSwrMessagesRef.current[i]?.id,
+				);
+
+			if (swrMessagesChanged) {
+				prevSwrMessagesRef.current = swrMessages;
+				setMessages(swrMessages);
+			}
+		}
+	}, [resume, swrMessages, setMessages]);
 
 	// Derive loading state from chat status
 	const isLoading = chatStatus === "streaming" || chatStatus === "submitted";
