@@ -301,7 +301,7 @@ func (p *Provider) Create(ctx context.Context, sessionID string, opts sandbox.Cr
 	containerConfig.ExposedPorts = nat.PortSet{port: struct{}{}}
 	hostConfig.PortBindings = nat.PortMap{
 		port: []nat.PortBinding{{
-			HostIP:   "0.0.0.0",
+			HostIP:   "127.0.0.1",
 			HostPort: "", // Empty = Docker assigns random available port
 		}},
 	}
