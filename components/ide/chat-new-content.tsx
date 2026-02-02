@@ -1,31 +1,23 @@
 import * as React from "react";
-import { lazy, Suspense } from "react";
+import {
+	WelcomeHeader,
+	WelcomeSelectors,
+} from "@/components/ide/welcome-animation";
 import type { Agent, Icon } from "@/lib/api-types";
 import { useDialogContext } from "@/lib/contexts/dialog-context";
 import { useAgentTypes } from "@/lib/hooks/use-agent-types";
 import { useAgents } from "@/lib/hooks/use-agents";
+import {
+	STORAGE_KEYS,
+	usePersistedState,
+} from "@/lib/hooks/use-persisted-state";
 import { useWorkspaces } from "@/lib/hooks/use-workspaces";
-
-// Lazy-load Framer Motion components to reduce initial bundle size (~35KB)
-const WelcomeHeader = lazy(() =>
-	import("@/components/ide/welcome-animation").then((mod) => ({
-		default: mod.WelcomeHeader,
-	})),
-);
-
-const WelcomeSelectors = lazy(() =>
-	import("@/components/ide/welcome-animation").then((mod) => ({
-		default: mod.WelcomeSelectors,
-	})),
-);
 
 interface ChatNewContentProps {
 	/** Whether to show the welcome UI */
 	show: boolean;
-	/** Currently selected workspace ID (for form submission) */
-	selectedWorkspaceId: string | null;
-	/** Currently selected agent ID (for form submission) */
-	selectedAgentId: string | null;
+	/** Initial workspace ID (from context, passed down as prop) */
+	initialWorkspaceId: string | null;
 	/** Callback when workspace selection changes */
 	onWorkspaceChange: (workspaceId: string | null) => void;
 	/** Callback when agent selection changes */
@@ -39,8 +31,7 @@ interface ChatNewContentProps {
  */
 export function ChatNewContent({
 	show,
-	selectedWorkspaceId,
-	selectedAgentId,
+	initialWorkspaceId,
 	onWorkspaceChange,
 	onAgentChange,
 }: ChatNewContentProps) {
@@ -49,42 +40,127 @@ export function ChatNewContent({
 	const { agents } = useAgents();
 	const { agentTypes } = useAgentTypes();
 
-	const [localSelectedWorkspaceId, setLocalSelectedWorkspaceId] =
-		React.useState<string | null>(selectedWorkspaceId);
-	const [localSelectedAgentId, setLocalSelectedAgentId] = React.useState<
+	// Persist agent ID selection in localStorage (component-local state)
+	const [localSelectedAgentId, setLocalSelectedAgentId] = usePersistedState<
 		string | null
-	>(selectedAgentId);
-	const [isShimmering, _setIsShimmering] = React.useState(false);
+	>(STORAGE_KEYS.SELECTED_AGENT_ID, null);
 
-	// Sync local state with props
-	React.useEffect(() => {
-		setLocalSelectedWorkspaceId(selectedWorkspaceId);
-	}, [selectedWorkspaceId]);
+	// Initialize workspace state from prop
+	const [localSelectedWorkspaceId, setLocalSelectedWorkspaceId] =
+		React.useState<string | null>(initialWorkspaceId);
 
-	React.useEffect(() => {
-		setLocalSelectedAgentId(selectedAgentId);
-	}, [selectedAgentId]);
+	// Track if we've notified parent of initial selections
+	const hasNotifiedWorkspaceRef = React.useRef(false);
+	const hasNotifiedAgentRef = React.useRef(false);
 
-	// Auto-select first workspace when workspaces become available and nothing is selected
+	// Track the previous initialWorkspaceId to detect when it changes (navigation)
+	const prevInitialWorkspaceIdRef = React.useRef(initialWorkspaceId);
+
+	// Sync workspace with initial value only when initialWorkspaceId changes (not when local state changes)
 	React.useEffect(() => {
-		const currentWorkspaceExists = workspaces.some(
-			(ws) => ws.id === localSelectedWorkspaceId,
-		);
-		if (!localSelectedWorkspaceId || !currentWorkspaceExists) {
-			const workspaceToSelect = workspaces[0];
-			if (workspaceToSelect) {
+		if (
+			initialWorkspaceId &&
+			initialWorkspaceId !== prevInitialWorkspaceIdRef.current
+		) {
+			prevInitialWorkspaceIdRef.current = initialWorkspaceId;
+			setLocalSelectedWorkspaceId(initialWorkspaceId);
+			onWorkspaceChange(initialWorkspaceId);
+			hasNotifiedWorkspaceRef.current = true;
+		}
+	}, [initialWorkspaceId, onWorkspaceChange]);
+
+	// Notify parent of initial workspace selection (from prop or auto-select)
+	React.useEffect(() => {
+		if (hasNotifiedWorkspaceRef.current) return;
+
+		// If we have a workspace selected and workspaces are loaded
+		if (localSelectedWorkspaceId && workspaces.length > 0) {
+			const workspaceExists = workspaces.some(
+				(ws) => ws.id === localSelectedWorkspaceId,
+			);
+
+			if (workspaceExists) {
+				// Notify parent of the current selection
+				onWorkspaceChange(localSelectedWorkspaceId);
+				hasNotifiedWorkspaceRef.current = true;
+			} else {
+				// Workspace doesn't exist, fall back to first
+				const workspaceToSelect = workspaces[0];
 				setLocalSelectedWorkspaceId(workspaceToSelect.id);
 				onWorkspaceChange(workspaceToSelect.id);
+				hasNotifiedWorkspaceRef.current = true;
+			}
+		} else if (!localSelectedWorkspaceId && workspaces.length > 0) {
+			// No workspace selected, auto-select first
+			const workspaceToSelect = workspaces[0];
+			setLocalSelectedWorkspaceId(workspaceToSelect.id);
+			onWorkspaceChange(workspaceToSelect.id);
+			hasNotifiedWorkspaceRef.current = true;
+		}
+	}, [localSelectedWorkspaceId, workspaces, onWorkspaceChange]);
+
+	// Handle workspace deletion after initial notification
+	React.useEffect(() => {
+		if (!hasNotifiedWorkspaceRef.current) return;
+		if (!localSelectedWorkspaceId) return;
+
+		// Check if currently selected workspace still exists
+		const workspaceExists = workspaces.some(
+			(ws) => ws.id === localSelectedWorkspaceId,
+		);
+
+		if (!workspaceExists && workspaces.length > 0) {
+			// Current workspace was deleted, fall back to first
+			const workspaceToSelect = workspaces[0];
+			setLocalSelectedWorkspaceId(workspaceToSelect.id);
+			onWorkspaceChange(workspaceToSelect.id);
+		}
+	}, [localSelectedWorkspaceId, workspaces, onWorkspaceChange]);
+
+	// Notify parent of initial agent selection (from persistent storage or auto-select)
+	React.useEffect(() => {
+		if (hasNotifiedAgentRef.current) return;
+
+		// If we have an agent selected and agents are loaded
+		if (localSelectedAgentId && agents.length > 0) {
+			const agentExists = agents.some((a) => a.id === localSelectedAgentId);
+
+			if (agentExists) {
+				// Notify parent of the current selection (from persistent storage)
+				onAgentChange(localSelectedAgentId);
+				hasNotifiedAgentRef.current = true;
+			} else {
+				// Agent doesn't exist, fall back to default or first
+				const defaultAgent = agents.find((a) => a.isDefault);
+				const agentToSelect = defaultAgent || agents[0];
+				if (agentToSelect) {
+					setLocalSelectedAgentId(agentToSelect.id);
+					onAgentChange(agentToSelect.id);
+					hasNotifiedAgentRef.current = true;
+				}
+			}
+		} else if (!localSelectedAgentId && agents.length > 0) {
+			// No agent selected, auto-select default or first
+			const defaultAgent = agents.find((a) => a.isDefault);
+			const agentToSelect = defaultAgent || agents[0];
+			if (agentToSelect) {
+				setLocalSelectedAgentId(agentToSelect.id);
+				onAgentChange(agentToSelect.id);
+				hasNotifiedAgentRef.current = true;
 			}
 		}
-	}, [workspaces, localSelectedWorkspaceId, onWorkspaceChange]);
+	}, [localSelectedAgentId, agents, onAgentChange, setLocalSelectedAgentId]);
 
-	// Auto-select default agent when agents become available and nothing is selected
+	// Handle agent deletion after initial notification
 	React.useEffect(() => {
-		const currentAgentExists = agents.some(
-			(a) => a.id === localSelectedAgentId,
-		);
-		if (!localSelectedAgentId || !currentAgentExists) {
+		if (!hasNotifiedAgentRef.current) return;
+		if (!localSelectedAgentId) return;
+
+		// Check if currently selected agent still exists
+		const agentExists = agents.some((a) => a.id === localSelectedAgentId);
+
+		if (!agentExists && agents.length > 0) {
+			// Current agent was deleted, fall back to default or first
 			const defaultAgent = agents.find((a) => a.isDefault);
 			const agentToSelect = defaultAgent || agents[0];
 			if (agentToSelect) {
@@ -92,7 +168,7 @@ export function ChatNewContent({
 				onAgentChange(agentToSelect.id);
 			}
 		}
-	}, [agents, localSelectedAgentId, onAgentChange]);
+	}, [localSelectedAgentId, agents, onAgentChange, setLocalSelectedAgentId]);
 
 	const selectedWorkspace = workspaces.find(
 		(ws) => ws.id === localSelectedWorkspaceId,
@@ -105,7 +181,7 @@ export function ChatNewContent({
 	};
 
 	const handleSelectAgent = (agentId: string) => {
-		setLocalSelectedAgentId(agentId);
+		setLocalSelectedAgentId(agentId); // This automatically persists via usePersistedState
 		onAgentChange(agentId);
 	};
 
@@ -120,27 +196,19 @@ export function ChatNewContent({
 
 	return (
 		<>
-			{/* Welcome header - animated in/out based on show prop */}
-			<Suspense fallback={null}>
-				<WelcomeHeader show={show} />
-			</Suspense>
-
-			{/* Agent/Workspace selectors - animated in/out based on show prop */}
-			<Suspense fallback={null}>
-				<WelcomeSelectors
-					show={show}
-					agents={agents}
-					workspaces={workspaces}
-					selectedAgent={selectedAgent}
-					selectedWorkspace={selectedWorkspace}
-					isShimmering={isShimmering}
-					getAgentIcons={getAgentIcons}
-					onSelectAgent={handleSelectAgent}
-					onSelectWorkspace={handleSelectWorkspace}
-					onAddAgent={() => agentDialog.open()}
-					onAddWorkspace={() => workspaceDialog.open()}
-				/>
-			</Suspense>
+			<WelcomeHeader show={show} />
+			<WelcomeSelectors
+				show={show}
+				agents={agents}
+				workspaces={workspaces}
+				selectedAgent={selectedAgent}
+				selectedWorkspace={selectedWorkspace}
+				getAgentIcons={getAgentIcons}
+				onSelectAgent={handleSelectAgent}
+				onSelectWorkspace={handleSelectWorkspace}
+				onAddAgent={() => agentDialog.open()}
+				onAddWorkspace={() => workspaceDialog.open()}
+			/>
 		</>
 	);
 }
