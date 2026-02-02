@@ -9,7 +9,7 @@ import { useSession } from "@/lib/hooks/use-sessions";
 import { useWorkspaces } from "@/lib/hooks/use-workspaces";
 
 export type MainContentView =
-	| { type: "new-session"; workspaceId?: string; agentId?: string }
+	| { type: "new-session"; workspaceId?: string; sessionId: string }
 	| { type: "session"; sessionId: string }
 	| { type: "workspace-sessions"; workspaceId: string };
 
@@ -30,10 +30,7 @@ export interface MainContentContextValue {
 	isSessionLoading: boolean;
 
 	// Actions to change the view
-	showNewSession: (options?: {
-		workspaceId?: string;
-		agentId?: string;
-	}) => void;
+	showNewSession: (options?: { workspaceId?: string }) => void;
 	showSession: (sessionId: string) => void;
 	showWorkspaceSessions: (workspaceId: string) => void;
 	// Handle session creation - updates view with workspace/agent IDs if current session matches
@@ -65,15 +62,8 @@ interface MainContentProviderProps {
 export function MainContentProvider({ children }: MainContentProviderProps) {
 	const [view, setView] = React.useState<MainContentView>({
 		type: "new-session",
+		sessionId: generateId(), // Generate on initial mount
 	});
-
-	// Generate a stable temporary session ID for new sessions
-	const tempSessionIdRef = React.useRef<string | null>(null);
-	if (view.type === "new-session" && !tempSessionIdRef.current) {
-		tempSessionIdRef.current = generateId();
-	} else if (view.type !== "new-session") {
-		tempSessionIdRef.current = null;
-	}
 
 	// Fetch workspaces to restore persisted selection
 	const { workspaces } = useWorkspaces();
@@ -98,10 +88,11 @@ export function MainContentProvider({ children }: MainContentProviderProps) {
 				(w) => w.id === persistedWorkspaceId,
 			);
 			if (workspaceExists) {
-				// Update view to include the persisted workspace
+				// Update view to include the persisted workspace (keep same session ID)
 				setView({
 					type: "new-session",
 					workspaceId: persistedWorkspaceId,
+					sessionId: view.sessionId,
 				});
 			}
 		}
@@ -122,7 +113,7 @@ export function MainContentProvider({ children }: MainContentProviderProps) {
 			return view.sessionId;
 		}
 		if (view.type === "new-session") {
-			return tempSessionIdRef.current;
+			return view.sessionId;
 		}
 		return null;
 	}, [view]);
@@ -147,11 +138,12 @@ export function MainContentProvider({ children }: MainContentProviderProps) {
 
 	// Actions
 	const showNewSession = React.useCallback(
-		(options?: { workspaceId?: string; agentId?: string }) => {
+		(options?: { workspaceId?: string }) => {
+			const sessionId = generateId();
 			setView({
 				type: "new-session",
 				workspaceId: options?.workspaceId,
-				agentId: options?.agentId,
+				sessionId,
 			});
 		},
 		[],
@@ -166,17 +158,19 @@ export function MainContentProvider({ children }: MainContentProviderProps) {
 	}, []);
 
 	const sessionCreated = React.useCallback(
-		(sessionId: string, workspaceId: string, agentId: string) => {
+		(sessionId: string, _workspaceId: string, _agentId: string) => {
 			// Only update if we're currently in new-session view and the session ID matches
-			if (
-				view.type === "new-session" &&
-				tempSessionIdRef.current === sessionId
-			) {
-				// Stay on new-session view with workspace/agent IDs stored
-				setView({
-					type: "new-session",
-					workspaceId,
-					agentId,
+			if (view.type === "new-session" && view.sessionId === sessionId) {
+				setView((prev) => {
+					// ensure we aren't dealing with a stale callback. this happens when the user
+					// clicks away from a new session before sessionCreated is called.
+					if (prev.type === "new-session" && prev.sessionId === sessionId) {
+						return {
+							type: "session",
+							sessionId,
+						};
+					}
+					return prev;
 				});
 			}
 		},
