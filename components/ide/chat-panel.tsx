@@ -71,6 +71,8 @@ interface ChatPanelProps {
 	sessionId: string;
 	/** Initial messages for resuming an existing session. If provided, this is a resume scenario. */
 	initialMessages?: UIMessage[];
+	/** Initial workspace ID (from context, passed down as prop) */
+	initialWorkspaceId: string | null;
 	/** Callback when a new session is created - receives session ID, workspace ID, and agent ID */
 	onSessionCreated?: (
 		sessionId: string,
@@ -86,6 +88,7 @@ interface ChatPanelProps {
 export function ChatPanel({
 	sessionId,
 	initialMessages,
+	initialWorkspaceId,
 	onSessionCreated,
 	onChatComplete,
 	className,
@@ -93,7 +96,8 @@ export function ChatPanel({
 	// Determine if this is a resume scenario based on initialMessages
 	const resume = initialMessages !== undefined;
 
-	// State for new session workspace/agent selection
+	// State for new session workspace selection
+	// Agent selection is managed entirely within ChatNewContent via persistent storage
 	const [localSelectedWorkspaceId, setLocalSelectedWorkspaceId] =
 		React.useState<string | null>(null);
 	const [localSelectedAgentId, setLocalSelectedAgentId] = React.useState<
@@ -237,6 +241,7 @@ export function ChatPanel({
 	// Handle form submission - memoized to prevent PromptInput re-renders
 	const handleSubmit = React.useCallback(
 		async (message: PromptInputMessage, e: React.FormEvent) => {
+			// Validate selections for new sessions
 			e.preventDefault();
 			const messageText = message.text;
 			if (!messageText?.trim() || isLoading) return;
@@ -335,8 +340,7 @@ export function ChatPanel({
 				{/* Welcome UI - header and selectors for new sessions */}
 				<ChatNewContent
 					show={!resume && messages.length === 0}
-					selectedWorkspaceId={localSelectedWorkspaceId}
-					selectedAgentId={localSelectedAgentId}
+					initialWorkspaceId={initialWorkspaceId}
 					onWorkspaceChange={setLocalSelectedWorkspaceId}
 					onAgentChange={setLocalSelectedAgentId}
 				/>

@@ -5,20 +5,18 @@ import { useMainContentContext } from "@/lib/contexts/main-content-context";
 import { SessionViewProvider } from "@/lib/contexts/session-view-context";
 
 export function MainContent() {
-	const { view, getSessionIdForView, isNewSession, sessionCreated } =
-		useMainContentContext();
+	const {
+		view,
+		getSessionIdForView,
+		getSelectedWorkspaceId,
+		isNewSession,
+		sessionCreated,
+	} = useMainContentContext();
 
 	// Get session ID for rendering SessionView (includes temp ID for new sessions)
 	const sessionIdForView = getSessionIdForView();
 	const isNew = isNewSession();
-
-	// Handle session creation - updates view with workspace/agent IDs
-	const handleSessionCreated = React.useCallback(
-		(sessionId: string, workspaceId: string, agentId: string) => {
-			sessionCreated(sessionId, workspaceId, agentId);
-		},
-		[sessionCreated],
-	);
+	const initialWorkspaceId = getSelectedWorkspaceId();
 
 	return (
 		<main className="flex-1 flex overflow-hidden">
@@ -26,13 +24,14 @@ export function MainContent() {
 				<SessionListTable />
 			) : (
 				<SessionViewProvider
-					key={`${sessionIdForView}:${isNew}`}
+					key={sessionIdForView || "no-session"}
 					sessionId={sessionIdForView}
 				>
 					<SessionView
 						sessionId={sessionIdForView}
 						isNew={isNew}
-						onSessionCreated={handleSessionCreated}
+						initialWorkspaceId={initialWorkspaceId}
+						onSessionCreated={sessionCreated}
 					/>
 				</SessionViewProvider>
 			)}

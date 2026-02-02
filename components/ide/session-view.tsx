@@ -39,6 +39,7 @@ function createFileNodeFromPath(path: string, status?: FileStatus): FileNode {
 interface SessionViewProps {
 	sessionId: string | null;
 	isNew: boolean;
+	initialWorkspaceId: string | null;
 	onSessionCreated?: (
 		sessionId: string,
 		workspaceId: string,
@@ -46,7 +47,11 @@ interface SessionViewProps {
 	) => void;
 }
 
-export function SessionView({ isNew, onSessionCreated }: SessionViewProps) {
+export function SessionView({
+	isNew,
+	initialWorkspaceId,
+	onSessionCreated,
+}: SessionViewProps) {
 	// Manage right sidebar width state
 	const [rightSidebarWidth, setRightSidebarWidth] = usePersistedState(
 		STORAGE_KEYS.RIGHT_SIDEBAR_WIDTH,
@@ -135,6 +140,7 @@ export function SessionView({ isNew, onSessionCreated }: SessionViewProps) {
 									key={selectedSessionId}
 									sessionId={selectedSessionId}
 									initialMessages={!isNew ? existingMessages : undefined}
+									initialWorkspaceId={initialWorkspaceId}
 									onSessionCreated={onSessionCreated}
 									onChatComplete={handleChatComplete}
 									className="h-full"
