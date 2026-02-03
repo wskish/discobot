@@ -80,7 +80,12 @@ fn start_server(app: &tauri::AppHandle, port: u16, secret: &str) -> Result<Comma
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Find available port and generate secret before starting Tauri
+    #[cfg(debug_assertions)]
+    let port = 3001_u16; // Use fixed port in dev mode for easier debugging
+
+    #[cfg(not(debug_assertions))]
     let port = find_available_port();
+
     let secret = generate_secret();
 
     tauri::Builder::default()
