@@ -273,10 +273,6 @@ export function ChatPanel({
 		navigator.clipboard.writeText(content);
 	}, []);
 
-	const handleRegenerate = React.useCallback((messageId: string) => {
-		console.log("Regenerate message:", messageId);
-	}, []);
-
 	return (
 		<div
 			className={cn(
@@ -351,7 +347,6 @@ export function ChatPanel({
 					messagesLoading={false}
 					isChatActive={isLoading}
 					onCopy={handleCopy}
-					onRegenerate={handleRegenerate}
 				/>
 			</div>
 

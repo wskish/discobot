@@ -1,5 +1,5 @@
 import type { DynamicToolUIPart, FileUIPart, UIMessage } from "ai";
-import { Copy, Loader2, MessageSquare, RefreshCcw } from "lucide-react";
+import { Copy, Loader2, MessageSquare } from "lucide-react";
 import * as React from "react";
 import {
 	Conversation,
@@ -35,8 +35,6 @@ interface ChatConversationProps {
 	isChatActive: boolean;
 	/** Callback to copy message content */
 	onCopy: (content: string) => void;
-	/** Callback to regenerate a message */
-	onRegenerate: (messageId: string) => void;
 }
 
 // Helper to extract text content from AI SDK message parts
@@ -53,13 +51,11 @@ function getMessageText(message: UIMessage): string {
 interface MessageItemProps {
 	message: UIMessage;
 	onCopy: (text: string) => void;
-	onRegenerate: (messageId: string) => void;
 }
 
 const MessageItem = React.memo(function MessageItem({
 	message,
 	onCopy,
-	onRegenerate,
 }: MessageItemProps) {
 	const textContent = React.useMemo(() => getMessageText(message), [message]);
 
@@ -129,13 +125,6 @@ const MessageItem = React.memo(function MessageItem({
 				{message.role === "assistant" && (
 					<MessageActions>
 						<MessageAction
-							label="Retry"
-							tooltip="Regenerate response"
-							onClick={() => onRegenerate(message.id)}
-						>
-							<RefreshCcw className="size-3" />
-						</MessageAction>
-						<MessageAction
 							label="Copy"
 							tooltip="Copy to clipboard"
 							onClick={() => onCopy(textContent)}
@@ -165,7 +154,6 @@ const LAZY_OBSERVER_OPTIONS: IntersectionObserverInit = {
 const LazyMessageItem = React.memo(function LazyMessageItem({
 	message,
 	onCopy,
-	onRegenerate,
 	estimatedHeight = 100,
 }: LazyMessageItemProps) {
 	const [ref, hasBeenVisible] = useLazyRender(LAZY_OBSERVER_OPTIONS);
@@ -176,7 +164,6 @@ const LazyMessageItem = React.memo(function LazyMessageItem({
 				<MessageItem
 					message={message}
 					onCopy={onCopy}
-					onRegenerate={onRegenerate}
 				/>
 			) : (
 				// Placeholder with estimated height to maintain scroll position
@@ -200,7 +187,6 @@ export function ChatConversation({
 	messagesLoading,
 	isChatActive,
 	onCopy,
-	onRegenerate,
 }: ChatConversationProps) {
 	// Show loading state when fetching messages
 	if (messagesLoading) {
@@ -238,14 +224,12 @@ export function ChatConversation({
 									key={message.id}
 									message={message}
 									onCopy={onCopy}
-									onRegenerate={onRegenerate}
 								/>
 							) : (
 								<LazyMessageItem
 									key={message.id}
 									message={message}
 									onCopy={onCopy}
-									onRegenerate={onRegenerate}
 									estimatedHeight={message.role === "user" ? 80 : 150}
 								/>
 							);
