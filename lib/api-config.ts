@@ -1,7 +1,7 @@
 // Default project ID for anonymous user mode (matches Go backend)
 export const PROJECT_ID = "local";
 
-const tauriLocalhost = "127.0.0.1";
+const tauriLocalhost = "localhost";
 
 // Cached Tauri server config (populated on first use)
 let tauriServerConfig: { port: number; secret: string } | null = null;
@@ -85,11 +85,6 @@ export function getApiRootBase() {
 
 	// Check if running in Tauri with initialized config
 	if (tauriServerConfig) {
-		console.log(
-			`Running in Tauri with port ${tauriServerConfig.port}`,
-			isTauri(),
-			tauriServerConfig,
-		);
 		return `http://${tauriLocalhost}:${tauriServerConfig.port}/api`;
 	}
 
@@ -97,12 +92,6 @@ export function getApiRootBase() {
 		throw new Error("not initialized, must call initTauriConfig() first");
 	}
 
-	// Call Go backend directly on port 3001
-	console.log(
-		`Calling Go backend directly on port 3001`,
-		isTauri(),
-		tauriServerConfig,
-	);
 	return "http://localhost:3001/api";
 }
 
