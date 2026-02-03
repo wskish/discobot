@@ -161,10 +161,7 @@ const LazyMessageItem = React.memo(function LazyMessageItem({
 	return (
 		<div ref={ref}>
 			{hasBeenVisible ? (
-				<MessageItem
-					message={message}
-					onCopy={onCopy}
-				/>
+				<MessageItem message={message} onCopy={onCopy} />
 			) : (
 				// Placeholder with estimated height to maintain scroll position
 				<div

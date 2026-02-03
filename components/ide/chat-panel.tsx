@@ -223,7 +223,19 @@ export function ChatPanel({
 
 			if (swrMessagesChanged) {
 				prevSwrMessagesRef.current = swrMessages;
-				setMessages(swrMessages);
+
+				// Extra safety: deduplicate before setting (should already be deduped by useMessages hook)
+				const seen = new Set<string>();
+				const dedupedMessages = swrMessages.filter((msg) => {
+					if (seen.has(msg.id)) {
+						console.warn(`[ChatPanel] Duplicate message ID in sync: ${msg.id}`);
+						return false;
+					}
+					seen.add(msg.id);
+					return true;
+				});
+
+				setMessages(dedupedMessages);
 			}
 		}
 	}, [resume, swrMessages, setMessages]);
