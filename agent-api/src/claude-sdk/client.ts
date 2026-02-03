@@ -71,6 +71,7 @@ async function findClaudeCLI(): Promise<string | null> {
 	// Add common installation locations as fallback
 	const commonPaths = [
 		process.env.HOME ? `${process.env.HOME}/.local/bin/claude` : null,
+		"/usr/bin/claude",
 		"/usr/local/bin/claude",
 		"/opt/homebrew/bin/claude",
 	].filter(Boolean) as string[];
@@ -142,7 +143,7 @@ export class ClaudeSDKClient implements Agent {
 		let ctx = this.sessions.get(sid);
 
 		if (!ctx) {
-			// Create DiskBackedSession and load from disk
+			// Create DiskBackedSession and initialize cache (load returns empty for non-existent files)
 			const session = new DiskBackedSession(sid, this.options.cwd);
 			await session.load();
 
@@ -155,6 +156,10 @@ export class ClaudeSDKClient implements Agent {
 				blockIds: null,
 			};
 			this.sessions.set(sid, ctx);
+
+			// Load persisted claudeSessionId mapping and messages from disk
+			// This restores the session state after agent-api restart
+			await this.loadSessionFromDisk(ctx);
 		}
 
 		this.currentSessionId = sid;
