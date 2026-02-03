@@ -6,7 +6,8 @@
 #---
 
 SQL_DUMP="${WORKSPACE_PATH}/test.db.sql"
-if [ ! -e ./server/discobot.db ] && [ -e "${SQL_DUMP}" ]; then
-    sqlite3 ./server/discobot.db < "${SQL_DUMP}"
+DB="/home/discobot/.local/share/discobot/discobot.db"
+if [ ! -e $DB ] && [ -e "${SQL_DUMP}" ]; then
+    sqlite3 $DB < "${SQL_DUMP}"
 fi
 pnpm install && pnpm dev
