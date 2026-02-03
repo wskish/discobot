@@ -25,8 +25,8 @@ export interface ClaudeSessionInfo {
  * Claude uses a simple encoding where / becomes -
  */
 function encodePathForClaude(path: string): string {
-	// Remove leading slash and replace remaining slashes with dashes
-	return path.replace(/^\//, "").replace(/\//g, "-");
+	// Replace all slashes with dashes (including leading slash)
+	return path.replace(/\//g, "-");
 }
 
 /**
