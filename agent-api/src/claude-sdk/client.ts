@@ -244,7 +244,12 @@ export class ClaudeSDKClient implements Agent {
 					`[SDK] canUseTool: ${toolName}, toolUseID: ${options.toolUseID}`,
 				);
 				// Always approve - we just want to intercept for logging
-				return { behavior: "allow" as const, toolUseID: options.toolUseID };
+				// Note: updatedInput is required by the SDK's runtime Zod schema even though TypeScript marks it optional
+				return {
+					behavior: "allow" as const,
+					updatedInput: input,
+					toolUseID: options.toolUseID,
+				};
 			},
 			// Use hooks to capture tool output after execution
 			hooks: {
