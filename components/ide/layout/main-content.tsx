@@ -1,4 +1,3 @@
-import * as React from "react";
 import { SessionListTable } from "@/components/ide/session-list-table";
 import { SessionView } from "@/components/ide/session-view";
 import { useMainContentContext } from "@/lib/contexts/main-content-context";

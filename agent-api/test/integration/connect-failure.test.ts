@@ -8,7 +8,7 @@
  */
 
 import assert from "node:assert/strict";
-import { after, before, describe, it, mock } from "node:test";
+import { describe, it } from "node:test";
 import { ClaudeSDKClient } from "../../src/claude-sdk/client.js";
 
 describe("Agent Connection State", { timeout: 10000 }, () => {
@@ -81,7 +81,7 @@ describe("Agent Connection State", { timeout: 10000 }, () => {
 			env: process.env as Record<string, string>,
 		});
 
-		const message = {
+		const _message = {
 			id: "test-msg",
 			role: "user" as const,
 			parts: [{ type: "text" as const, text: "Hello" }],
@@ -93,7 +93,7 @@ describe("Agent Connection State", { timeout: 10000 }, () => {
 			await client.ensureSession();
 			// Note: prompt() will fail because claudeCliPath is null
 			// This is expected behavior - connect() must be called first
-		} catch (error) {
+		} catch (_error) {
 			// This is fine - we're just testing that isConnected works correctly
 		}
 

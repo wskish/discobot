@@ -8,7 +8,6 @@ import type { UIMessage } from "ai";
 import {
 	clearSession as clearStoredSession,
 	getSessionData,
-	loadSession,
 	saveSession,
 } from "../store/session.js";
 import { ClaudeSDKClient } from "./client.js";

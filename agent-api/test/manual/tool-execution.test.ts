@@ -97,7 +97,7 @@ try {
 
 	await client.prompt(userMessage, sessionId);
 
-	console.log("\n" + "=".repeat(60));
+	console.log(`\n${"=".repeat(60)}`);
 	console.log("✓ Prompt completed\n");
 
 	// Summary

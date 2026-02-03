@@ -11,21 +11,19 @@ import type {
 	EnvironmentUpdate,
 } from "../agent/interface.js";
 import type { Session } from "../agent/session.js";
-import { DiskBackedSession } from "./disk-backed-session.js";
 import type { StreamBlockIds, StreamState } from "../server/stream.js";
 import { createBlockIds, createStreamState } from "../server/stream.js";
 import {
 	clearSession as clearStoredSession,
 	getSessionData,
-	loadSession,
 	type SessionData as StoreSessionData,
 	saveSession,
 } from "../store/session.js";
+import { DiskBackedSession } from "./disk-backed-session.js";
 import {
 	type ClaudeSessionInfo,
 	discoverSessions,
 	loadFullSessionData,
-	loadSessionMessages,
 	type SessionData,
 } from "./persistence.js";
 import { sdkMessageToChunks } from "./translate.js";
@@ -164,42 +162,6 @@ export class ClaudeSDKClient implements Agent {
 
 		this.currentSessionId = sid;
 		return sid;
-	}
-
-	/**
-	 * Load a session from disk, including the persisted claudeSessionId mapping
-	 */
-	private async loadSessionFromDisk(ctx: SessionContext): Promise<void> {
-		try {
-			// First, try to load the persisted session data which includes claudeSessionId
-			const storedSession = await loadSession();
-			if (storedSession && storedSession.sessionId === ctx.sessionId) {
-				// Restore the Claude session ID mapping
-				if (storedSession.claudeSessionId) {
-					ctx.claudeSessionId = storedSession.claudeSessionId;
-					console.log(
-						`Restored claudeSessionId mapping: ${ctx.sessionId} -> ${ctx.claudeSessionId}`,
-					);
-				}
-			}
-
-			// If we have a claudeSessionId, try to load messages from the Claude session file
-			const claudeId = ctx.claudeSessionId;
-			if (claudeId) {
-				const messages = await loadSessionMessages(claudeId, this.options.cwd);
-
-				// Add messages to the session
-				for (const msg of messages) {
-					ctx.session.addMessage(msg);
-				}
-
-				console.log(
-					`Loaded ${messages.length} messages from Claude session ${claudeId}`,
-				);
-			}
-		} catch (error) {
-			console.warn(`Failed to load session from disk:`, error);
-		}
 	}
 
 	/**
