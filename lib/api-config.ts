@@ -1,19 +1,19 @@
 // Default project ID for anonymous user mode (matches Go backend)
 export const PROJECT_ID = "local";
 
-// Cookie name for Tauri auth
-const AUTH_COOKIE_NAME = "discobot_secret";
+const tauriLocalhost = "127.0.0.1";
 
 // Cached Tauri server config (populated on first use)
 let tauriServerConfig: { port: number; secret: string } | null = null;
+let tauriInitialized = false;
 
 /**
  * Initialize Tauri server config (port and secret).
  * Call this early in app startup when running in Tauri.
- * Sets the auth cookie so all subsequent requests are authenticated.
  */
 export async function initTauriConfig(): Promise<void> {
-	if (typeof window === "undefined" || !("__TAURI__" in window)) {
+	if (!isTauri()) {
+		tauriInitialized = true;
 		return;
 	}
 
@@ -22,13 +22,8 @@ export async function initTauriConfig(): Promise<void> {
 		invoke<number>("get_server_port"),
 		invoke<string>("get_server_secret"),
 	]);
+	tauriInitialized = true;
 	tauriServerConfig = { port, secret };
-
-	console.log(`Initialized Tauri server config with port ${port} and secret`);
-	// Set the auth cookie - it will be sent with all requests to the Go server
-	// SameSite=Strict for security, no expiry (session cookie)
-	// biome-ignore lint/suspicious/noDocumentCookie: Cookie Store API has limited browser support
-	document.cookie = `${AUTH_COOKIE_NAME}=${encodeURIComponent(secret)}; path=/; SameSite=Strict`;
 }
 
 /**
@@ -38,11 +33,31 @@ export function getTauriServerConfig() {
 	return tauriServerConfig;
 }
 
+export function isTauri() {
+	if (tauriServerConfig) {
+		return true;
+	}
+	return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+}
+
 /**
- * Check if running in Tauri with initialized config.
+ * Get the Tauri auth token if in Tauri mode, otherwise null.
  */
-export function isTauriMode(): boolean {
-	return tauriServerConfig !== null;
+export function getTauriToken(): string | null {
+	return tauriServerConfig?.secret ?? null;
+}
+
+/**
+ * Append the Tauri auth token to a URL if in Tauri mode.
+ * Used for WebSocket and SSE URLs that need authentication.
+ */
+export function appendAuthToken(url: string): string {
+	const token = getTauriToken();
+	if (!token) {
+		return url;
+	}
+	const separator = url.includes("?") ? "&" : "?";
+	return `${url}${separator}token=${encodeURIComponent(token)}`;
 }
 
 /**
@@ -58,11 +73,6 @@ export function getApiRootBase() {
 		return "http://localhost:3001/api";
 	}
 
-	// Check if running in Tauri with initialized config
-	if (tauriServerConfig) {
-		return `http://127.0.0.1:${tauriServerConfig.port}/api`;
-	}
-
 	// Check if hostname matches *-svc-ui.* pattern
 	const hostname = window.location.hostname;
 	if (hostname.includes("-svc-ui.")) {
@@ -73,7 +83,26 @@ export function getApiRootBase() {
 		return `${protocol}//${apiHost}/api`;
 	}
 
+	// Check if running in Tauri with initialized config
+	if (tauriServerConfig) {
+		console.log(
+			`Running in Tauri with port ${tauriServerConfig.port}`,
+			isTauri(),
+			tauriServerConfig,
+		);
+		return `http://${tauriLocalhost}:${tauriServerConfig.port}/api`;
+	}
+
+	if (!tauriInitialized && isTauri()) {
+		throw new Error("not initialized, must call initTauriConfig() first");
+	}
+
 	// Call Go backend directly on port 3001
+	console.log(
+		`Calling Go backend directly on port 3001`,
+		isTauri(),
+		tauriServerConfig,
+	);
 	return "http://localhost:3001/api";
 }
 
@@ -86,31 +115,13 @@ export function getApiBase() {
 
 /**
  * Get the backend WebSocket base URL.
+ * Includes auth token in Tauri mode.
  *
- * - In Tauri: connects directly to Go server on dynamic port
+ * - In Tauri: connects directly to Go server on dynamic port with token
  * - In browser with *-svc-ui.* hostname: routes to corresponding *-svc-api.* host
  * - Otherwise: connects to Go backend directly on port 3001
  */
 export function getWsBase() {
-	if (typeof window === "undefined") {
-		return "";
-	}
-
-	// Check if running in Tauri with initialized config
-	if (tauriServerConfig) {
-		return `ws://127.0.0.1:${tauriServerConfig.port}/api/projects/${PROJECT_ID}`;
-	}
-
-	// Check if hostname matches *-svc-ui.* pattern
-	const hostname = window.location.hostname;
-	if (hostname.includes("-svc-ui.")) {
-		const apiHostname = hostname.replace("-svc-ui.", "-svc-api.");
-		const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-		const port = window.location.port;
-		const apiHost = port ? `${apiHostname}:${port}` : apiHostname;
-		return `${protocol}//${apiHost}/api/projects/${PROJECT_ID}`;
-	}
-
-	// Connect to Go backend directly on port 3001
-	return `ws://localhost:3001/api/projects/${PROJECT_ID}`;
+	const url = getApiRootBase();
+	return `${url.replace(/^http/, "ws")}/projects/${PROJECT_ID}`;
 }

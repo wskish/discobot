@@ -21,6 +21,7 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { isTauri } from "@/lib/api-config";
 import type { Workspace } from "@/lib/api-types";
 import { useDialogContext } from "@/lib/contexts/dialog-context";
 import { useMainContentContext } from "@/lib/contexts/main-content-context";
@@ -34,7 +35,6 @@ import {
 	getSessionHoverText,
 	getSessionStatusIndicator,
 } from "@/lib/session-utils";
-import { IS_TAURI } from "@/lib/tauri";
 
 interface HeaderProps {
 	leftSidebarOpen: boolean;
@@ -154,7 +154,7 @@ export function Header({ leftSidebarOpen, onToggleSidebar }: HeaderProps) {
 	// Detect macOS for window control placement
 	const [isMac, setIsMac] = React.useState(false);
 	React.useEffect(() => {
-		if (!IS_TAURI) return;
+		if (!isTauri()) return;
 		import("@tauri-apps/plugin-os").then(({ platform }) => {
 			setIsMac(platform() === "macos");
 		});
@@ -169,7 +169,7 @@ export function Header({ leftSidebarOpen, onToggleSidebar }: HeaderProps) {
 			/>
 			<div className="flex items-center gap-2 min-w-0 relative">
 				{/* macOS window controls on the left */}
-				{IS_TAURI && isMac && <WindowControls />}
+				{isTauri() && isMac && <WindowControls />}
 				<Button
 					variant="ghost"
 					size="icon"
@@ -351,7 +351,7 @@ export function Header({ leftSidebarOpen, onToggleSidebar }: HeaderProps) {
 				</Button>
 				<ThemeToggle className="tauri-no-drag" />
 				{/* Windows/Linux window controls on the right */}
-				{IS_TAURI && !isMac && <WindowControls />}
+				{isTauri() && !isMac && <WindowControls />}
 			</div>
 		</header>
 	);

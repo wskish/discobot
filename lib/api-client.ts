@@ -1,5 +1,5 @@
 // API Client for making requests to the backend
-import { getApiBase, getApiRootBase } from "./api-config";
+import { appendAuthToken, getApiBase, getApiRootBase } from "./api-config";
 
 /** Error thrown when file write fails due to optimistic locking conflict */
 export class FileConflictError extends Error {
@@ -52,11 +52,16 @@ import type {
 } from "./api-types";
 
 class ApiClient {
-	private base = getApiBase();
-	private rootBase = getApiRootBase();
+	// Use getters to get current base URL (may change after Tauri init)
+	private get base() {
+		return getApiBase();
+	}
+	private get rootBase() {
+		return getApiRootBase();
+	}
 
 	private async fetch<T>(path: string, options?: RequestInit): Promise<T> {
-		const response = await fetch(`${this.base}${path}`, {
+		const response = await fetch(appendAuthToken(`${this.base}${path}`), {
 			...options,
 			headers: {
 				"Content-Type": "application/json",
@@ -81,7 +86,7 @@ class ApiClient {
 
 	// Fetch from root API (not project-scoped)
 	private async fetchRoot<T>(path: string, options?: RequestInit): Promise<T> {
-		const response = await fetch(`${this.rootBase}${path}`, {
+		const response = await fetch(appendAuthToken(`${this.rootBase}${path}`), {
 			...options,
 			headers: {
 				"Content-Type": "application/json",
@@ -288,7 +293,7 @@ class ApiClient {
 	 * @param sessionId Session ID
 	 */
 	getChatStreamUrl(sessionId: string): string {
-		return `${this.base}/chat/${sessionId}/stream`;
+		return appendAuthToken(`${this.base}/chat/${sessionId}/stream`);
 	}
 
 	// Agents
@@ -487,7 +492,9 @@ class ApiClient {
 	 * @param serviceId Service ID (filename in .discobot/services/)
 	 */
 	getServiceOutputUrl(sessionId: string, serviceId: string): string {
-		return `${this.base}/sessions/${sessionId}/services/${serviceId}/output`;
+		return appendAuthToken(
+			`${this.base}/sessions/${sessionId}/services/${serviceId}/output`,
+		);
 	}
 
 	// User Preferences (user-scoped, not project-scoped)
