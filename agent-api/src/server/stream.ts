@@ -143,6 +143,8 @@ interface ToolTrackingState {
 	lastRawInput: unknown;
 	/** Last seen title (for use in fallback input-available) */
 	lastTitle: string | undefined;
+	/** Buffer for accumulating streaming JSON input (SDK-specific) */
+	inputJsonBuffer?: string;
 }
 
 /**

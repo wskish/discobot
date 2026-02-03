@@ -146,7 +146,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     # Install latest stable Go
     && GO_VERSION=$(curl -fsSL 'https://go.dev/VERSION?m=text' | head -1) \
     && curl -fsSL "https://go.dev/dl/${GO_VERSION}.linux-$(dpkg --print-architecture).tar.gz" | tar -C /usr/local -xz \
-    && rm -rf /var/lib/apt/lists/* /root/.npm \
+    # Install Claude Code CLI binary to /usr/local/bin
+    && curl -fsSL https://claude.ai/install.sh | bash \
+    && cp -L /root/.local/bin/claude /usr/local/bin/claude \
+    && rm -rf /var/lib/apt/lists/* /root/.npm /root/.local \
     # Enable user_allow_other in fuse.conf (required for --allow-root mount option)
     && echo 'user_allow_other' >> /etc/fuse.conf
 
@@ -190,6 +193,7 @@ RUN chmod +x /opt/discobot/bin/*
 # Add discobot binaries and npm global bin to PATH
 # Also set NPM_CONFIG_PREFIX for non-login shell contexts
 # Set PNPM_HOME to use persistent storage for pnpm cache/store
+# Claude CLI is installed to /usr/local/bin (already in default PATH)
 ENV NPM_CONFIG_PREFIX="/home/discobot/.npm-global"
 ENV PNPM_HOME="/.data/pnpm"
 ENV PATH="/usr/local/go/bin:/home/discobot/.npm-global/bin:/opt/discobot/bin:${PATH}"

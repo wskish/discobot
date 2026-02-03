@@ -1,14 +1,14 @@
 # Agent API Architecture
 
-This document describes the architecture of the Discobot Agent API service, a Bun application that bridges the IDE with AI coding agents via the Agent Client Protocol (ACP).
+This document describes the architecture of the Discobot Agent API service, a Node.js application that bridges the IDE with AI coding agents via the Claude Agent SDK or Agent Client Protocol (ACP).
 
 ## Overview
 
 The agent service runs inside a Docker container and provides:
 - HTTP API for the Go server to send chat messages
-- ACP client to communicate with Claude Code
-- Message format translation between AI SDK and ACP
-- Session persistence for recovery
+- Claude Agent SDK client (default) or ACP client for agent communication
+- Message format translation between AI SDK and agent protocol
+- Automatic session persistence and resumption
 
 ## System Context
 
@@ -20,23 +20,24 @@ The agent service runs inside a Docker container and provides:
 │   │                    Agent Service (Node.js)                   │  │
 │   │                                                              │  │
 │   │  ┌──────────────┐  ┌──────────────┐  ┌──────────────────┐  │  │
-│   │  │    HTTP      │  │     ACP      │  │     Session      │  │  │
-│   │  │   Server     │  │    Client    │  │      Store       │  │  │
+│   │  │    HTTP      │  │    Agent     │  │     Session      │  │  │
+│   │  │   Server     │  │  Interface   │  │      Store       │  │  │
 │   │  │   (Hono)     │  │              │  │                  │  │  │
-│   │  └──────────────┘  └──────────────┘  └──────────────────┘  │  │
+│   │  └──────────────┘  └──────┬───────┘  └──────────────────┘  │  │
 │   │         │                  │                    │           │  │
-│   │         │                  │                    │           │  │
+│   │         │                  ├─ ClaudeSDKClient (default)     │  │
+│   │         │                  └─ ACPClient (legacy)            │  │
 │   │         │                  ▼                    │           │  │
 │   │         │         ┌──────────────┐              │           │  │
-│   │         │         │ Claude Code  │              │           │  │
+│   │         │         │ Claude CLI   │              │           │  │
 │   │         │         │  (spawned)   │              │           │  │
 │   │         │         └──────────────┘              │           │  │
 │   └─────────│──────────────────────────────────────│───────────┘  │
 │             │                                       │              │
 │             │ HTTP :3002                           │ File         │
 │             ▼                                       ▼              │
-│        Go Server                 ~/.config/discobot/*.json        │
-│                                                                    │
+│        Go Server                   ~/.claude/projects/            │
+│                                   (SDK sessions)                   │
 │                         /workspace (bind mount)                    │
 └────────────────────────────────────────────────────────────────────┘
 ```
@@ -44,7 +45,9 @@ The agent service runs inside a Docker container and provides:
 ## Module Documentation
 
 - [Server Module](./design/server.md) - HTTP API implementation
-- [ACP Module](./design/acp.md) - Agent Client Protocol client
+- [Agent Interface](./design/agent.md) - Agent abstraction layer
+- [Claude SDK Module](./design/claude-sdk.md) - Claude Agent SDK integration (default)
+- [ACP Module](./design/acp.md) - Agent Client Protocol client (legacy)
 - [Store Module](./design/store.md) - Session and message storage
 - [File System Layout](./design/filesystem.md) - Container paths and mount points
 - [Agent Integrations](./design/agent-integrations.md) - Discobot-specific agent integration points
@@ -52,6 +55,28 @@ The agent service runs inside a Docker container and provides:
 ## Data Flow
 
 ### Chat Request Flow
+
+**With Claude SDK (default):**
+
+```
+1. Go Server POST /chat with UIMessage[]
+   │
+2. HTTP Handler extracts last user message
+   │
+3. Agent Interface routes to ClaudeSDKClient
+   │
+4. SDK spawns Claude CLI and streams messages
+   │
+5. Translate SDK messages → UIMessageChunk
+   │
+6. Stream SSE chunks to Go Server
+   │
+7. Go Server proxies to Frontend
+   │
+8. Session auto-saved to ~/.claude/projects/
+```
+
+**With ACP (legacy):**
 
 ```
 1. Go Server POST /chat with UIMessage[]

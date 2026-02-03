@@ -33,6 +33,7 @@ import type {
 	WriteFileResponse,
 } from "../api/types.js";
 import { authMiddleware } from "../auth/middleware.js";
+import { ClaudeSDKClient } from "../claude-sdk/client.js";
 import {
 	getManagedService,
 	getService,
@@ -81,12 +82,24 @@ export interface AppOptions {
 export function createApp(options: AppOptions) {
 	const app = new Hono();
 
-	const agent: Agent = new ACPClient({
-		command: options.agentCommand,
-		args: options.agentArgs,
-		cwd: options.agentCwd,
-		persistMessages: options.persistMessages ?? true, // Default to true for backwards compatibility
-	});
+	const agentType = process.env.AGENT_TYPE || "claude-sdk";
+
+	let agent: Agent;
+	if (agentType === "acp") {
+		agent = new ACPClient({
+			command: options.agentCommand,
+			args: options.agentArgs,
+			cwd: options.agentCwd,
+			persistMessages: options.persistMessages ?? true,
+		});
+	} else {
+		// Default to Claude SDK
+		agent = new ClaudeSDKClient({
+			cwd: options.agentCwd,
+			model: process.env.AGENT_MODEL,
+			env: process.env as Record<string, string>,
+		});
+	}
 
 	if (options.enableLogging) {
 		app.use("*", logger());
