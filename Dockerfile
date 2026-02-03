@@ -69,6 +69,16 @@ COPY agent/ ./agent/
 # The go:embed directive will include agent/internal/proxy/default-config.yaml
 RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /discobot-agent ./agent/cmd/agent
 
+# Stage 2c: Extract Claude CLI version from SDK package metadata
+# The SDK's package.json contains "claudeCodeVersion" field declaring compatible CLI version
+FROM oven/bun:1-alpine AS version-extractor
+COPY agent-api/package.json agent-api/bun.lock* /tmp/
+WORKDIR /tmp
+RUN bun install --frozen-lockfile 2>/dev/null || bun install \
+    && CLI_VERSION=$(cat node_modules/@anthropic-ai/claude-agent-sdk/package.json | grep -o '"claudeCodeVersion": "[^"]*"' | cut -d'"' -f4) \
+    && echo "$CLI_VERSION" > /cli-version \
+    && echo "Claude Code CLI version from SDK: $CLI_VERSION"
+
 # Stage 3: Build the Bun standalone binary (glibc)
 FROM oven/bun:1 AS bun-builder
 
@@ -127,6 +137,9 @@ FROM ubuntu:24.04 AS runtime
 # docker-buildx is needed for multi-arch builds and advanced build features
 # iptables is needed by dockerd for network management
 # rsync is needed for agentfs to overlayfs migration
+# Copy the extracted CLI version from version-extractor stage
+COPY --from=version-extractor /cli-version /tmp/cli-version
+
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \
@@ -142,14 +155,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     vim \
     && curl -fsSL https://deb.nodesource.com/setup_25.x | bash - \
     && apt-get install -y --no-install-recommends nodejs \
-    && npm install -g @zed-industries/claude-code-acp pnpm \
+    # Install Claude Code CLI with version derived from SDK (0.2.X -> 2.1.X)
+    && CLI_VERSION=$(cat /tmp/cli-version) \
+    && echo "Installing Claude Code CLI version: $CLI_VERSION" \
+    && npm install -g @anthropic-ai/claude-code@${CLI_VERSION} @zed-industries/claude-code-acp pnpm \
     # Install latest stable Go
     && GO_VERSION=$(curl -fsSL 'https://go.dev/VERSION?m=text' | head -1) \
     && curl -fsSL "https://go.dev/dl/${GO_VERSION}.linux-$(dpkg --print-architecture).tar.gz" | tar -C /usr/local -xz \
-    # Install Claude Code CLI binary to /usr/local/bin
-    && curl -fsSL https://claude.ai/install.sh | bash \
-    && cp -L /root/.local/bin/claude /usr/local/bin/claude \
-    && rm -rf /var/lib/apt/lists/* /root/.npm /root/.local \
+    && rm -rf /var/lib/apt/lists/* /root/.npm \
     # Enable user_allow_other in fuse.conf (required for --allow-root mount option)
     && echo 'user_allow_other' >> /etc/fuse.conf
 
