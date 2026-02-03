@@ -5,13 +5,13 @@ import {
 	type SDKMessage,
 } from "@anthropic-ai/claude-agent-sdk";
 import type { UIMessage } from "ai";
-import { SessionImpl } from "../acp/session-impl.js";
 import type {
 	Agent,
 	AgentUpdateCallback,
 	EnvironmentUpdate,
 } from "../agent/interface.js";
 import type { Session } from "../agent/session.js";
+import { DiskBackedSession } from "./disk-backed-session.js";
 import type { StreamBlockIds, StreamState } from "../server/stream.js";
 import { createBlockIds, createStreamState } from "../server/stream.js";
 import {
@@ -33,7 +33,7 @@ import { sdkMessageToChunks } from "./translate.js";
 interface SessionContext {
 	sessionId: string;
 	claudeSessionId: string | null;
-	session: SessionImpl;
+	session: Session;
 	callback: AgentUpdateCallback | null;
 	streamState: StreamState | null;
 	blockIds: StreamBlockIds | null;
@@ -142,18 +142,19 @@ export class ClaudeSDKClient implements Agent {
 		let ctx = this.sessions.get(sid);
 
 		if (!ctx) {
+			// Create DiskBackedSession and load from disk
+			const session = new DiskBackedSession(sid, this.options.cwd);
+			await session.load();
+
 			ctx = {
 				sessionId: sid,
 				claudeSessionId: null,
-				session: new SessionImpl(sid),
+				session,
 				callback: null,
 				streamState: null,
 				blockIds: null,
 			};
 			this.sessions.set(sid, ctx);
-
-			// Always try to load existing session from ~/.claude
-			await this.loadSessionFromDisk(ctx);
 		}
 
 		this.currentSessionId = sid;
@@ -237,6 +238,13 @@ export class ClaudeSDKClient implements Agent {
 	async prompt(message: UIMessage, sessionId?: string): Promise<void> {
 		const sid = await this.ensureSession(sessionId);
 		const ctx = this.sessions.get(sid)!;
+
+		// Invalidate cache and clear dirty updates from previous turn
+		if (ctx.session instanceof DiskBackedSession) {
+			ctx.session.invalidateCache();
+			ctx.session.clearDirty();
+			await ctx.session.load();
+		}
 
 		// Initialize stream state for this prompt
 		ctx.streamState = createStreamState();
@@ -364,10 +372,13 @@ export class ClaudeSDKClient implements Agent {
 	}
 
 	createSession(sessionId: string): Session {
+		// Create a new empty session (don't load from disk)
+		const session = new DiskBackedSession(sessionId, this.options.cwd);
+
 		const ctx: SessionContext = {
 			sessionId,
 			claudeSessionId: null,
-			session: new SessionImpl(sessionId),
+			session,
 			callback: null,
 			streamState: null,
 			blockIds: null,
