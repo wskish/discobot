@@ -130,9 +130,15 @@ func (h *Handler) TerminalWebSocket(w http.ResponseWriter, r *http.Request) {
 					return
 				}
 				if n > 0 {
+					// Properly JSON-encode the data to preserve ANSI escape codes
+					data, err := json.Marshal(string(buf[:n]))
+					if err != nil {
+						log.Printf("JSON marshal error: %v", err)
+						return
+					}
 					msg := TerminalMessage{
 						Type: "output",
-						Data: json.RawMessage(`"` + escapeForJSON(buf[:n]) + `"`),
+						Data: json.RawMessage(data),
 					}
 					if err := conn.WriteJSON(msg); err != nil {
 						log.Printf("WebSocket write error: %v", err)
@@ -265,35 +271,4 @@ func sendError(conn *websocket.Conn, message string) {
 		Data: json.RawMessage(`"` + message + `"`),
 	}
 	_ = conn.WriteJSON(msg)
-}
-
-// escapeForJSON escapes binary data for JSON string
-func escapeForJSON(data []byte) string {
-	// Use base64 for binary data to avoid JSON escaping issues
-	// The client should decode this
-	result := make([]byte, 0, len(data)*2)
-	for _, b := range data {
-		switch b {
-		case '"':
-			result = append(result, '\\', '"')
-		case '\\':
-			result = append(result, '\\', '\\')
-		case '\n':
-			result = append(result, '\\', 'n')
-		case '\r':
-			result = append(result, '\\', 'r')
-		case '\t':
-			result = append(result, '\\', 't')
-		default:
-			if b < 32 || b > 126 {
-				// Escape non-printable characters
-				result = append(result, '\\', 'u', '0', '0',
-					"0123456789abcdef"[b>>4],
-					"0123456789abcdef"[b&0xf])
-			} else {
-				result = append(result, b)
-			}
-		}
-	}
-	return string(result)
 }
