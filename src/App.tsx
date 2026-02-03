@@ -2,6 +2,7 @@ import { Route, Routes } from "react-router";
 import { AppShell } from "@/components/app-shell";
 import { ResizeObserverFix } from "@/components/resize-observer-fix";
 import { ThemeProvider } from "@/components/theme-provider";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { HomePage } from "./pages/HomePage";
 
 export function App() {
@@ -13,12 +14,14 @@ export function App() {
 			disableTransitionOnChange
 			storageKey="theme"
 		>
-			<ResizeObserverFix />
-			<AppShell>
-				<Routes>
-					<Route path="/" element={<HomePage />} />
-				</Routes>
-			</AppShell>
+			<TooltipProvider delayDuration={700}>
+				<ResizeObserverFix />
+				<AppShell>
+					<Routes>
+						<Route path="/" element={<HomePage />} />
+					</Routes>
+				</AppShell>
+			</TooltipProvider>
 		</ThemeProvider>
 	);
 }
