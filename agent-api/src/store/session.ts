@@ -22,6 +22,7 @@ export interface SessionData {
 	sessionId: string;
 	cwd: string;
 	createdAt: string;
+	claudeSessionId?: string; // Claude SDK session ID for resumption
 }
 
 // In-memory message store using AI SDK's UIMessage type

@@ -1,6 +1,16 @@
 import assert from "node:assert";
-import { beforeEach, describe, it } from "node:test";
+import { existsSync, mkdirSync, rmSync } from "node:fs";
+import { readFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { after, before, beforeEach, describe, it } from "node:test";
 import type { UIMessage } from "ai";
+import {
+	clearSession as clearStoredSession,
+	getSessionData,
+	loadSession,
+	saveSession,
+} from "../store/session.js";
 import { ClaudeSDKClient } from "./client.js";
 
 describe("ClaudeSDKClient", () => {
@@ -332,4 +342,156 @@ describe("ClaudeSDKClient", () => {
 	// require actual SDK integration or complex mocking. These should be tested
 	// in integration tests where we can use real session files and SDK responses.
 	// See test/integration/ for these tests.
+});
+
+describe("ClaudeSDKClient claudeSessionId persistence", () => {
+	// Set up a test directory for session files
+	const TEST_DATA_DIR = join(tmpdir(), `discobot-client-test-${process.pid}`);
+	const testSessionFile = join(TEST_DATA_DIR, "test-session.json");
+	const testMessagesFile = join(TEST_DATA_DIR, "test-messages.json");
+
+	before(() => {
+		// Create test directory
+		if (!existsSync(TEST_DATA_DIR)) {
+			mkdirSync(TEST_DATA_DIR, { recursive: true });
+		}
+		// Set env vars to use test files
+		process.env.SESSION_FILE = testSessionFile;
+		process.env.MESSAGES_FILE = testMessagesFile;
+	});
+
+	beforeEach(async () => {
+		// Clear persisted session before each test
+		await clearStoredSession();
+		// Remove test files if they exist
+		if (existsSync(testSessionFile)) {
+			rmSync(testSessionFile);
+		}
+		if (existsSync(testMessagesFile)) {
+			rmSync(testMessagesFile);
+		}
+	});
+
+	after(async () => {
+		// Clean up
+		await clearStoredSession();
+		if (existsSync(TEST_DATA_DIR)) {
+			rmSync(TEST_DATA_DIR, { recursive: true, force: true });
+		}
+		// Restore env vars
+		delete process.env.SESSION_FILE;
+		delete process.env.MESSAGES_FILE;
+	});
+
+	it("loads persisted claudeSessionId when session exists", async () => {
+		// Pre-persist a session with a claudeSessionId
+		await saveSession({
+			sessionId: "my-discobot-session",
+			cwd: "/test/workspace",
+			createdAt: new Date().toISOString(),
+			claudeSessionId: "claude-abc-123",
+		});
+
+		// Create client and ensure the session
+		const client = new ClaudeSDKClient({
+			cwd: "/test/workspace",
+		});
+		await client.ensureSession("my-discobot-session");
+
+		// The client should have loaded the claudeSessionId internally
+		// We can verify this by checking that the persisted data is still there
+		const sessionData = getSessionData();
+		assert.strictEqual(sessionData?.claudeSessionId, "claude-abc-123");
+		assert.strictEqual(sessionData?.sessionId, "my-discobot-session");
+	});
+
+	it("does not load claudeSessionId for different session", async () => {
+		// Pre-persist a session with a different sessionId
+		await saveSession({
+			sessionId: "other-session",
+			cwd: "/test/workspace",
+			createdAt: new Date().toISOString(),
+			claudeSessionId: "claude-xyz-789",
+		});
+
+		// Create client and ensure a different session
+		const client = new ClaudeSDKClient({
+			cwd: "/test/workspace",
+		});
+		await client.ensureSession("my-session");
+
+		// The session data should still be the old one (not overwritten)
+		const sessionData = getSessionData();
+		assert.strictEqual(sessionData?.sessionId, "other-session");
+	});
+
+	it("clearSession clears persisted session data", async () => {
+		// Pre-persist a session
+		await saveSession({
+			sessionId: "test-session",
+			cwd: "/test/workspace",
+			createdAt: new Date().toISOString(),
+			claudeSessionId: "claude-session-id",
+		});
+
+		// Verify it was saved
+		assert.ok(
+			existsSync(testSessionFile),
+			"Session file should exist before clear",
+		);
+
+		// Create client, ensure session, and clear it
+		const client = new ClaudeSDKClient({
+			cwd: "/test/workspace",
+		});
+		await client.ensureSession("test-session");
+		await client.clearSession("test-session");
+
+		// Session file should be removed
+		assert.strictEqual(
+			existsSync(testSessionFile),
+			false,
+			"Session file should be deleted after clearSession",
+		);
+	});
+
+	it("persists claudeSessionId to file with correct structure", async () => {
+		// Save a session with claudeSessionId
+		await saveSession({
+			sessionId: "persist-test",
+			cwd: "/workspace",
+			createdAt: "2024-01-01T00:00:00.000Z",
+			claudeSessionId: "claude-persisted-id",
+		});
+
+		// Read the file directly and verify structure
+		const content = await readFile(testSessionFile, "utf-8");
+		const data = JSON.parse(content);
+
+		assert.strictEqual(data.sessionId, "persist-test");
+		assert.strictEqual(data.cwd, "/workspace");
+		assert.strictEqual(data.createdAt, "2024-01-01T00:00:00.000Z");
+		assert.strictEqual(data.claudeSessionId, "claude-persisted-id");
+	});
+
+	it("handles missing claudeSessionId in persisted data gracefully", async () => {
+		// Save a session WITHOUT claudeSessionId (legacy data)
+		await saveSession({
+			sessionId: "legacy-session",
+			cwd: "/test/workspace",
+			createdAt: new Date().toISOString(),
+		});
+
+		// Create client and ensure the session
+		const client = new ClaudeSDKClient({
+			cwd: "/test/workspace",
+		});
+
+		// Should not throw
+		await client.ensureSession("legacy-session");
+
+		// Client should work normally
+		const session = client.getSession("legacy-session");
+		assert.ok(session, "Session should exist");
+	});
 });

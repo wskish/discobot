@@ -15,6 +15,13 @@ import type { Session } from "../agent/session.js";
 import type { StreamBlockIds, StreamState } from "../server/stream.js";
 import { createBlockIds, createStreamState } from "../server/stream.js";
 import {
+	clearSession as clearStoredSession,
+	getSessionData,
+	loadSession,
+	type SessionData as StoreSessionData,
+	saveSession,
+} from "../store/session.js";
+import {
 	type ClaudeSessionInfo,
 	discoverSessions,
 	loadFullSessionData,
@@ -154,37 +161,62 @@ export class ClaudeSDKClient implements Agent {
 	}
 
 	/**
-	 * Load a session from ~/.claude directory if it exists
+	 * Load a session from disk, including the persisted claudeSessionId mapping
 	 */
 	private async loadSessionFromDisk(ctx: SessionContext): Promise<void> {
 		try {
-			// First, try to discover if this session exists in ~/.claude
-			const sessions = await discoverSessions(this.options.cwd);
-			const existingSession = sessions.find(
-				(s) => s.sessionId === ctx.sessionId,
-			);
+			// First, try to load the persisted session data which includes claudeSessionId
+			const storedSession = await loadSession();
+			if (storedSession && storedSession.sessionId === ctx.sessionId) {
+				// Restore the Claude session ID mapping
+				if (storedSession.claudeSessionId) {
+					ctx.claudeSessionId = storedSession.claudeSessionId;
+					console.log(
+						`Restored claudeSessionId mapping: ${ctx.sessionId} -> ${ctx.claudeSessionId}`,
+					);
+				}
+			}
 
-			if (existingSession) {
-				// Load messages from the session file
-				const messages = await loadSessionMessages(
-					ctx.sessionId,
-					this.options.cwd,
-				);
+			// If we have a claudeSessionId, try to load messages from the Claude session file
+			const claudeId = ctx.claudeSessionId;
+			if (claudeId) {
+				const messages = await loadSessionMessages(claudeId, this.options.cwd);
 
 				// Add messages to the session
 				for (const msg of messages) {
 					ctx.session.addMessage(msg);
 				}
 
-				// Store the Claude session ID for resumption
-				ctx.claudeSessionId = ctx.sessionId;
-
 				console.log(
-					`Loaded ${messages.length} messages from session ${ctx.sessionId}`,
+					`Loaded ${messages.length} messages from Claude session ${claudeId}`,
 				);
 			}
 		} catch (error) {
 			console.warn(`Failed to load session from disk:`, error);
+		}
+	}
+
+	/**
+	 * Persist the mapping between discobot sessionId and Claude SDK sessionId
+	 */
+	private async persistClaudeSessionId(
+		sessionId: string,
+		claudeSessionId: string,
+	): Promise<void> {
+		try {
+			const existingSession = getSessionData();
+			const sessionData: StoreSessionData = {
+				sessionId,
+				cwd: this.options.cwd,
+				createdAt: existingSession?.createdAt || new Date().toISOString(),
+				claudeSessionId,
+			};
+			await saveSession(sessionData);
+			console.log(
+				`Persisted claudeSessionId mapping: ${sessionId} -> ${claudeSessionId}`,
+			);
+		} catch (error) {
+			console.error(`Failed to persist claudeSessionId mapping:`, error);
 		}
 	}
 
@@ -227,7 +259,7 @@ export class ClaudeSDKClient implements Agent {
 		// Configure SDK options
 		const sdkOptions: Options = {
 			cwd: this.options.cwd,
-			model: this.options.model || "claude-sonnet-4-5-20250929",
+			model: this.options.model,
 			resume: ctx.claudeSessionId || undefined,
 			env: this.env,
 			includePartialMessages: true,
@@ -318,6 +350,8 @@ export class ClaudeSDKClient implements Agent {
 			ctx.session.clearMessages();
 			ctx.claudeSessionId = null;
 		}
+		// Also clear persisted session data
+		await clearStoredSession();
 	}
 
 	getSession(sessionId?: string): Session | undefined {
@@ -384,9 +418,11 @@ export class ClaudeSDKClient implements Agent {
 		msg: SDKMessage,
 		assistantMessageId: string,
 	): Promise<void> {
-		// Capture session ID from init message
+		// Capture session ID from init message and persist the mapping
 		if (msg.type === "system" && msg.subtype === "init") {
 			ctx.claudeSessionId = msg.session_id;
+			// Persist the mapping so it survives restarts
+			await this.persistClaudeSessionId(ctx.sessionId, msg.session_id);
 			return;
 		}
 
