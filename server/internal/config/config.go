@@ -22,6 +22,7 @@ type Config struct {
 	// Server settings
 	Port               int
 	CORSOrigins        []string
+	CORSDebug          bool // Enable CORS debug logging (default: false)
 	SuggestionsEnabled bool // Enable filesystem suggestions API (default: false)
 
 	// Database
@@ -95,7 +96,8 @@ func Load() (*Config, error) {
 
 	// Server
 	cfg.Port = getEnvInt("PORT", 3001)
-	cfg.CORSOrigins = getEnvList("CORS_ORIGINS", nil)
+	cfg.CORSOrigins = getEnvList("CORS_ORIGINS", []string{"http://*.localhost:3001"})
+	cfg.CORSDebug = getEnvBool("CORS_DEBUG", false)
 	cfg.SuggestionsEnabled = getEnvBool("SUGGESTIONS_ENABLED", false)
 
 	// Database - defaults to XDG_DATA_HOME/discobot/discobot.db
