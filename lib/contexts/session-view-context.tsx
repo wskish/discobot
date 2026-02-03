@@ -70,6 +70,8 @@ export interface SessionViewContextValue {
 	// Commit state
 	isCommitting: boolean;
 	handleCommit: () => Promise<void>;
+	/** Register the chat's resumeStream function for use after commit starts */
+	registerChatResumeStream: (fn: (() => Promise<void>) | null) => void;
 
 	// Right sidebar controls (managed internally)
 	rightSidebarOpen: boolean;
@@ -252,13 +254,28 @@ export function SessionViewProvider({
 
 	// Commit state
 	const [isCommitting, setIsCommitting] = React.useState(false);
+	const chatResumeStreamRef = React.useRef<(() => Promise<void>) | null>(null);
+
+	const registerChatResumeStream = React.useCallback(
+		(fn: (() => Promise<void>) | null) => {
+			chatResumeStreamRef.current = fn;
+		},
+		[],
+	);
 
 	const handleCommit = React.useCallback(async () => {
 		if (!selectedSessionId || isCommitting) return;
 
 		try {
 			setIsCommitting(true);
+			// Start the commit job on the server
 			await api.commitSession(selectedSessionId);
+
+			// Give the server a moment to start the stream, then resume it in the chat
+			// The resumeStream will connect to GET /chat/{sessionId}/stream
+			setTimeout(() => {
+				chatResumeStreamRef.current?.();
+			}, 100);
 		} catch (error) {
 			console.error("Failed to start commit:", error);
 		} finally {
@@ -303,6 +320,7 @@ export function SessionViewProvider({
 			stopService,
 			isCommitting,
 			handleCommit,
+			registerChatResumeStream,
 			rightSidebarOpen,
 			changedFilesCount,
 			onToggleRightSidebar,
@@ -330,6 +348,7 @@ export function SessionViewProvider({
 			stopService,
 			isCommitting,
 			handleCommit,
+			registerChatResumeStream,
 			rightSidebarOpen,
 			changedFilesCount,
 			onToggleRightSidebar,

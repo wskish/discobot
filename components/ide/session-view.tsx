@@ -85,6 +85,7 @@ export function SessionView({
 		mountedServices,
 		rightSidebarOpen,
 		refreshDiffData,
+		registerChatResumeStream,
 	} = useSessionViewContext();
 
 	// Fetch diff entries for rendering file content
@@ -143,6 +144,7 @@ export function SessionView({
 									initialWorkspaceId={initialWorkspaceId}
 									onSessionCreated={onSessionCreated}
 									onChatComplete={handleChatComplete}
+									onRegisterResumeStream={registerChatResumeStream}
 									className="h-full"
 								/>
 							)}

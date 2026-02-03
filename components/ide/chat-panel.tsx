@@ -81,6 +81,8 @@ interface ChatPanelProps {
 	) => void;
 	/** Callback when chat completes (for refreshing file data) */
 	onChatComplete?: () => void;
+	/** Callback to register the resumeStream function for external use (e.g., after commit starts) */
+	onRegisterResumeStream?: (fn: (() => Promise<void>) | null) => void;
 	/** Optional className */
 	className?: string;
 }
@@ -91,6 +93,7 @@ export function ChatPanel({
 	initialWorkspaceId,
 	onSessionCreated,
 	onChatComplete,
+	onRegisterResumeStream,
 	className,
 }: ChatPanelProps) {
 	// Determine if this is a resume scenario based on initialMessages
@@ -196,6 +199,7 @@ export function ChatPanel({
 		messages,
 		setMessages,
 		sendMessage,
+		resumeStream,
 		status: chatStatus,
 		error: chatError,
 	} = useChat({
@@ -206,6 +210,14 @@ export function ChatPanel({
 		messages: initialMessages,
 		onFinish: onChatComplete,
 	});
+
+	// Register resumeStream for external use (e.g., after commit starts)
+	React.useEffect(() => {
+		onRegisterResumeStream?.(resumeStream);
+		return () => {
+			onRegisterResumeStream?.(null);
+		};
+	}, [resumeStream, onRegisterResumeStream]);
 
 	// Sync SWR messages with useChat when they change (after refetch)
 	// This ensures that when we invalidate the cache and get fresh messages,
