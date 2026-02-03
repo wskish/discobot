@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# Development script to run agent-api from source
+# Use with: LOCAL_AGENT_BINARY=/path/to/discobot/agent-api/dev-agent
+
+set -e
+
+# Get the directory where this script is located
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Run agent-api from source using tsx
+exec npx --prefix "$SCRIPT_DIR" tsx --watch "$SCRIPT_DIR/src/index.ts" "$@"

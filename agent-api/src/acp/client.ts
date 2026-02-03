@@ -747,7 +747,7 @@ export class ACPClient implements Agent {
 	private getSessionDir(sessionId: string): string {
 		const baseDir =
 			process.env.SESSION_BASE_DIR ||
-			"/home/discobot/.config/discobot/sessions";
+			`${process.env.HOME}/.config/discobot/sessions`;
 		return join(baseDir, sessionId);
 	}
 
