@@ -1,4 +1,4 @@
-import type { DynamicToolUIPart, FileUIPart, UIMessage } from "ai";
+import type { UIMessage } from "ai";
 import { Copy, Loader2, MessageSquare } from "lucide-react";
 import * as React from "react";
 import {
@@ -7,24 +7,16 @@ import {
 	ConversationEmptyState,
 	ConversationScrollButton,
 } from "@/components/ai-elements/conversation";
-import { ImageAttachment } from "@/components/ai-elements/image-attachment";
 import {
 	Message,
 	MessageAction,
 	MessageActions,
 	MessageContent,
-	MessageResponse,
 } from "@/components/ai-elements/message";
 import { Shimmer } from "@/components/ai-elements/shimmer";
-import {
-	Tool,
-	ToolContent,
-	ToolHeader,
-	ToolInput,
-	ToolOutput,
-} from "@/components/ai-elements/tool";
 import { useLazyRender } from "@/lib/hooks/use-lazy-render";
 import { cn } from "@/lib/utils";
+import { MessagePart } from "./message-parts";
 
 interface ChatConversationProps {
 	/** Messages from useChat (consolidated list) */
@@ -51,11 +43,13 @@ function getMessageText(message: UIMessage): string {
 interface MessageItemProps {
 	message: UIMessage;
 	onCopy: (text: string) => void;
+	isStreaming?: boolean;
 }
 
 const MessageItem = React.memo(function MessageItem({
 	message,
 	onCopy,
+	isStreaming = false,
 }: MessageItemProps) {
 	const textContent = React.useMemo(() => getMessageText(message), [message]);
 
@@ -66,62 +60,15 @@ const MessageItem = React.memo(function MessageItem({
 					{message.role === "user" ? "You" : "Assistant"}
 				</div>
 				{/* Render message parts in order */}
-				{message.parts.map((part, partIdx) => {
-					if (part.type === "text") {
-						return (
-							// biome-ignore lint/suspicious/noArrayIndexKey: Text parts have no unique ID, order is stable
-							<MessageResponse key={`text-${partIdx}`}>
-								{part.text}
-							</MessageResponse>
-						);
-					}
-					if (part.type === "file") {
-						const filePart = part as FileUIPart;
-						if (filePart.mediaType?.startsWith("image/")) {
-							return (
-								<ImageAttachment
-									// biome-ignore lint/suspicious/noArrayIndexKey: File parts have no unique ID, order is stable
-									key={`file-${partIdx}`}
-									src={filePart.url}
-									filename={filePart.filename}
-								/>
-							);
-						}
-						// Non-image file attachment
-						return (
-							<div
-								// biome-ignore lint/suspicious/noArrayIndexKey: File parts have no unique ID, order is stable
-								key={`file-${partIdx}`}
-								className="flex items-center gap-2 rounded-md border border-border bg-muted/50 px-3 py-2 text-sm"
-							>
-								<span className="text-muted-foreground">
-									📎 {filePart.filename}
-								</span>
-							</div>
-						);
-					}
-					if (part.type === "dynamic-tool") {
-						const toolPart = part as DynamicToolUIPart;
-						return (
-							<Tool key={toolPart.toolCallId}>
-								<ToolHeader
-									type={toolPart.type}
-									state={toolPart.state}
-									toolName={toolPart.toolName}
-									title={toolPart.title}
-								/>
-								<ToolContent>
-									<ToolInput input={toolPart.input} />
-									<ToolOutput
-										output={toolPart.output}
-										errorText={toolPart.errorText}
-									/>
-								</ToolContent>
-							</Tool>
-						);
-					}
-					return null;
-				})}
+				{message.parts.map((part, partIdx) => (
+					<MessagePart
+						key={`${message.id}-part-${partIdx}`}
+						message={message}
+						partIdx={partIdx}
+						part={part}
+						isStreaming={isStreaming}
+					/>
+				))}
 				{message.role === "assistant" && (
 					<MessageActions>
 						<MessageAction
@@ -154,6 +101,7 @@ const LAZY_OBSERVER_OPTIONS: IntersectionObserverInit = {
 const LazyMessageItem = React.memo(function LazyMessageItem({
 	message,
 	onCopy,
+	isStreaming = false,
 	estimatedHeight = 100,
 }: LazyMessageItemProps) {
 	const [ref, hasBeenVisible] = useLazyRender(LAZY_OBSERVER_OPTIONS);
@@ -161,7 +109,11 @@ const LazyMessageItem = React.memo(function LazyMessageItem({
 	return (
 		<div ref={ref}>
 			{hasBeenVisible ? (
-				<MessageItem message={message} onCopy={onCopy} />
+				<MessageItem
+					message={message}
+					onCopy={onCopy}
+					isStreaming={isStreaming}
+				/>
 			) : (
 				// Placeholder with estimated height to maintain scroll position
 				<div
@@ -216,17 +168,23 @@ export function ChatConversation({
 							// Render last few messages immediately (they're likely visible)
 							// Lazy-render older messages to improve initial load performance
 							const isRecentMessage = index >= messages.length - 3;
+							// Only the last message can be streaming
+							const isThisMessageStreaming =
+								isChatActive && index === messages.length - 1;
+
 							return isRecentMessage ? (
 								<MessageItem
 									key={message.id}
 									message={message}
 									onCopy={onCopy}
+									isStreaming={isThisMessageStreaming}
 								/>
 							) : (
 								<LazyMessageItem
 									key={message.id}
 									message={message}
 									onCopy={onCopy}
+									isStreaming={isThisMessageStreaming}
 									estimatedHeight={message.role === "user" ? 80 : 150}
 								/>
 							);
