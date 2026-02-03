@@ -214,14 +214,24 @@ export function ChatPanel({
 
 	React.useEffect(() => {
 		if (resume && swrMessages.length > 0) {
-			// Check if swrMessages actually changed by comparing with previous value
+			// Check if the last SWR message exists in useChat messages
+			// If it does, useChat is already up-to-date (or ahead with streaming content)
+			const lastSwrMessage = swrMessages[swrMessages.length - 1];
+			const lastSwrMessageExistsInUseChat = messages.some(
+				(msg) => msg.id === lastSwrMessage.id,
+			);
+
+			// Only sync if:
+			// 1. SWR messages have changed (different length or IDs)
+			// 2. AND the last SWR message doesn't exist in useChat messages yet
+			//    (to avoid clobbering streaming messages)
 			const swrMessagesChanged =
 				swrMessages.length !== prevSwrMessagesRef.current.length ||
 				swrMessages.some(
 					(msg, i) => msg.id !== prevSwrMessagesRef.current[i]?.id,
 				);
 
-			if (swrMessagesChanged) {
+			if (swrMessagesChanged && !lastSwrMessageExistsInUseChat) {
 				prevSwrMessagesRef.current = swrMessages;
 
 				// Extra safety: deduplicate before setting (should already be deduped by useMessages hook)
@@ -238,7 +248,7 @@ export function ChatPanel({
 				setMessages(dedupedMessages);
 			}
 		}
-	}, [resume, swrMessages, setMessages]);
+	}, [resume, swrMessages, messages, setMessages]);
 
 	// Derive loading state from chat status
 	const isLoading = chatStatus === "streaming" || chatStatus === "submitted";
