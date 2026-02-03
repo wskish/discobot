@@ -4,10 +4,15 @@ import (
 	"encoding/hex"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/adrg/xdg"
 )
+
+const appName = "discobot"
 
 // DefaultSandboxImage is the default sandbox image for sessions.
 const DefaultSandboxImage = "ghcr.io/obot-platform/discobot:main"
@@ -93,8 +98,8 @@ func Load() (*Config, error) {
 	cfg.CORSOrigins = getEnvList("CORS_ORIGINS", nil)
 	cfg.SuggestionsEnabled = getEnvBool("SUGGESTIONS_ENABLED", false)
 
-	// Database
-	cfg.DatabaseDSN = getEnv("DATABASE_DSN", "sqlite3://./discobot.db")
+	// Database - defaults to XDG_DATA_HOME/discobot/discobot.db
+	cfg.DatabaseDSN = getEnv("DATABASE_DSN", "sqlite3://"+filepath.Join(xdg.DataHome, appName, "discobot.db"))
 	cfg.DatabaseDriver = detectDriver(cfg.DatabaseDSN)
 
 	// Authentication - defaults to disabled (anonymous user mode)
@@ -129,8 +134,8 @@ func Load() (*Config, error) {
 	}
 	cfg.EncryptionKey = encryptionKey
 
-	// Workspaces and Git
-	cfg.WorkspaceDir = getEnv("WORKSPACE_DIR", "./workspaces")
+	// Workspaces and Git - defaults to XDG_DATA_HOME/discobot/workspaces
+	cfg.WorkspaceDir = getEnv("WORKSPACE_DIR", filepath.Join(xdg.DataHome, appName, "workspaces"))
 
 	// Sandbox runtime settings
 	cfg.SandboxImage = getEnv("SANDBOX_IMAGE", DefaultSandboxImage)
@@ -145,7 +150,8 @@ func Load() (*Config, error) {
 	cfg.CacheEnabled = getEnvBool("CACHE_ENABLED", true)
 
 	// VZ-specific settings (macOS Virtualization.framework)
-	cfg.VZDataDir = getEnv("VZ_DATA_DIR", "./vz")
+	// VZ state defaults to XDG_STATE_HOME/discobot/vz
+	cfg.VZDataDir = getEnv("VZ_DATA_DIR", filepath.Join(xdg.StateHome, appName, "vz"))
 	cfg.VZKernelPath = getEnv("VZ_KERNEL_PATH", "")
 	cfg.VZInitrdPath = getEnv("VZ_INITRD_PATH", "")
 	cfg.VZBaseDiskPath = getEnv("VZ_BASE_DISK_PATH", "")
@@ -155,9 +161,10 @@ func Load() (*Config, error) {
 	cfg.LocalAgentBinary = getEnv("LOCAL_AGENT_BINARY", "obot-agent-api")
 
 	// SSH server settings
+	// SSH host key defaults to XDG_STATE_HOME/discobot/ssh_host_key
 	cfg.SSHEnabled = getEnvBool("SSH_ENABLED", true)
 	cfg.SSHPort = getEnvInt("SSH_PORT", 3333)
-	cfg.SSHHostKeyPath = getEnv("SSH_HOST_KEY_PATH", "./ssh_host_key")
+	cfg.SSHHostKeyPath = getEnv("SSH_HOST_KEY_PATH", filepath.Join(xdg.StateHome, appName, "ssh_host_key"))
 
 	// Job Dispatcher settings
 	cfg.DispatcherEnabled = getEnvBool("DISPATCHER_ENABLED", true)

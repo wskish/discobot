@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -55,6 +56,15 @@ func New(cfg *config.Config) (*DB, error) {
 		// glebarez/sqlite (modernc) handles pragmas differently
 		// For in-memory databases, use ":memory:"
 		// For file databases, just use the path
+
+		// Ensure parent directory exists for file-based databases
+		if sqliteDSN != ":memory:" && !strings.HasPrefix(sqliteDSN, ":memory:") {
+			dir := filepath.Dir(sqliteDSN)
+			if err := os.MkdirAll(dir, 0755); err != nil {
+				return nil, fmt.Errorf("failed to create database directory %s: %w", dir, err)
+			}
+		}
+
 		db, err = gorm.Open(sqlite.Open(sqliteDSN), gormConfig)
 		if err == nil {
 			// Enable foreign keys after connection
