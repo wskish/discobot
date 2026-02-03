@@ -291,34 +291,8 @@ export class ClaudeSDKClient implements Agent {
 					toolUseID: options.toolUseID,
 				};
 			},
-			// Use hooks to capture tool output after execution
-			hooks: {
-				PostToolUse: [
-					{
-						hooks: [
-							async (input: any, toolUseID: string | undefined) => {
-								console.log(
-									`[SDK] PostToolUse hook: ${(input as any).tool_name}`,
-									`tool_use_id: ${toolUseID}`,
-									`response: ${JSON.stringify((input as any).tool_response).substring(0, 200)}...`,
-								);
-
-								// Emit tool-output-available chunk via the session callback
-								if (ctx.callback && toolUseID) {
-									ctx.callback({
-										type: "tool-output-available",
-										toolCallId: toolUseID,
-										output: (input as any).tool_response,
-										dynamic: true,
-									});
-								}
-
-								return {};
-							},
-						],
-					},
-				],
-			},
+			// Tool outputs are handled through streaming events (tool_result blocks)
+			// rather than PostToolUse hooks to maintain proper event ordering
 		};
 
 		try {

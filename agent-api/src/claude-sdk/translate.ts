@@ -251,12 +251,13 @@ function handleContentBlockDelta(
 
 	// Tool input is being streamed
 	if (event.delta?.type === "input_json_delta") {
+		const chunks: UIMessageChunk[] = [];
 		const partialJson = event.delta.partial_json;
 
 		// Find the tool state for this block index
 		// Since we don't have the tool ID in the delta event, we need to find the most recent
 		// tool that's in input-streaming state
-		for (const [_toolCallId, toolState] of state.toolStates.entries()) {
+		for (const [toolCallId, toolState] of state.toolStates.entries()) {
 			if (
 				toolState.state === "input-streaming" &&
 				!toolState.inputAvailableSent
@@ -268,17 +269,29 @@ function handleContentBlockDelta(
 				toolState.inputJsonBuffer += partialJson;
 
 				// Try to parse the accumulated JSON to update lastRawInput
+				// If successful, emit a tool-input-delta chunk with the parsed input
 				try {
 					const parsed = JSON.parse(toolState.inputJsonBuffer);
 					toolState.lastRawInput = parsed;
+
+					// Emit delta chunk to stream the input progressively
+					chunks.push({
+						type: "tool-input-delta",
+						toolCallId,
+						delta: parsed,
+						dynamic: true,
+					});
 				} catch {
 					// Not yet complete JSON, wait for more deltas
+					// We could emit the partial JSON string here if needed
 				}
 
 				// Only process the first matching tool
 				break;
 			}
 		}
+
+		return chunks;
 	}
 
 	return [];
