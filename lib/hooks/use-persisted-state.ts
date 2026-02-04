@@ -69,4 +69,5 @@ export const STORAGE_KEYS = {
 	// Consolidated diff view state
 	CONSOLIDATED_DIFF_EXPANDED: "discobot:consolidatedDiffExpanded",
 	CONSOLIDATED_DIFF_REVIEWED: "discobot:consolidatedDiffReviewed",
+	CONSOLIDATED_DIFF_STYLE: "discobot:consolidatedDiffStyle",
 } as const;

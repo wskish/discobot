@@ -1,8 +1,15 @@
-import * as Diff from "diff";
-import { Check, ChevronDown, ChevronRight, Loader2 } from "lucide-react";
+import { PatchDiff } from "@pierre/diffs/react";
+import {
+	Check,
+	ChevronDown,
+	ChevronRight,
+	Columns2,
+	Edit,
+	Loader2,
+	Rows2,
+} from "lucide-react";
 import { useTheme } from "next-themes";
 import * as React from "react";
-import { lazy, Suspense } from "react";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api-client";
 import { useSessionViewContext } from "@/lib/contexts/session-view-context";
@@ -11,129 +18,47 @@ import {
 	usePersistedState,
 } from "@/lib/hooks/use-persisted-state";
 import {
-	useSessionFileContent,
 	useSessionFileDiff,
 	useSessionFiles,
 } from "@/lib/hooks/use-session-files";
 import { cn } from "@/lib/utils";
 
-// Lazy-load Monaco DiffEditor
-const DiffEditor = lazy(() =>
-	import("@monaco-editor/react").then((mod) => ({ default: mod.DiffEditor })),
-);
-
-// Language detection from file path
-const LANGUAGE_MAP: Record<string, string> = {
-	js: "javascript",
-	jsx: "javascript",
-	ts: "typescript",
-	tsx: "typescript",
-	py: "python",
-	rb: "ruby",
-	go: "go",
-	rs: "rust",
-	java: "java",
-	c: "c",
-	cpp: "cpp",
-	h: "c",
-	hpp: "cpp",
-	cs: "csharp",
-	php: "php",
-	swift: "swift",
-	kt: "kotlin",
-	scala: "scala",
-	html: "html",
-	htm: "html",
-	css: "css",
-	scss: "scss",
-	less: "less",
-	json: "json",
-	xml: "xml",
-	yaml: "yaml",
-	yml: "yaml",
-	md: "markdown",
-	sql: "sql",
-	sh: "shell",
-	bash: "shell",
-	zsh: "shell",
-	ps1: "powershell",
-	dockerfile: "dockerfile",
-	makefile: "makefile",
-	toml: "toml",
-	ini: "ini",
-	conf: "ini",
-	graphql: "graphql",
-	gql: "graphql",
-	vue: "vue",
-	svelte: "svelte",
-};
-
-function getLanguageFromPath(filePath: string): string {
-	const ext = filePath.split(".").pop()?.toLowerCase() || "";
-	const filename = filePath.split("/").pop()?.toLowerCase() || "";
-	if (filename === "dockerfile") return "dockerfile";
-	if (filename === "makefile") return "makefile";
-	if (filename.startsWith(".") && !ext) return "plaintext";
-	return LANGUAGE_MAP[ext] || "plaintext";
-}
+type DiffStyle = "split" | "unified";
 
 /**
- * Reconstruct original content from current content and unified diff patch.
+ * Generate a simple hash from a string for comparison purposes
  */
-function reconstructOriginalFromPatch(
-	currentContent: string,
-	patch: string,
-): string {
-	try {
-		const parsedPatches = Diff.parsePatch(patch);
-		if (parsedPatches.length === 0) {
-			return currentContent;
-		}
-
-		const reversedPatch = parsedPatches[0];
-		const originalPatch = {
-			...reversedPatch,
-			hunks: reversedPatch.hunks.map((hunk) => ({
-				...hunk,
-				lines: hunk.lines.map((line: string) => {
-					if (line.startsWith("+")) return `-${line.slice(1)}`;
-					if (line.startsWith("-")) return `+${line.slice(1)}`;
-					return line;
-				}),
-				oldStart: hunk.newStart,
-				oldLines: hunk.newLines,
-				newStart: hunk.oldStart,
-				newLines: hunk.oldLines,
-			})),
-		};
-
-		const result = Diff.applyPatch(currentContent, originalPatch);
-		return typeof result === "string" ? result : currentContent;
-	} catch (error) {
-		console.error("Failed to reconstruct original from patch:", error);
-		return currentContent;
-	}
+async function hashString(str: string): Promise<string> {
+	const encoder = new TextEncoder();
+	const data = encoder.encode(str);
+	const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+	const hashArray = Array.from(new Uint8Array(hashBuffer));
+	return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
 interface FileDiffSectionProps {
 	filePath: string;
 	sessionId: string;
 	isExpanded: boolean;
-	isReviewed: boolean;
+	currentPatchHash: string | null;
+	diffStyle: DiffStyle;
 	onToggleExpand: () => void;
-	onToggleReview: () => void;
+	onToggleReview: (patchHash: string) => void;
+	onEdit: () => void;
 }
 
 /**
- * Individual file diff section with collapsible Monaco DiffEditor
+ * Individual file diff section with collapsible PatchDiff
  */
 function FileDiffSection({
 	filePath,
 	sessionId,
 	isExpanded,
-	isReviewed,
+	currentPatchHash,
+	diffStyle,
 	onToggleExpand,
 	onToggleReview,
+	onEdit,
 }: FileDiffSectionProps) {
 	const { resolvedTheme } = useTheme();
 
@@ -143,72 +68,29 @@ function FileDiffSection({
 		error: diffError,
 	} = useSessionFileDiff(sessionId, filePath);
 
-	const isDeleted = diff?.status === "deleted";
-	const isAdded = diff?.status === "added";
-
-	// For deleted files, we need to fetch from base commit
-	// For other files, load current content
-	const shouldLoadContent = !isDiffLoading && !!diff && !diff.binary;
-
-	// Load content from base for deleted files, from current workspace otherwise
-	const [deletedFileContent, setDeletedFileContent] = React.useState<
-		string | null
-	>(null);
-	const [deletedFileLoading, setDeletedFileLoading] = React.useState(false);
-	const [deletedFileError, setDeletedFileError] = React.useState<Error | null>(
-		null,
-	);
-
-	// Fetch deleted file content from base commit
+	// Compute hash of current patch
+	const [patchHash, setPatchHash] = React.useState<string | null>(null);
 	React.useEffect(() => {
-		if (isDeleted && shouldLoadContent && sessionId && filePath) {
-			setDeletedFileLoading(true);
-			setDeletedFileError(null);
-			api
-				.readSessionFile(sessionId, filePath, { fromBase: true })
-				.then((result) => {
-					setDeletedFileContent(result.content || "");
-					setDeletedFileLoading(false);
-				})
-				.catch((err) => {
-					setDeletedFileError(err);
-					setDeletedFileLoading(false);
-				});
+		if (diff?.patch) {
+			hashString(diff.patch).then(setPatchHash);
+		} else {
+			setPatchHash(null);
 		}
-	}, [isDeleted, shouldLoadContent, sessionId, filePath]);
+	}, [diff?.patch]);
 
-	const {
-		content: currentContent,
-		isLoading: isContentLoading,
-		error: contentError,
-	} = useSessionFileContent(
-		shouldLoadContent && !isDeleted ? sessionId : null,
-		filePath,
-	);
-
-	// Reconstruct original content from patch
-	const originalContent = React.useMemo(() => {
-		if (isAdded) return "";
-		if (isDeleted) return deletedFileContent || "";
-		if (!currentContent || !diff?.patch) return "";
-		return reconstructOriginalFromPatch(currentContent, diff.patch);
-	}, [currentContent, diff?.patch, isAdded, isDeleted, deletedFileContent]);
-
-	const language = getLanguageFromPath(filePath);
+	// File is reviewed if the stored hash matches the current patch hash
+	const isReviewed = patchHash !== null && patchHash === currentPatchHash;
 
 	// Handle review - auto-collapse when marked as reviewed
 	const handleReviewClick = () => {
-		onToggleReview();
-		if (!isReviewed && isExpanded) {
-			// Collapse when marking as reviewed
-			onToggleExpand();
+		if (patchHash) {
+			onToggleReview(patchHash);
+			if (!isReviewed && isExpanded) {
+				// Collapse when marking as reviewed
+				onToggleExpand();
+			}
 		}
 	};
-
-	const isLoading =
-		isDiffLoading ||
-		(shouldLoadContent && (isDeleted ? deletedFileLoading : isContentLoading));
-	const finalError = diffError || (isDeleted ? deletedFileError : contentError);
 
 	return (
 		<div className="border-b border-border">
@@ -230,6 +112,12 @@ function FileDiffSection({
 						<ChevronRight className="h-4 w-4 shrink-0" />
 					)}
 					<span className="font-mono text-sm truncate">{filePath}</span>
+					{diff && !diff.binary && (
+						<span className="flex items-center gap-1 text-xs shrink-0">
+							<span className="text-green-500">+{diff.additions}</span>
+							<span className="text-red-500">-{diff.deletions}</span>
+						</span>
+					)}
 					{diff?.status && (
 						<span
 							className={cn(
@@ -260,37 +148,55 @@ function FileDiffSection({
 						</span>
 					)}
 				</button>
-				<Button
-					variant={isReviewed ? "secondary" : "ghost"}
-					size="sm"
-					className="h-6 px-2 text-xs shrink-0"
-					onClick={(e) => {
-						e.stopPropagation();
-						handleReviewClick();
-					}}
-				>
-					{isReviewed ? (
-						<>
-							<Check className="h-3 w-3 mr-1" />
-							Reviewed
-						</>
-					) : (
-						"Mark as Reviewed"
+				<div className="flex items-center gap-1 shrink-0">
+					{/* Edit button - only show for non-deleted files */}
+					{diff?.status !== "deleted" && (
+						<Button
+							variant="ghost"
+							size="sm"
+							className="h-6 px-2 text-xs"
+							onClick={(e) => {
+								e.stopPropagation();
+								onEdit();
+							}}
+							title="Edit file"
+						>
+							<Edit className="h-3 w-3 mr-1" />
+							Edit
+						</Button>
 					)}
-				</Button>
+					<Button
+						variant={isReviewed ? "secondary" : "ghost"}
+						size="sm"
+						className="h-6 px-2 text-xs"
+						onClick={(e) => {
+							e.stopPropagation();
+							handleReviewClick();
+						}}
+					>
+						{isReviewed ? (
+							<>
+								<Check className="h-3 w-3 mr-1" />
+								Reviewed
+							</>
+						) : (
+							"Mark as Reviewed"
+						)}
+					</Button>
+				</div>
 			</div>
 
 			{/* Expandable diff content */}
 			{isExpanded && (
 				<div className="bg-background">
-					{isLoading ? (
+					{isDiffLoading ? (
 						<div className="flex items-center justify-center py-8 text-muted-foreground">
 							<Loader2 className="h-5 w-5 animate-spin mr-2" />
 							Loading diff...
 						</div>
-					) : finalError ? (
+					) : diffError ? (
 						<div className="flex items-center justify-center py-8 text-destructive">
-							Failed to load: {finalError.message}
+							Failed to load: {diffError.message}
 						</div>
 					) : !diff || !diff.patch ? (
 						<div className="flex items-center justify-center py-8 text-muted-foreground">
@@ -301,44 +207,18 @@ function FileDiffSection({
 							Binary file - cannot display diff
 						</div>
 					) : (
-						<div style={{ height: "400px" }}>
-							<Suspense
-								fallback={
-									<div className="flex items-center justify-center h-full text-muted-foreground">
-										<Loader2 className="h-5 w-5 animate-spin mr-2" />
-										Loading editor...
-									</div>
-								}
-							>
-								<DiffEditor
-									height="100%"
-									language={language}
-									original={originalContent}
-									modified={isDeleted ? "" : currentContent || ""}
-									theme={resolvedTheme === "dark" ? "vs-dark" : "vs"}
-									options={{
-										readOnly: true,
-										renderSideBySide: true,
-										minimap: { enabled: false },
-										scrollBeyondLastLine: false,
-										fontSize: 13,
-										lineNumbers: "on",
-										renderLineHighlight: "all",
-										scrollbar: {
-											verticalScrollbarSize: 10,
-											horizontalScrollbarSize: 10,
-										},
-										hideUnchangedRegions: {
-											enabled: true,
-											minimumLineCount: 3,
-											contextLineCount: 3,
-											revealLineCount: 0,
-										},
-										diffWordWrap: "on",
-									}}
-								/>
-							</Suspense>
-						</div>
+						<PatchDiff
+							patch={diff.patch}
+							options={{
+								theme: {
+									dark: "github-dark",
+									light: "github-light",
+								},
+								themeType: resolvedTheme === "dark" ? "dark" : "light",
+								diffStyle,
+								lineDiffType: "word-alt",
+							}}
+						/>
 					)}
 				</div>
 			)}
@@ -351,7 +231,15 @@ function FileDiffSection({
  * Each file is collapsible and can be marked as reviewed (persisted in localStorage).
  */
 export function ConsolidatedDiffView() {
-	const { selectedSessionId } = useSessionViewContext();
+	const { selectedSessionId, handleFileSelect, setActiveView } =
+		useSessionViewContext();
+
+	// Track diff style preference (split/unified)
+	const [diffStyle, setDiffStyle] = usePersistedState<DiffStyle>(
+		STORAGE_KEYS.CONSOLIDATED_DIFF_STYLE,
+		"split",
+		"local",
+	);
 
 	// Get all changed files from session
 	const { diffEntries, isLoading: isLoadingFiles } = useSessionFiles(
@@ -367,13 +255,15 @@ export function ConsolidatedDiffView() {
 		"session",
 	);
 
-	// Track reviewed state per session+file (in localStorage)
+	// Track reviewed state per session+file with patch hash (in localStorage)
+	// Format: { sessionId: { filePath: patchHash } }
 	const [reviewedFiles, setReviewedFiles] = usePersistedState<
-		Record<string, string[]>
+		Record<string, Record<string, string>>
 	>(STORAGE_KEYS.CONSOLIDATED_DIFF_REVIEWED, {}, "local");
 
+	// Get reviewed files for current session as a Map of filePath -> patchHash
 	const sessionReviewedFiles = React.useMemo(
-		() => new Set(reviewedFiles[selectedSessionId || ""] || []),
+		() => new Map(Object.entries(reviewedFiles[selectedSessionId || ""] || {})),
 		[reviewedFiles, selectedSessionId],
 	);
 
@@ -398,21 +288,23 @@ export function ConsolidatedDiffView() {
 	);
 
 	const toggleReviewed = React.useCallback(
-		(filePath: string) => {
+		(filePath: string, patchHash: string) => {
 			if (!selectedSessionId) return;
 
 			setReviewedFiles((prev) => {
-				const sessionFiles = new Set(prev[selectedSessionId] || []);
+				const sessionFiles = { ...(prev[selectedSessionId] || {}) };
 
-				if (sessionFiles.has(filePath)) {
-					sessionFiles.delete(filePath);
+				// If already reviewed with this exact hash, unmark it
+				// Otherwise, mark as reviewed with the new hash
+				if (sessionFiles[filePath] === patchHash) {
+					delete sessionFiles[filePath];
 				} else {
-					sessionFiles.add(filePath);
+					sessionFiles[filePath] = patchHash;
 				}
 
 				return {
 					...prev,
-					[selectedSessionId]: Array.from(sessionFiles),
+					[selectedSessionId]: sessionFiles,
 				};
 			});
 		},
@@ -428,16 +320,42 @@ export function ConsolidatedDiffView() {
 		setExpandedFiles([]);
 	}, [setExpandedFiles]);
 
-	const markAllReviewed = React.useCallback(() => {
+	const markAllReviewed = React.useCallback(async () => {
 		if (!selectedSessionId) return;
-		const allPaths = diffEntries.map((f) => f.path);
+
+		// Fetch all diffs to get patch hashes
+		const sessionFiles: Record<string, string> = {};
+
+		for (const file of diffEntries) {
+			try {
+				// Fetch the diff for this file using the API client
+				const diffData = await api.getSessionDiff(selectedSessionId, {
+					path: file.path,
+				});
+				if ("patch" in diffData && diffData.patch) {
+					const hash = await hashString(diffData.patch);
+					sessionFiles[file.path] = hash;
+				}
+			} catch (error) {
+				console.error(`Failed to fetch diff for ${file.path}:`, error);
+			}
+		}
+
 		setReviewedFiles((prev) => ({
 			...prev,
-			[selectedSessionId]: allPaths,
+			[selectedSessionId]: sessionFiles,
 		}));
 		// Also collapse all when marking all as reviewed
 		setExpandedFiles([]);
 	}, [selectedSessionId, diffEntries, setReviewedFiles, setExpandedFiles]);
+
+	const handleEditFile = React.useCallback(
+		(filePath: string) => {
+			handleFileSelect(filePath);
+			setActiveView(`file:${filePath}`);
+		},
+		[handleFileSelect, setActiveView],
+	);
 
 	if (!selectedSessionId) {
 		return (
@@ -465,6 +383,8 @@ export function ConsolidatedDiffView() {
 	}
 
 	const allExpanded = diffEntries.every((f) => expandedFilesSet.has(f.path));
+	// Note: We can't easily check if all are reviewed with current hashes without loading all diffs
+	// So we just check if all file paths have a stored hash (may be outdated)
 	const allReviewed = diffEntries.every((f) =>
 		sessionReviewedFiles.has(f.path),
 	);
@@ -485,6 +405,33 @@ export function ConsolidatedDiffView() {
 					)}
 				</div>
 				<div className="flex items-center gap-2">
+					{/* Diff style toggle */}
+					<div className="flex items-center rounded-md border border-border bg-background">
+						<Button
+							variant="ghost"
+							size="sm"
+							className={cn(
+								"h-6 px-1.5 rounded-r-none",
+								diffStyle === "split" && "bg-muted",
+							)}
+							onClick={() => setDiffStyle("split")}
+							title="Side by side"
+						>
+							<Columns2 className="h-3.5 w-3.5" />
+						</Button>
+						<Button
+							variant="ghost"
+							size="sm"
+							className={cn(
+								"h-6 px-1.5 rounded-l-none border-l border-border",
+								diffStyle === "unified" && "bg-muted",
+							)}
+							onClick={() => setDiffStyle("unified")}
+							title="Unified"
+						>
+							<Rows2 className="h-3.5 w-3.5" />
+						</Button>
+					</div>
 					<Button
 						variant="ghost"
 						size="sm"
@@ -514,9 +461,11 @@ export function ConsolidatedDiffView() {
 						filePath={file.path}
 						sessionId={selectedSessionId}
 						isExpanded={expandedFilesSet.has(file.path)}
-						isReviewed={sessionReviewedFiles.has(file.path)}
+						currentPatchHash={sessionReviewedFiles.get(file.path) || null}
+						diffStyle={diffStyle}
 						onToggleExpand={() => toggleExpanded(file.path)}
-						onToggleReview={() => toggleReviewed(file.path)}
+						onToggleReview={(hash) => toggleReviewed(file.path, hash)}
+						onEdit={() => handleEditFile(file.path)}
 					/>
 				))}
 			</div>

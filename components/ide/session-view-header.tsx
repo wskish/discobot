@@ -17,6 +17,7 @@ import { ServiceButton } from "@/components/ide/service-button";
 import { Button } from "@/components/ui/button";
 import { CommitStatus } from "@/lib/api-constants";
 import { useSessionViewContext } from "@/lib/contexts/session-view-context";
+import { useSessionFiles } from "@/lib/hooks/use-session-files";
 import { cn } from "@/lib/utils";
 
 export function SessionViewHeader() {
@@ -43,6 +44,9 @@ export function SessionViewHeader() {
 		onToggleRightSidebar,
 	} = useSessionViewContext();
 	const activeService = services.find((s) => s.id === activeServiceId);
+
+	// Get diff stats for the "All Changes" button
+	const { diffStats } = useSessionFiles(selectedSessionId, false);
 
 	// Check if session is in a commit state
 	const isSessionCommitting =
@@ -153,18 +157,16 @@ export function SessionViewHeader() {
 				>
 					Terminal
 				</Button>
-				<Button
-					variant={activeView === "consolidated-diff" ? "secondary" : "ghost"}
-					size="sm"
-					className="h-6 text-xs shrink-0"
-					onClick={() => setActiveView("consolidated-diff")}
-				>
-					All Changes
-				</Button>
-				{selectedSessionId && (
-					<div className="shrink-0">
-						<IDELauncher sessionId={selectedSessionId} />
-					</div>
+				{diffStats && diffStats.filesChanged > 0 && (
+					<Button
+						variant={activeView === "consolidated-diff" ? "secondary" : "ghost"}
+						size="sm"
+						className="h-6 text-xs shrink-0 gap-1"
+						onClick={() => setActiveView("consolidated-diff")}
+					>
+						<span className="text-green-500">+{diffStats.additions}</span>
+						<span className="text-red-500">-{diffStats.deletions}</span>
+					</Button>
 				)}
 				{selectedSessionId &&
 					services.map((service) => (
@@ -353,35 +355,25 @@ export function SessionViewHeader() {
 						{showCommitLoading ? "Committing..." : "Commit"}
 					</Button>
 				)}
+				{selectedSessionId && (
+					<div className="shrink-0">
+						<IDELauncher sessionId={selectedSessionId} />
+					</div>
+				)}
 				{onToggleRightSidebar && (
-					<>
-						<Button
-							variant="ghost"
-							size="sm"
-							className="h-6 text-xs"
-							onClick={() => {
-								setActiveView("consolidated-diff");
-								if (!rightSidebarOpen) {
-									onToggleRightSidebar();
-								}
-							}}
-						>
-							{changedFilesCount > 0
-								? `Changes (${changedFilesCount})`
-								: "Files"}
-						</Button>
-						{rightSidebarOpen && (
-							<Button
-								variant="ghost"
-								size="icon"
-								className="h-6 w-6"
-								onClick={onToggleRightSidebar}
-								title="Collapse Files"
-							>
-								<PanelRightClose className="h-3.5 w-3.5" />
-							</Button>
+					<Button
+						variant="ghost"
+						size={rightSidebarOpen ? "icon" : "sm"}
+						className={cn("h-6", rightSidebarOpen ? "w-6" : "text-xs")}
+						onClick={onToggleRightSidebar}
+						title={rightSidebarOpen ? "Close Files" : "Open Files"}
+					>
+						{rightSidebarOpen ? (
+							<PanelRightClose className="h-3.5 w-3.5" />
+						) : (
+							"Files"
 						)}
-					</>
+					</Button>
 				)}
 			</div>
 		</div>
