@@ -285,7 +285,13 @@ export function Header({ leftSidebarOpen, onToggleSidebar }: HeaderProps) {
 								</button>
 							</DropdownMenuTrigger>
 							<DropdownMenuContent align="start" className="w-72">
-								{workspaceSessions.map((session) => (
+								{[...workspaceSessions]
+								.sort(
+									(a, b) =>
+										new Date(b.timestamp).getTime() -
+										new Date(a.timestamp).getTime(),
+								)
+								.map((session) => (
 									<SessionDropdownItem
 										key={session.id}
 										session={session}
