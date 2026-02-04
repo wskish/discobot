@@ -331,6 +331,7 @@ export function DiffContent({ file }: DiffContentProps) {
 			<div className="flex-1 overflow-hidden">
 				<Suspense fallback={<DiffEditorLoader />}>
 					<DiffEditor
+						key={`diff-${file.id}`}
 						height="100%"
 						language={language}
 						original={originalContent}
@@ -503,6 +504,7 @@ function FileContentView({
 			{/* Monaco Editor */}
 			<div className="flex-1 overflow-hidden">
 				<Editor
+					key={`edit-${filePath}`}
 					height="100%"
 					language={language}
 					value={state.content}
@@ -566,6 +568,7 @@ function FileContentView({
 					<div className="flex-1 min-h-0 overflow-hidden border rounded-md">
 						{state.conflictContent !== null && (
 							<DiffEditor
+								key={`conflict-diff-${filePath}`}
 								height="100%"
 								language={language}
 								original={state.conflictContent}
