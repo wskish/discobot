@@ -391,7 +391,7 @@ export function ConsolidatedDiffView() {
 	);
 
 	return (
-		<div className="flex-1 flex flex-col overflow-hidden">
+		<div className="flex-1 flex flex-col overflow-hidden h-full">
 			{/* Toolbar */}
 			<div className="h-10 flex items-center justify-between px-4 border-b border-border bg-muted/20 shrink-0">
 				<div className="flex items-center gap-2">
