@@ -65,7 +65,7 @@ fn start_server(app: &tauri::AppHandle, port: u16, secret: &str) -> Result<Comma
         .sidecar("discobot-server")
         .map_err(|e| format!("Failed to create sidecar command: {}", e))?
         .env("PORT", port.to_string())
-        .env("CORS_ORIGINS", "http://tauri.localhost")
+        .env("CORS_ORIGINS", "http://tauri.localhost,tauri://localhost")
         .env("DISCOBOT_SECRET", secret)
         .env("TAURI", "true")
         .env("SUGGESTIONS_ENABLED", "true");
