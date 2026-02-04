@@ -56,8 +56,7 @@ interface DialogContextValue {
 	handleAddOrEditAgent: (data: CreateAgentRequest) => Promise<void>;
 	handleConfirmDeleteWorkspace: (deleteFiles: boolean) => Promise<void>;
 	handleWelcomeComplete: (
-		agentType: SupportedAgentType,
-		authProviderId: string | null,
+		needsCredential: boolean,
 		workspace: CreateWorkspaceRequest | null,
 	) => Promise<void>;
 
@@ -104,8 +103,7 @@ export function DialogProvider({ children }: DialogProviderProps) {
 
 	// Welcome modal state
 	const [welcomeSkipped, setWelcomeSkipped] = React.useState(false);
-	const [pendingAgentType, setPendingAgentType] =
-		React.useState<SupportedAgentType | null>(null);
+	const [pendingAgentType] = React.useState<SupportedAgentType | null>(null);
 
 	// Check system status on mount
 	React.useEffect(() => {
@@ -177,43 +175,86 @@ export function DialogProvider({ children }: DialogProviderProps) {
 
 	const handleWelcomeComplete = React.useCallback(
 		async (
-			agentType: SupportedAgentType,
-			authProviderId: string | null,
+			needsCredential: boolean,
 			workspaceData: CreateWorkspaceRequest | null,
 		) => {
-			if (authProviderId) {
-				// Auth provider selected - store pending agent and open credentials dialog
-				setPendingAgentType(agentType);
-				credentialsDialog.open({ providerId: authProviderId });
-				// If workspace was provided, create it after agent setup
-				if (workspaceData) {
-					await workspace.createWorkspace(workspaceData);
-				}
-			} else {
-				// "Free" selected or already has credentials - create agent directly
-				const newAgent = await createAgent({
-					name: agentType.name,
-					description: agentType.description,
-					agentType: agentType.id,
-				});
-				// Make it the default agent
-				await api.setDefaultAgent(newAgent.id);
-				mutateAgents();
-				// Create workspace if provided
-				if (workspaceData) {
-					const ws = await workspace.createWorkspace(workspaceData);
-					if (ws) {
-						mainPanel.showNewSession({ workspaceId: ws.id });
-					}
+			// If we need credentials, open the credentials dialog for Anthropic
+			if (needsCredential) {
+				credentialsDialog.open({ providerId: "anthropic" });
+				return;
+			}
+
+			// Create workspace if provided
+			if (workspaceData) {
+				const ws = await workspace.createWorkspace(workspaceData);
+				if (ws) {
+					mainPanel.showNewSession({ workspaceId: ws.id });
 				}
 			}
 		},
-		[workspace, createAgent, mutateAgents, mainPanel, credentialsDialog],
+		[workspace, mainPanel, credentialsDialog],
 	);
 
 	const closeSystemRequirements = React.useCallback(() => {
 		setShowSystemRequirements(false);
 	}, []);
+
+	// Monitor credentials - when Anthropic credentials are created, auto-create Claude Code agent
+	const prevCredentialsCount = React.useRef(credentials.length);
+	const agentCreationInProgress = React.useRef(false);
+	const { agents } = useAgents();
+
+	React.useEffect(() => {
+		// Skip if agent creation already in progress or agents already exist
+		if (agentCreationInProgress.current || agents.length > 0) return;
+
+		// Skip if credentials count hasn't changed (no new credentials)
+		if (credentials.length === prevCredentialsCount.current) return;
+
+		prevCredentialsCount.current = credentials.length;
+
+		// Check if we now have Anthropic credentials
+		const hasAnthropicCredential = credentials.some(
+			(c) => c.isConfigured && c.provider === "anthropic",
+		);
+
+		if (hasAnthropicCredential) {
+			// Credentials were successfully created - now create Claude Code agent automatically
+			agentCreationInProgress.current = true;
+
+			(async () => {
+				try {
+					const newAgent = await createAgent({
+						name: "Claude Code",
+						description: "AI coding agent powered by Claude",
+						agentType: "claude-code",
+					});
+					await api.setDefaultAgent(newAgent.id);
+					await mutateAgents();
+
+					// Close credentials dialog if still open
+					if (credentialsDialog.isOpen) {
+						credentialsDialog.close();
+					}
+
+					// Welcome modal will automatically reopen for workspace step if needed
+				} catch (error) {
+					console.error(
+						"Failed to create Claude Code agent after credentials setup:",
+						error,
+					);
+				} finally {
+					agentCreationInProgress.current = false;
+				}
+			})();
+		}
+	}, [
+		credentials,
+		agents.length,
+		createAgent,
+		mutateAgents,
+		credentialsDialog,
+	]);
 
 	const value = React.useMemo<DialogContextValue>(
 		() => ({

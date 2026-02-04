@@ -1,4 +1,4 @@
-import { ArrowLeft, ChevronDown, ChevronRight, Sparkles } from "lucide-react";
+import { Key } from "lucide-react";
 import * as React from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -9,16 +9,15 @@ import {
 	DialogTitle,
 } from "@/components/ui/dialog";
 import type {
+	Agent,
 	AuthProvider,
 	CreateWorkspaceRequest,
 	CredentialInfo,
 	SupportedAgentType,
 } from "@/lib/api-types";
 import { STORAGE_KEYS } from "@/lib/hooks/use-persisted-state";
-import { cn } from "@/lib/utils";
 import { DiscobotBrand } from "../discobot-brand";
 import { DiscobotLogo } from "../discobot-logo";
-import { IconRenderer } from "../icon-renderer";
 import { WorkspaceForm, type WorkspaceFormRef } from "../workspace-form";
 
 interface WelcomeModalProps {
@@ -26,285 +25,189 @@ interface WelcomeModalProps {
 	agentTypes: SupportedAgentType[];
 	authProviders: AuthProvider[];
 	configuredCredentials: CredentialInfo[];
+	existingAgents: Agent[];
+	hasExistingWorkspaces: boolean;
 	onComplete: (
-		agentType: SupportedAgentType,
-		authProviderId: string | null,
+		needsCredential: boolean,
 		workspace: CreateWorkspaceRequest | null,
 	) => void;
-	/** Called when user skips the welcome flow (session-only, comes back on refresh) */
 	onSkip?: () => void;
-	/** If true, skips the workspace step (user already has workspaces) */
-	hasExistingWorkspaces?: boolean;
 }
 
-type Step = "agent" | "auth" | "workspace";
-
 /**
- * Welcome onboarding modal shown when no agents are configured.
- * Features a three-step flow:
- * 1. Select an AI coding agent
- * 2. Select an auth provider (if needed)
- * 3. Add a workspace
+ * Simple onboarding modal for Claude Code:
+ * 1. Auto-create Claude Code agent if none exists
+ * 2. If no credential, show prompt to configure it
+ * 3. If no workspace, show workspace form
  */
 export function WelcomeModal({
 	open,
 	agentTypes,
-	authProviders,
 	configuredCredentials,
+	existingAgents,
+	hasExistingWorkspaces,
 	onComplete,
 	onSkip,
-	hasExistingWorkspaces,
 }: WelcomeModalProps) {
-	const [step, setStep] = React.useState<Step>("agent");
-	const [selectedAgent, setSelectedAgent] =
-		React.useState<SupportedAgentType | null>(null);
-	const [selectedAuthProviderId, setSelectedAuthProviderId] = React.useState<
-		string | null
-	>(null);
-	const [showOtherAgents, setShowOtherAgents] = React.useState(false);
-	const [showOtherProviders, setShowOtherProviders] = React.useState(false);
 	const [workspaceIsValid, setWorkspaceIsValid] = React.useState(false);
 	const [initialWorkspacePath, setInitialWorkspacePath] = React.useState<
 		string | undefined
 	>(undefined);
 	const workspaceFormRef = React.useRef<WorkspaceFormRef>(null);
 
-	// Reset state when modal opens and restore last selections from localStorage
-	// biome-ignore lint/correctness/useExhaustiveDependencies: handleSelectAgent is intentionally excluded - it reads stale agent data on every modal open
+	// Find Claude Code agent type
+	const claudeCodeAgentType = React.useMemo(
+		() => agentTypes.find((a) => a.id === "claude-code"),
+		[agentTypes],
+	);
+
+	// Check if we have a Claude Code agent
+	const hasClaudeCodeAgent = existingAgents.length > 0;
+
+	// Check if we have Anthropic credentials configured
+	const hasAnthropicCredential = React.useMemo(() => {
+		return configuredCredentials.some(
+			(c) => c.isConfigured && c.provider === "anthropic",
+		);
+	}, [configuredCredentials]);
+
+	// Determine what we need
+	const needsCredential = !hasAnthropicCredential;
+	const needsWorkspace = !hasExistingWorkspaces;
+
+	// Track if we've already initialized to prevent infinite loops
+	const hasInitialized = React.useRef(false);
+
+	// Initialize workspace path from localStorage
 	React.useEffect(() => {
-		if (open) {
-			setStep("agent");
-			setSelectedAgent(null);
-			setSelectedAuthProviderId(null);
-			setShowOtherAgents(false);
-			setShowOtherProviders(false);
-			setWorkspaceIsValid(false);
-
-			// Restore last workspace path from localStorage
-			try {
-				const storedPath = localStorage.getItem(
-					STORAGE_KEYS.LAST_WORKSPACE_PATH,
-				);
-				setInitialWorkspacePath(storedPath ?? undefined);
-			} catch {
-				setInitialWorkspacePath(undefined);
-			}
-
-			// Restore last agent type from localStorage if it still exists
-			try {
-				const storedAgentTypeId = localStorage.getItem(
-					STORAGE_KEYS.LAST_AGENT_TYPE_ID,
-				);
-				if (storedAgentTypeId) {
-					const lastAgent = agentTypes.find((a) => a.id === storedAgentTypeId);
-					if (lastAgent) {
-						// Auto-select the last used agent
-						handleSelectAgent(lastAgent);
-					}
-				}
-			} catch {
-				// Ignore errors reading localStorage
-			}
+		if (!open) {
+			hasInitialized.current = false;
+			return;
 		}
-	}, [open, agentTypes]);
 
-	const featuredAgents = React.useMemo(
-		() => agentTypes.filter((a) => a.highlighted),
-		[agentTypes],
-	);
-
-	const otherAgents = React.useMemo(
-		() => agentTypes.filter((a) => !a.highlighted),
-		[agentTypes],
-	);
-
-	// Get configured provider IDs
-	const configuredProviderIds = React.useMemo(
-		() =>
-			new Set(
-				configuredCredentials
-					.filter((c) => c.isConfigured)
-					.map((c) => c.provider),
-			),
-		[configuredCredentials],
-	);
-
-	// Handle agent selection
-	const handleSelectAgent = (agent: SupportedAgentType) => {
-		const supportedProviders = agent.supportedAuthProviders || [];
-		const supportsAll = supportedProviders.includes("*");
-
-		// Check if user has any configured credentials for this agent
-		const hasConfiguredProvider = supportsAll
-			? configuredProviderIds.size > 0
-			: supportedProviders.some((p) => configuredProviderIds.has(p));
-
-		setSelectedAgent(agent);
-
-		// Save agent type selection to localStorage
 		try {
-			localStorage.setItem(STORAGE_KEYS.LAST_AGENT_TYPE_ID, agent.id);
+			const storedPath = localStorage.getItem(STORAGE_KEYS.LAST_WORKSPACE_PATH);
+			setInitialWorkspacePath(storedPath ?? undefined);
 		} catch {
-			// Ignore errors writing to localStorage
+			setInitialWorkspacePath(undefined);
 		}
+	}, [open]);
 
-		if (hasConfiguredProvider) {
-			// User already has valid credentials
-			setSelectedAuthProviderId(null);
-			if (hasExistingWorkspaces) {
-				// Skip workspace step - complete immediately
-				onComplete(agent, null, null);
-			} else {
-				setStep("workspace");
-			}
-		} else if (supportedProviders.length === 0 && agent.allowNoAuth) {
-			// Agent doesn't need auth and allows no auth
-			setSelectedAuthProviderId(null);
-			if (hasExistingWorkspaces) {
-				// Skip workspace step - complete immediately
-				onComplete(agent, null, null);
-			} else {
-				setStep("workspace");
-			}
-		} else {
-			// Need to select auth provider
-			setStep("auth");
+	// Auto-create Claude Code agent if it doesn't exist AND has credentials (once per modal open)
+	React.useEffect(() => {
+		if (
+			!open ||
+			!claudeCodeAgentType ||
+			hasClaudeCodeAgent ||
+			hasInitialized.current
+		)
+			return;
+
+		// Only auto-create if credentials already exist (don't trigger credential dialog)
+		if (!needsCredential) {
+			hasInitialized.current = true;
+			onComplete(false, null);
 		}
+	}, [
+		open,
+		claudeCodeAgentType,
+		hasClaudeCodeAgent,
+		needsCredential,
+		onComplete,
+	]);
+
+	const handleConfigureCredential = () => {
+		// Signal that we need to configure credential
+		onComplete(true, null);
 	};
 
-	// Handle auth provider selection
-	const handleSelectAuthProvider = (providerId: string | null) => {
-		setSelectedAuthProviderId(providerId);
-		if (hasExistingWorkspaces && selectedAgent) {
-			// Skip workspace step - complete immediately
-			onComplete(selectedAgent, providerId, null);
-		} else {
-			setStep("workspace");
-		}
-	};
-
-	// Handle workspace submission
 	const handleWorkspaceSubmit = (workspace: CreateWorkspaceRequest) => {
-		if (selectedAgent) {
-			// Save workspace path to localStorage
-			try {
-				localStorage.setItem(STORAGE_KEYS.LAST_WORKSPACE_PATH, workspace.path);
-			} catch {
-				// Ignore errors writing to localStorage
-			}
-			onComplete(selectedAgent, selectedAuthProviderId, workspace);
+		try {
+			localStorage.setItem(STORAGE_KEYS.LAST_WORKSPACE_PATH, workspace.path);
+		} catch {
+			// Ignore errors
 		}
+		onComplete(false, workspace);
 	};
 
-	// Handle skip workspace
 	const handleSkipWorkspace = () => {
-		if (selectedAgent) {
-			onComplete(selectedAgent, selectedAuthProviderId, null);
-		}
+		onComplete(false, null);
 	};
 
-	// Go back
-	const handleBack = () => {
-		if (step === "workspace") {
-			const supportedProviders = selectedAgent?.supportedAuthProviders || [];
-			const supportsAll = supportedProviders.includes("*");
-			const hasConfiguredProvider = supportsAll
-				? configuredProviderIds.size > 0
-				: supportedProviders.some((p) => configuredProviderIds.has(p));
+	// If everything is set up, close immediately
+	if (!needsCredential && !needsWorkspace) {
+		return null;
+	}
 
-			if (
-				hasConfiguredProvider ||
-				(supportedProviders.length === 0 && selectedAgent?.allowNoAuth)
-			) {
-				// Came directly from agent selection
-				setStep("agent");
-				setSelectedAgent(null);
-			} else {
-				// Came from auth selection
-				setStep("auth");
-			}
-			setSelectedAuthProviderId(null);
-		} else if (step === "auth") {
-			setStep("agent");
-			setSelectedAgent(null);
-			setShowOtherProviders(false);
-		}
-	};
+	// Show credential configuration prompt
+	if (needsCredential) {
+		return (
+			<Dialog open={open}>
+				<DialogContent
+					className="sm:max-w-md p-0 gap-0 overflow-hidden"
+					showCloseButton={false}
+				>
+					{/* Header */}
+					<div className="relative bg-gradient-to-br from-primary/10 via-primary/5 to-background px-8 py-10 text-center">
+						<div className="flex justify-center mb-4">
+							<DiscobotLogo size={64} className="text-purple-500" />
+						</div>
 
-	// Get available auth providers for selected agent
-	const availableProviders = React.useMemo(() => {
-		if (!selectedAgent) return [];
-		const supported = selectedAgent.supportedAuthProviders || [];
-		// "*" means all providers are supported
-		if (supported.includes("*")) {
-			return authProviders;
-		}
-		// Map in order of supportedAuthProviders to respect agent's preferred order
-		return supported
-			.map((id) => authProviders.find((p) => p.id === id))
-			.filter((p): p is AuthProvider => p !== undefined);
-	}, [selectedAgent, authProviders]);
+						<DialogHeader className="space-y-3">
+							<DialogTitle className="text-3xl tracking-tight flex items-center justify-center">
+								<span className="font-semibold">Welcome to</span>
+								<DiscobotBrand logoSize={0} textSize="text-3xl" />
+							</DialogTitle>
+							<DialogDescription className="text-base text-muted-foreground max-w-md mx-auto">
+								To get started, you need to configure your Claude Code
+								credential.
+							</DialogDescription>
+						</DialogHeader>
+					</div>
 
-	// Get highlighted auth providers for this agent
-	const highlightedProviderIds = React.useMemo(() => {
-		return new Set(selectedAgent?.highlightedAuthProviders || []);
-	}, [selectedAgent]);
+					{/* Content */}
+					<div className="px-8 py-6 space-y-6">
+						<div className="flex flex-col items-center gap-4">
+							<div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center">
+								<Key className="h-8 w-8 text-primary" />
+							</div>
+							<div className="text-center space-y-2">
+								<h3 className="font-semibold text-lg">Configure Claude Code</h3>
+								<p className="text-sm text-muted-foreground">
+									Click below to set up your Anthropic API key
+								</p>
+							</div>
+							<Button onClick={handleConfigureCredential} size="lg">
+								Configure Credential
+							</Button>
+						</div>
 
-	// Featured providers (from highlightedAuthProviders) and others
-	const featuredProviders = React.useMemo(() => {
-		if (!selectedAgent?.highlightedAuthProviders?.length) {
-			// Fallback to first 2 if no highlighted providers specified
-			return availableProviders.slice(0, 2);
-		}
-		// Return highlighted providers in the order specified
-		return selectedAgent.highlightedAuthProviders
-			.map((id) => authProviders.find((p) => p.id === id))
-			.filter((p): p is AuthProvider => p !== undefined);
-	}, [selectedAgent, authProviders, availableProviders]);
+						{onSkip && (
+							<div className="flex justify-center pt-2 border-t border-border">
+								<Button
+									variant="ghost"
+									onClick={onSkip}
+									className="text-muted-foreground"
+								>
+									Skip for now
+								</Button>
+							</div>
+						)}
+					</div>
+				</DialogContent>
+			</Dialog>
+		);
+	}
 
-	const otherProvidersList = React.useMemo(() => {
-		return availableProviders.filter((p) => !highlightedProviderIds.has(p.id));
-	}, [availableProviders, highlightedProviderIds]);
-
-	const getStepDescription = () => {
-		switch (step) {
-			case "agent":
-				return "Get started by adding an AI coding agent. Choose from our recommended agents below or explore other options.";
-			case "auth":
-				return (
-					<>
-						Select how you want to authenticate with{" "}
-						<span className="font-medium text-foreground">
-							{selectedAgent?.name}
-						</span>
-						.
-					</>
-				);
-			case "workspace":
-				return "Add a workspace to start coding. You can add a local folder or clone a git repository.";
-		}
-	};
-
+	// Show workspace form
 	return (
 		<Dialog open={open}>
 			<DialogContent
 				className="sm:max-w-2xl p-0 gap-0 overflow-hidden max-h-[90vh] flex flex-col"
 				showCloseButton={false}
 			>
-				{/* Header with gradient background */}
+				{/* Header */}
 				<div className="relative bg-gradient-to-br from-primary/10 via-primary/5 to-background px-8 py-10 text-center flex-shrink-0">
-					{/* Back button for step 2 and 3 */}
-					{(step === "auth" || step === "workspace") && (
-						<button
-							type="button"
-							onClick={handleBack}
-							className="absolute left-4 top-4 p-2 rounded-lg hover:bg-background/50 transition-colors text-muted-foreground hover:text-foreground"
-						>
-							<ArrowLeft className="h-5 w-5" />
-						</button>
-					)}
-
-					{/* Logo */}
 					<div className="flex justify-center mb-4">
 						<DiscobotLogo size={64} className="text-purple-500" />
 					</div>
@@ -315,315 +218,43 @@ export function WelcomeModal({
 							<DiscobotBrand logoSize={0} textSize="text-3xl" />
 						</DialogTitle>
 						<DialogDescription className="text-base text-muted-foreground max-w-md mx-auto">
-							{getStepDescription()}
+							Add a workspace to start coding. You can add a local folder or
+							clone a git repository.
 						</DialogDescription>
 					</DialogHeader>
 				</div>
 
 				{/* Content */}
 				<div className="px-8 py-6 space-y-6 flex-1 overflow-y-auto">
-					{step === "agent" && (
-						<>
-							{/* Featured Agents */}
-							<div className="space-y-3">
-								<h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
-									Recommended
-								</h3>
-								<div className="grid gap-3">
-									{featuredAgents.map((agent, index) => (
-										<FeaturedCard
-											key={agent.id}
-											icon={<IconRenderer icons={agent.icons} size={28} />}
-											name={agent.name}
-											description={agent.description}
-											badges={agent.badges}
-											onSelect={() => handleSelectAgent(agent)}
-											isPrimary={index === 0}
-										/>
-									))}
-								</div>
-							</div>
+					<div className="space-y-3">
+						<h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
+							Workspace
+						</h3>
+						<WorkspaceForm
+							ref={workspaceFormRef}
+							onSubmit={handleWorkspaceSubmit}
+							onValidationChange={setWorkspaceIsValid}
+							initialValue={initialWorkspacePath}
+						/>
+					</div>
 
-							{/* Other Agents */}
-							{otherAgents.length > 0 && (
-								<div className="space-y-3">
-									<button
-										type="button"
-										onClick={() => setShowOtherAgents(!showOtherAgents)}
-										className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors group"
-									>
-										<ChevronDown
-											className={cn(
-												"h-4 w-4 transition-transform duration-200",
-												showOtherAgents && "rotate-180",
-											)}
-										/>
-										<span>Other Agents</span>
-										<span className="text-xs text-muted-foreground/60">
-											({otherAgents.length})
-										</span>
-									</button>
-
-									{showOtherAgents && (
-										<div className="grid gap-2 pl-6 animate-in slide-in-from-top-2 duration-200">
-											{otherAgents.map((agent) => (
-												<CompactCard
-													key={agent.id}
-													icon={<IconRenderer icons={agent.icons} size={20} />}
-													name={agent.name}
-													description={agent.description}
-													onSelect={() => handleSelectAgent(agent)}
-												/>
-											))}
-										</div>
-									)}
-								</div>
-							)}
-
-							{/* Skip button */}
-							{onSkip && (
-								<div className="flex justify-center pt-2">
-									<Button
-										variant="ghost"
-										onClick={onSkip}
-										className="text-muted-foreground"
-									>
-										Skip for now
-									</Button>
-								</div>
-							)}
-						</>
-					)}
-
-					{step === "auth" && (
-						<>
-							{/* Auth Provider Selection */}
-							<div className="space-y-3">
-								<h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
-									Authentication
-								</h3>
-								<div className="grid gap-3">
-									{/* Free option for agents that allow no auth */}
-									{selectedAgent?.allowNoAuth && (
-										<FeaturedCard
-											icon={
-												<div className="h-7 w-7 rounded-full bg-gradient-to-br from-green-400 to-emerald-500 flex items-center justify-center">
-													<Sparkles className="h-4 w-4 text-white" />
-												</div>
-											}
-											name="Free"
-											description="Use without authentication - some features may be limited"
-											badges={[
-												{
-													label: "No Setup",
-													className:
-														"bg-green-500/10 text-green-600 dark:text-green-400",
-												},
-											]}
-											onSelect={() => handleSelectAuthProvider(null)}
-											isPrimary
-										/>
-									)}
-
-									{/* Featured providers */}
-									{featuredProviders.map((provider) => (
-										<FeaturedCard
-											key={provider.id}
-											icon={<IconRenderer icons={provider.icons} size={28} />}
-											name={provider.name}
-											description={
-												provider.description ||
-												`Authenticate with ${provider.name}`
-											}
-											onSelect={() => handleSelectAuthProvider(provider.id)}
-											isPrimary={
-												!selectedAgent?.allowNoAuth &&
-												provider.id === featuredProviders[0]?.id
-											}
-										/>
-									))}
-								</div>
-							</div>
-
-							{/* Other Providers */}
-							{otherProvidersList.length > 0 && (
-								<div className="space-y-3">
-									<button
-										type="button"
-										onClick={() => setShowOtherProviders(!showOtherProviders)}
-										className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors group"
-									>
-										<ChevronDown
-											className={cn(
-												"h-4 w-4 transition-transform duration-200",
-												showOtherProviders && "rotate-180",
-											)}
-										/>
-										<span>Other Providers</span>
-										<span className="text-xs text-muted-foreground/60">
-											({otherProvidersList.length})
-										</span>
-									</button>
-
-									{showOtherProviders && (
-										<div className="grid gap-2 pl-6 animate-in slide-in-from-top-2 duration-200">
-											{otherProvidersList.map((provider) => (
-												<CompactCard
-													key={provider.id}
-													icon={
-														<IconRenderer icons={provider.icons} size={20} />
-													}
-													name={provider.name}
-													description={
-														provider.description ||
-														`Authenticate with ${provider.name}`
-													}
-													onSelect={() => handleSelectAuthProvider(provider.id)}
-												/>
-											))}
-										</div>
-									)}
-								</div>
-							)}
-						</>
-					)}
-
-					{step === "workspace" && (
-						<div className="space-y-6">
-							<div className="space-y-3">
-								<h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
-									Workspace
-								</h3>
-								<WorkspaceForm
-									ref={workspaceFormRef}
-									onSubmit={handleWorkspaceSubmit}
-									onValidationChange={setWorkspaceIsValid}
-									initialValue={initialWorkspacePath}
-								/>
-							</div>
-
-							<div className="flex justify-end gap-3 pt-2">
-								<Button
-									variant="ghost"
-									onClick={handleSkipWorkspace}
-									className="text-muted-foreground"
-								>
-									Skip for now
-								</Button>
-								<Button
-									onClick={() => workspaceFormRef.current?.submit()}
-									disabled={!workspaceIsValid}
-								>
-									Add Workspace
-								</Button>
-							</div>
-						</div>
-					)}
+					<div className="flex justify-end gap-3 pt-2 border-t border-border">
+						<Button
+							variant="ghost"
+							onClick={onSkip || handleSkipWorkspace}
+							className="text-muted-foreground"
+						>
+							Skip for now
+						</Button>
+						<Button
+							onClick={() => workspaceFormRef.current?.submit()}
+							disabled={!workspaceIsValid}
+						>
+							Add Workspace
+						</Button>
+					</div>
 				</div>
 			</DialogContent>
 		</Dialog>
-	);
-}
-
-interface FeaturedCardProps {
-	icon: React.ReactNode;
-	name: string;
-	description?: string;
-	badges?: { label: string; className: string }[];
-	onSelect: () => void;
-	isPrimary?: boolean;
-}
-
-function FeaturedCard({
-	icon,
-	name,
-	description,
-	badges = [],
-	onSelect,
-	isPrimary,
-}: FeaturedCardProps) {
-	return (
-		<button
-			type="button"
-			onClick={onSelect}
-			className={cn(
-				"group relative flex items-center gap-4 p-4 rounded-xl border text-left transition-all duration-200",
-				"hover:shadow-md hover:border-primary/50 hover:bg-accent/50",
-				isPrimary
-					? "bg-primary/5 border-primary/20 ring-1 ring-primary/10"
-					: "bg-card border-border",
-			)}
-		>
-			{/* Icon */}
-			<div
-				className={cn(
-					"flex-shrink-0 h-12 w-12 rounded-lg flex items-center justify-center",
-					isPrimary ? "bg-primary/10" : "bg-muted",
-				)}
-			>
-				{icon}
-			</div>
-
-			{/* Content */}
-			<div className="flex-1 min-w-0">
-				<div className="flex items-center gap-2 flex-wrap">
-					<h4 className="font-semibold text-foreground">{name}</h4>
-					{badges.map((badge) => (
-						<span
-							key={badge.label}
-							className={cn(
-								"px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide rounded-full",
-								badge.className,
-							)}
-						>
-							{badge.label}
-						</span>
-					))}
-				</div>
-				{description && (
-					<p className="text-sm text-muted-foreground line-clamp-2 mt-0.5">
-						{description}
-					</p>
-				)}
-			</div>
-
-			{/* Arrow */}
-			<ChevronRight className="flex-shrink-0 h-5 w-5 text-muted-foreground group-hover:text-primary transition-colors" />
-		</button>
-	);
-}
-
-interface CompactCardProps {
-	icon: React.ReactNode;
-	name: string;
-	description?: string;
-	onSelect: () => void;
-}
-
-function CompactCard({ icon, name, description, onSelect }: CompactCardProps) {
-	return (
-		<button
-			type="button"
-			onClick={onSelect}
-			className="group flex items-center gap-3 p-3 rounded-lg border border-border bg-card text-left transition-all duration-200 hover:bg-accent/50 hover:border-primary/30"
-		>
-			{/* Icon */}
-			<div className="flex-shrink-0 h-9 w-9 rounded-md bg-muted flex items-center justify-center">
-				{icon}
-			</div>
-
-			{/* Content */}
-			<div className="flex-1 min-w-0">
-				<h4 className="font-medium text-sm text-foreground">{name}</h4>
-				{description && (
-					<p className="text-xs text-muted-foreground truncate">
-						{description}
-					</p>
-				)}
-			</div>
-
-			{/* Arrow */}
-			<ChevronRight className="flex-shrink-0 h-4 w-4 text-muted-foreground/50 group-hover:text-muted-foreground transition-colors" />
-		</button>
 	);
 }

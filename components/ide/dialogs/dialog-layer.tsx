@@ -1,3 +1,4 @@
+import * as React from "react";
 import { lazy, Suspense } from "react";
 import { useDialogContext } from "@/lib/contexts/dialog-context";
 import { useAgentTypes } from "@/lib/hooks/use-agent-types";
@@ -42,6 +43,16 @@ export function DialogLayer() {
 	const { agents, isLoading: agentsLoading } = useAgents();
 	const { agentTypes } = useAgentTypes();
 	const dialogs = useDialogContext();
+
+	// Simple check: show welcome if no agents OR no Anthropic credentials OR no workspaces
+	const hasAnthropicCredential = React.useMemo(() => {
+		return dialogs.credentials.some(
+			(c) => c.isConfigured && c.provider === "anthropic",
+		);
+	}, [dialogs.credentials]);
+
+	const needsOnboarding =
+		agents.length === 0 || !hasAnthropicCredential || workspaces.length === 0;
 
 	return (
 		<>
@@ -97,12 +108,13 @@ export function DialogLayer() {
 						dialogs.welcome.systemStatusChecked &&
 						!dialogs.systemRequirements.isOpen &&
 						!agentsLoading &&
-						agents.length === 0 &&
+						needsOnboarding &&
 						!dialogs.welcome.skipped
 					}
 					agentTypes={agentTypes}
 					authProviders={dialogs.authProviders}
 					configuredCredentials={dialogs.credentials}
+					existingAgents={agents}
 					hasExistingWorkspaces={workspaces.length > 0}
 					onSkip={() => dialogs.welcome.setSkipped(true)}
 					onComplete={dialogs.handleWelcomeComplete}
