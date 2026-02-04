@@ -56,9 +56,6 @@ const MessageItem = React.memo(function MessageItem({
 	return (
 		<Message from={message.role}>
 			<MessageContent>
-				<div className="text-xs font-medium text-muted-foreground mb-1">
-					{message.role === "user" ? "You" : "Assistant"}
-				</div>
 				{/* Render message parts in order */}
 				{message.parts.map((part, partIdx) => (
 					<MessagePart
