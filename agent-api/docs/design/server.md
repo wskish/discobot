@@ -7,6 +7,7 @@ This module implements the HTTP API using Hono web framework.
 | File | Description |
 |------|-------------|
 | `src/server/app.ts` | Hono application with routes |
+| `src/server/completion.ts` | Background completion handling |
 | `src/index.ts` | Server bootstrap and configuration |
 
 ## Architecture
@@ -18,20 +19,20 @@ This module implements the HTTP API using Hono web framework.
 │  ┌──────────────────────────────────────────────────────┐  │
 │  │                     Routes                            │  │
 │  │  GET  /        → Status check                        │  │
-│  │  GET  /health  → Health with ACP status              │  │
+│  │  GET  /health  → Health with agent status            │  │
 │  │  GET  /user    → Get sandbox user info               │  │
 │  │  GET  /chat    → Get all messages                    │  │
-│  │  POST /chat    → Send message (SSE response)         │  │
+│  │  POST /chat    → Send message (background + SSE)     │  │
+│  │  GET  /chat/events → SSE stream for events           │  │
 │  │  DELETE /chat  → Clear session                       │  │
 │  └──────────────────────────────────────────────────────┘  │
 │                           │                                  │
 │                           ▼                                  │
 │  ┌──────────────────────────────────────────────────────┐  │
 │  │                  Dependencies                         │  │
-│  │  - ACPClient (acp/client.ts)                         │  │
+│  │  - Agent (agent/interface.ts)                        │  │
 │  │  - SessionStore (store/session.ts)                   │  │
-│  │  - translate functions (acp/translate.ts)            │  │
-│  │  - stream functions (server/stream.ts)               │  │
+│  │  - completion (server/completion.ts)                 │  │
 │  └──────────────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -44,19 +45,16 @@ Creates and configures the Hono application:
 
 ```typescript
 interface AppConfig {
-  agentCommand: string
-  agentArgs: string[]
-  agentCwd: string
+  agent: Agent
 }
 
 function createApp(config: AppConfig): Hono
 ```
 
 The factory:
-1. Creates ACP client with config
-2. Creates session store
-3. Registers all routes
-4. Returns configured Hono app
+1. Accepts an Agent implementation
+2. Registers all routes
+3. Returns configured Hono app
 
 ## Routes
 
@@ -74,13 +72,13 @@ Service status endpoint.
 
 ### GET /health
 
-Detailed health check with ACP connection status.
+Detailed health check with agent connection status.
 
 **Response:**
 ```json
 {
   "status": "ok",
-  "acp": {
+  "agent": {
     "connected": true,
     "sessionId": "session-123"
   }
@@ -100,7 +98,7 @@ Returns information about the current sandbox user. Used by the server to determ
 }
 ```
 
-The endpoint uses Node.js `os.userInfo()` to get the current process user. This allows the server to run terminal sessions as the correct non-root user without hardcoding usernames.
+The endpoint uses Node.js `os.userInfo()` to get the current process user.
 
 ### GET /chat
 
@@ -128,7 +126,7 @@ Returns all stored messages from current session.
 
 ### POST /chat
 
-Send a user message and stream the assistant response.
+Start a completion in the background. Returns immediately with a completion ID.
 
 **Request:**
 ```json
@@ -144,18 +142,39 @@ Send a user message and stream the assistant response.
 }
 ```
 
+**Response (202 Accepted):**
+```json
+{
+  "completionId": "abc12345",
+  "status": "started"
+}
+```
+
+**Error Response (409 Conflict):**
+```json
+{
+  "error": "completion_in_progress",
+  "completionId": "existing123"
+}
+```
+
+### GET /chat/events
+
+SSE stream for completion events. Connect before or after POST /chat.
+
 **Response (SSE):**
 ```
 Content-Type: text/event-stream
 
+data: {"type": "start", "messageId": "msg-2"}
 data: {"type": "text-delta", "id": "msg-2", "delta": "Here"}
 data: {"type": "text-delta", "id": "msg-2", "delta": "'s a function:"}
 data: {"type": "tool-input-available", "toolCallId": "tc-1", "toolName": "write_file", "input": {...}}
 data: {"type": "tool-output-available", "toolCallId": "tc-1", "output": "File written"}
-data: {"type": "finish", "messageId": "msg-2"}
+data: {"type": "finish"}
 ```
 
-**Error Response (SSE):**
+**Error Event:**
 ```
 data: {"type": "error", "errorText": "Connection failed"}
 ```
@@ -175,64 +194,77 @@ Clear the current session and all messages.
 
 | Type | Fields | Description |
 |------|--------|-------------|
+| `start` | `messageId` | Completion started |
+| `text-start` | `id` | Text block started |
 | `text-delta` | `id`, `delta` | Incremental text content |
-| `reasoning-delta` | `id`, `delta` | Incremental reasoning/thought |
-| `tool-input-streaming` | `toolCallId`, `toolName` | Tool call started |
+| `text-end` | `id` | Text block complete |
+| `reasoning-start` | `id` | Reasoning block started |
+| `reasoning-delta` | `id`, `delta` | Incremental reasoning |
+| `reasoning-end` | `id` | Reasoning block complete |
+| `tool-input-start` | `toolCallId`, `toolName` | Tool call started |
+| `tool-input-delta` | `toolCallId`, `partialInput` | Tool input streaming |
 | `tool-input-available` | `toolCallId`, `toolName`, `input` | Tool input ready |
 | `tool-output-available` | `toolCallId`, `output` | Tool completed |
-| `tool-output-error` | `toolCallId`, `error` | Tool failed |
-| `finish` | `messageId` | Response complete |
+| `tool-output-error` | `toolCallId`, `errorText` | Tool failed |
+| `finish` | | Response complete |
 | `error` | `errorText` | Error occurred |
 
-## Request Processing
+## Completion Flow
 
-### POST /chat Flow
+### Background Completion Architecture
+
+```
+Client                    Server                    Agent
+  │                         │                         │
+  ├─POST /chat─────────────►│                         │
+  │◄─202 {completionId}─────│                         │
+  │                         │                         │
+  ├─GET /chat/events───────►│                         │
+  │                         ├─agent.prompt()─────────►│
+  │                         │  (async generator)      │
+  │                         │◄─yield chunk───────────┤
+  │◄──SSE: chunk────────────│                         │
+  │                         │◄─yield chunk───────────┤
+  │◄──SSE: chunk────────────│                         │
+  │                         │◄─generator done────────┤
+  │◄──SSE: finish───────────│                         │
+```
+
+### runCompletion Flow
 
 ```typescript
-async function handleChat(c: Context) {
-  // 1. Parse request body
-  const { messages } = await c.req.json<{ messages: UIMessage[] }>()
+function runCompletion(agent: Agent, ...) {
+  // Run asynchronously without blocking
+  (async () => {
+    try {
+      // 1. Configure git user if provided
+      await configureGitUser(gitUserName, gitUserEmail)
 
-  // 2. Extract last user message
-  const lastMessage = messages.filter(m => m.role === 'user').pop()
-  if (!lastMessage) {
-    return c.json({ error: 'No user message' }, 400)
-  }
+      // 2. Update environment if credentials changed
+      if (credentialsChanged) {
+        await agent.updateEnvironment({ env: credentialEnv })
+      }
 
-  // 3. Ensure ACP connection and session
-  await acpClient.connect()
-  await acpClient.ensureSession()
+      // 3. Ensure agent is connected with session
+      if (!agent.isConnected) await agent.connect()
+      await agent.ensureSession(sessionId)
 
-  // 4. Add user message to store
-  store.addMessage(lastMessage)
+      // 4. Send start event
+      addCompletionEvent({ type: "start", messageId: userMessage.id })
 
-  // 5. Create assistant message placeholder
-  const assistantMessage = createUIMessage('assistant')
-  store.addMessage(assistantMessage)
+      // 5. Stream chunks from agent's async generator
+      for await (const chunk of agent.prompt(userMessage, sessionId)) {
+        addCompletionEvent(chunk)
+      }
 
-  // 6. Convert to ACP format
-  const content = uiMessageToContentBlocks(lastMessage)
-
-  // 7. Set up SSE response
-  const stream = new TransformStream()
-  const writer = stream.writable.getWriter()
-
-  // 8. Handle ACP updates
-  acpClient.setUpdateCallback((update) => {
-    // Convert directly to stream chunks
-    const chunks = sessionUpdateToChunks(update, state, ids)
-    // Accumulate parts in assistant message
-    // Write SSE events
-    for (const chunk of chunks) sendSSE(chunk)
-  })
-
-  // 9. Send prompt
-  await acpClient.prompt(content)
-
-  // 10. Return SSE stream
-  return new Response(stream.readable, {
-    headers: { 'Content-Type': 'text/event-stream' }
-  })
+      // 6. Send finish event
+      addCompletionEvent({ type: "finish" })
+      await finishCompletion()
+    } catch (error) {
+      addCompletionEvent({ type: "error", errorText: error.message })
+      await finishCompletion(error.message)
+    }
+  })()
 }
 ```
 
@@ -252,26 +284,28 @@ if (!lastUserMessage) {
 }
 ```
 
-### Connection Errors
+### Completion Conflict
 
 ```typescript
-try {
-  await acpClient.connect()
-} catch (error) {
-  return c.json({ error: 'Failed to connect to agent' }, 500)
+if (isCompletionRunning()) {
+  return c.json({
+    error: 'completion_in_progress',
+    completionId: existingId
+  }, 409)
 }
 ```
 
 ### Stream Errors
 
+Errors during completion are sent as SSE events:
+
 ```typescript
-acpClient.setErrorCallback((error) => {
-  writer.write(`data: ${JSON.stringify({
+} catch (error) {
+  addCompletionEvent({
     type: 'error',
     errorText: error.message
-  })}\n\n`)
-  writer.close()
-})
+  })
+}
 ```
 
 ## Server Bootstrap
@@ -281,16 +315,17 @@ acpClient.setErrorCallback((error) => {
 ```typescript
 import { serve } from '@hono/node-server'
 import { createApp } from './server/app'
+import { ClaudeSDKClient } from './claude-sdk/client'
 
-// Load configuration from environment
-const config = {
-  agentCommand: process.env.AGENT_COMMAND ?? 'claude-code-acp',
-  agentArgs: (process.env.AGENT_ARGS ?? '').split(' ').filter(Boolean),
-  agentCwd: process.env.AGENT_CWD ?? process.cwd(),
-}
+// Create agent
+const agent = new ClaudeSDKClient({
+  cwd: process.env.CWD ?? process.cwd(),
+  model: process.env.MODEL,
+  env: { /* credentials */ }
+})
 
 // Create application
-const app = createApp(config)
+const app = createApp({ agent })
 
 // Start server
 const port = parseInt(process.env.PORT ?? '3001')
@@ -303,8 +338,8 @@ console.log(`Agent server running on port ${port}`)
 
 The server is tested via:
 - Unit tests for route handlers
-- Integration tests with mock ACP client
-- E2E tests with real Claude Code
+- Integration tests with mock Agent
+- E2E tests with real Claude CLI
 
 ```typescript
 // test/e2e.test.ts
@@ -312,15 +347,16 @@ import { describe, it } from 'node:test'
 import assert from 'node:assert'
 
 describe('POST /chat', () => {
-  it('streams response', async () => {
+  it('starts completion', async () => {
     const response = await fetch('http://localhost:3001/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ messages: [...] })
     })
 
-    assert.strictEqual(response.headers.get('content-type'), 'text/event-stream')
-    // Parse and validate SSE events
+    assert.strictEqual(response.status, 202)
+    const body = await response.json()
+    assert.ok(body.completionId)
   })
 })
 ```

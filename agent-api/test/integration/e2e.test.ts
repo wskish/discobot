@@ -72,8 +72,6 @@ describe("Agent Service E2E Tests", () => {
 		await clearSession();
 
 		const result = createApp({
-			agentCommand: "claude-code-acp",
-			agentArgs: [],
 			agentCwd: process.cwd(),
 			enableLogging: false,
 		});

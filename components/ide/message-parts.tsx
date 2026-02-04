@@ -6,12 +6,7 @@ import {
 	ReasoningContent,
 	ReasoningTrigger,
 } from "@/components/ai-elements/reasoning";
-import {
-	Source,
-	Sources,
-	SourcesContent,
-	SourcesTrigger,
-} from "@/components/ai-elements/sources";
+import { Source } from "@/components/ai-elements/sources";
 import {
 	Tool,
 	ToolContent,
@@ -59,6 +54,7 @@ interface MessagePartsProps {
  * - dynamic-tool: Tool calls with input/output
  * - source-url: URL citations for RAG
  * - source-document: Document citations for RAG
+ * - step-start: Step boundary marker (no visual render, used for logical grouping)
  *
  * Keeps chat-conversation.tsx simple by centralizing part rendering logic.
  */
@@ -71,7 +67,6 @@ export function MessagePart({
 	// Text part
 	if (part.type === "text") {
 		return (
-			// biome-ignore lint/suspicious/noArrayIndexKey: Text parts have no unique ID, order is stable
 			<MessageResponse key={`text-${partIdx}`}>{part.text}</MessageResponse>
 		);
 	}
@@ -84,7 +79,6 @@ export function MessagePart({
 			isStreaming && partIdx === message.parts.length - 1;
 
 		return (
-			// biome-ignore lint/suspicious/noArrayIndexKey: Reasoning parts have no unique ID, order is stable
 			<Reasoning key={`reasoning-${partIdx}`} isStreaming={isThisPartStreaming}>
 				<ReasoningTrigger />
 				<ReasoningContent>{reasoningPart.text}</ReasoningContent>
@@ -98,7 +92,6 @@ export function MessagePart({
 		if (filePart.mediaType?.startsWith("image/")) {
 			return (
 				<ImageAttachment
-					// biome-ignore lint/suspicious/noArrayIndexKey: File parts have no unique ID, order is stable
 					key={`file-${partIdx}`}
 					src={filePart.url}
 					filename={filePart.filename}
@@ -108,7 +101,6 @@ export function MessagePart({
 		// Non-image file attachment
 		return (
 			<div
-				// biome-ignore lint/suspicious/noArrayIndexKey: File parts have no unique ID, order is stable
 				key={`file-${partIdx}`}
 				className="flex items-center gap-2 rounded-md border border-border bg-muted/50 px-3 py-2 text-sm"
 			>
@@ -140,7 +132,6 @@ export function MessagePart({
 	if (part.type === "source-url") {
 		const sourcePart = part as SourceUrlPart;
 		return (
-			// biome-ignore lint/suspicious/noArrayIndexKey: Source parts have no unique ID, order is stable
 			<Source
 				key={`source-url-${partIdx}`}
 				href={sourcePart.url}
@@ -154,7 +145,6 @@ export function MessagePart({
 		const docPart = part as DocumentSourcePart;
 		return (
 			<div
-				// biome-ignore lint/suspicious/noArrayIndexKey: Document parts have no unique ID, order is stable
 				key={`document-${partIdx}`}
 				className="flex flex-col gap-1 rounded-md border border-border bg-muted/50 px-3 py-2 text-sm"
 			>
@@ -168,6 +158,11 @@ export function MessagePart({
 				)}
 			</div>
 		);
+	}
+
+	// Step boundary parts - no visual rendering, just markers for logical grouping
+	if (part.type === "step-start") {
+		return null;
 	}
 
 	// Unknown part type - log warning and skip

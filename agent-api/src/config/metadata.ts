@@ -92,8 +92,6 @@ export function hasMetadata(): boolean {
  * This is built from VirtioFS metadata with environment variable fallbacks.
  */
 export interface AgentConfig {
-	agentCommand: string;
-	agentArgs: string[];
 	agentCwd: string;
 	port: number;
 	sharedSecretHash?: string;
@@ -102,11 +100,6 @@ export interface AgentConfig {
 	workspaceCommit?: string;
 	/** If set, start socat to forward vsock to TCP */
 	vsock?: VsockConfig;
-	/**
-	 * Enable message persistence to disk.
-	 * This is needed for ACP implementations that don't replay messages on session resume.
-	 */
-	persistMessages: boolean;
 }
 
 /**
@@ -119,16 +112,6 @@ export interface AgentConfig {
  */
 export function loadConfig(): AgentConfig {
 	const metadata = readMetadata();
-
-	// Agent command
-	const agentCommand =
-		metadata?.agent?.command || process.env.AGENT_COMMAND || "claude-code-acp";
-
-	// Agent arguments
-	const agentArgs =
-		metadata?.agent?.args ||
-		process.env.AGENT_ARGS?.split(" ").filter(Boolean) ||
-		[];
 
 	// Working directory
 	const agentCwd =
@@ -163,13 +146,7 @@ export function loadConfig(): AgentConfig {
 	// Vsock config (only from metadata, no env fallback)
 	const vsock = metadata?.agent?.vsock;
 
-	// Message persistence (default: true for backwards compatibility)
-	const persistMessages =
-		process.env.PERSIST_MESSAGES?.toLowerCase() !== "false";
-
 	return {
-		agentCommand,
-		agentArgs,
 		agentCwd,
 		port,
 		sharedSecretHash,
@@ -177,6 +154,5 @@ export function loadConfig(): AgentConfig {
 		workspacePath,
 		workspaceCommit,
 		vsock,
-		persistMessages,
 	};
 }

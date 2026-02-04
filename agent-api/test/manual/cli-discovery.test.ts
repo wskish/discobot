@@ -19,7 +19,8 @@ try {
 	console.log("✓ Successfully found Claude CLI");
 
 	// Check the private claudeCliPath field (for testing purposes)
-	const cliPath = (client as any).claudeCliPath;
+	const cliPath = (client as unknown as { claudeCliPath: string })
+		.claudeCliPath;
 	console.log(`✓ Path: ${cliPath}`);
 
 	await client.disconnect();

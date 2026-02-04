@@ -6,6 +6,16 @@
 import type { UIMessage } from "ai";
 import { ClaudeSDKClient } from "../../src/claude-sdk/client.js";
 
+// Type for tool chunks in streaming
+interface ToolChunk {
+	type: string;
+	toolName?: string;
+	toolCallId?: string;
+	state?: string;
+	input?: unknown;
+	output?: unknown;
+}
+
 const API_KEY = process.env.ANTHROPIC_API_KEY;
 if (!API_KEY) {
 	console.error("❌ ANTHROPIC_API_KEY environment variable is required");
@@ -23,8 +33,8 @@ const client = new ClaudeSDKClient({
 
 const sessionId = "manual-test";
 let chunkCount = 0;
-const toolInputChunks: any[] = [];
-const toolOutputChunks: any[] = [];
+const toolInputChunks: unknown[] = [];
+const toolOutputChunks: unknown[] = [];
 
 try {
 	console.log("Connecting to Claude SDK...");
@@ -33,46 +43,6 @@ try {
 
 	await client.ensureSession(sessionId);
 	console.log("✓ Session created\n");
-
-	// Set callback AFTER ensuring session exists
-	client.setUpdateCallback((chunk) => {
-		chunkCount++;
-
-		// Log all chunks with details
-		console.log(`\n[CHUNK ${chunkCount}] type: ${chunk.type}`);
-
-		if (chunk.type === "tool-input-start") {
-			console.log(`  Tool: ${(chunk as any).toolName}`);
-			console.log(`  Call ID: ${(chunk as any).toolCallId}`);
-			toolInputChunks.push(chunk);
-		}
-
-		if (chunk.type === "tool-input-available") {
-			console.log(`  Tool: ${(chunk as any).toolName}`);
-			console.log(`  Call ID: ${(chunk as any).toolCallId}`);
-			console.log(`  Input: ${JSON.stringify((chunk as any).input, null, 2)}`);
-			toolInputChunks.push(chunk);
-		}
-
-		if (chunk.type === "tool-output-available") {
-			console.log(`  Call ID: ${(chunk as any).toolCallId}`);
-			const output = (chunk as any).output;
-			console.log(`  Output type: ${typeof output}`);
-			console.log(
-				`  Output keys: ${output && typeof output === "object" ? Object.keys(output).join(", ") : "N/A"}`,
-			);
-			console.log(
-				`  Output (first 200 chars): ${JSON.stringify(output).substring(0, 200)}...`,
-			);
-			toolOutputChunks.push(chunk);
-		}
-
-		if (chunk.type === "tool-output-error") {
-			console.log(`  Call ID: ${(chunk as any).toolCallId}`);
-			console.log(`  Error: ${JSON.stringify((chunk as any).output)}`);
-			toolOutputChunks.push(chunk);
-		}
-	}, sessionId);
 
 	// Test with different tool types
 	const testPrompts = [
@@ -95,7 +65,47 @@ try {
 	console.log("Sending prompt: 'List files using ls'");
 	console.log("=".repeat(60));
 
-	await client.prompt(userMessage, sessionId);
+	// Iterate over the async generator to capture chunks
+	for await (const chunk of client.prompt(userMessage, sessionId)) {
+		chunkCount++;
+
+		// Log all chunks with details
+		console.log(`\n[CHUNK ${chunkCount}] type: ${chunk.type}`);
+
+		if (chunk.type === "tool-input-start") {
+			console.log(`  Tool: ${(chunk as ToolChunk).toolName}`);
+			console.log(`  Call ID: ${(chunk as ToolChunk).toolCallId}`);
+			toolInputChunks.push(chunk);
+		}
+
+		if (chunk.type === "tool-input-available") {
+			console.log(`  Tool: ${(chunk as ToolChunk).toolName}`);
+			console.log(`  Call ID: ${(chunk as ToolChunk).toolCallId}`);
+			console.log(
+				`  Input: ${JSON.stringify((chunk as ToolChunk).input, null, 2)}`,
+			);
+			toolInputChunks.push(chunk);
+		}
+
+		if (chunk.type === "tool-output-available") {
+			console.log(`  Call ID: ${(chunk as ToolChunk).toolCallId}`);
+			const output = (chunk as ToolChunk).output;
+			console.log(`  Output type: ${typeof output}`);
+			console.log(
+				`  Output keys: ${output && typeof output === "object" ? Object.keys(output).join(", ") : "N/A"}`,
+			);
+			console.log(
+				`  Output (first 200 chars): ${JSON.stringify(output).substring(0, 200)}...`,
+			);
+			toolOutputChunks.push(chunk);
+		}
+
+		if (chunk.type === "tool-output-error") {
+			console.log(`  Call ID: ${(chunk as ToolChunk).toolCallId}`);
+			console.log(`  Error: ${JSON.stringify((chunk as ToolChunk).output)}`);
+			toolOutputChunks.push(chunk);
+		}
+	}
 
 	console.log(`\n${"=".repeat(60)}`);
 	console.log("✓ Prompt completed\n");
@@ -115,7 +125,7 @@ try {
 		for (const [i, part] of assistantMsg.parts.entries()) {
 			console.log(`    Part ${i + 1}: type=${part.type}`);
 			if (part.type === "dynamic-tool") {
-				const tool = part as any;
+				const tool = part as ToolChunk;
 				console.log(`      Tool: ${tool.toolName}`);
 				console.log(`      State: ${tool.state}`);
 				console.log(`      Input: ${JSON.stringify(tool.input)}`);

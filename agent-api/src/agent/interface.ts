@@ -2,11 +2,11 @@ import type { UIMessage, UIMessageChunk } from "ai";
 import type { Session } from "./session.js";
 
 /**
- * Agent interface - abstracts the underlying agent protocol (ACP or other)
+ * Agent interface - abstracts the underlying agent implementation.
  *
  * This interface uses AI SDK types (UIMessage, UIMessageChunk) to remain
- * protocol-agnostic. Different implementations (ACP, HTTP, etc.) handle
- * their own protocol translation and message storage internally.
+ * implementation-agnostic. Different implementations handle their own
+ * protocol translation and message storage internally.
  *
  * The agent is multi-session aware and can manage multiple independent sessions.
  */
@@ -24,22 +24,15 @@ export interface Agent {
 	ensureSession(sessionId?: string): Promise<string>;
 
 	/**
-	 * Set a callback to receive streaming updates as UIMessageChunk events.
-	 * These chunks are used for SSE streaming to the client.
-	 * @param sessionId - Optional session ID to set callback for. If not provided, uses default session.
-	 */
-	setUpdateCallback(
-		callback: AgentUpdateCallback | null,
-		sessionId?: string,
-	): void;
-
-	/**
-	 * Send a prompt to the agent with a user message.
-	 * The agent will process the message and stream updates via the callback.
+	 * Send a prompt to the agent and stream UIMessageChunk events.
+	 * Returns an async generator that yields chunks as they arrive.
 	 * @param message - The user message to send
 	 * @param sessionId - Optional session ID to send prompt to. If not provided, uses default session.
 	 */
-	prompt(message: UIMessage, sessionId?: string): Promise<void>;
+	prompt(
+		message: UIMessage,
+		sessionId?: string,
+	): AsyncGenerator<UIMessageChunk, void, unknown>;
 
 	/**
 	 * Cancel the current operation.
@@ -90,40 +83,8 @@ export interface Agent {
 	 * If no sessionId is provided, clears the default session.
 	 */
 	clearSession(sessionId?: string): Promise<void>;
-
-	// Convenience methods for default session (backwards compatibility)
-	/**
-	 * Get all messages in the default session.
-	 */
-	getMessages(): UIMessage[];
-
-	/**
-	 * Add a message to the default session.
-	 */
-	addMessage(message: UIMessage): void;
-
-	/**
-	 * Update an existing message by ID in the default session.
-	 */
-	updateMessage(id: string, updates: Partial<UIMessage>): void;
-
-	/**
-	 * Get the last assistant message in the default session.
-	 */
-	getLastAssistantMessage(): UIMessage | undefined;
-
-	/**
-	 * Clear all messages in the default session.
-	 */
-	clearMessages(): void;
 }
 
 export interface EnvironmentUpdate {
 	env: Record<string, string>;
 }
-
-/**
- * Callback for receiving streaming updates from the agent.
- * Implementations translate their protocol-specific updates to UIMessageChunk.
- */
-export type AgentUpdateCallback = (chunk: UIMessageChunk) => void;

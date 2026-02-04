@@ -732,13 +732,13 @@ describe("ChatNewContent - Workspace Selection Logic", () => {
 				const workspaceCalls: string[] = [];
 				const agentCalls: string[] = [];
 
-				const { result: wsResult } = renderHook(() =>
+				renderHook(() =>
 					useWorkspaceSelection("ws-2", workspaces, (id) =>
 						workspaceCalls.push(id),
 					),
 				);
 
-				const { result: agentResult } = renderHook(() =>
+				renderHook(() =>
 					useAgentSelection("agent-2", agents, (id) => agentCalls.push(id)),
 				);
 

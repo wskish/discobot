@@ -1,16 +1,27 @@
+/**
+ * Claude CLI session persistence utilities.
+ *
+ * Claude CLI stores sessions in ~/.claude/projects/<encoded-cwd>/<session-id>.jsonl
+ * This module provides utilities to discover and load sessions from that directory.
+ *
+ * The JSONL format stores SDK message types (SDKAssistantMessage, SDKUserMessage)
+ * which contain BetaMessage/MessageParam for their content.
+ */
+
 import { readdir, readFile, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import type { UIMessage } from "ai";
+import type {
+	SDKAssistantMessage,
+	SDKMessage,
+	SDKUserMessage,
+} from "@anthropic-ai/claude-agent-sdk";
+import type { BetaContentBlock } from "@anthropic-ai/sdk/resources/beta/messages/messages";
+import type { DynamicToolUIPart, UIMessage } from "ai";
 
-/**
- * Claude SDK stores sessions in ~/.claude/projects/<encoded-cwd>/<session-id>.jsonl
- * This module provides utilities to discover and load sessions from that directory.
- *
- * The JSONL format stores SDK-style messages with enriched metadata. The core message
- * structures match SDKUserMessage and SDKAssistantMessage from the SDK, but include
- * additional fields for session tracking (cwd, gitBranch, version, timestamp, etc.).
- */
+// ============================================================================
+// Types
+// ============================================================================
 
 export interface ClaudeSessionInfo {
 	sessionId: string;
@@ -20,12 +31,38 @@ export interface ClaudeSessionInfo {
 	messageCount: number;
 }
 
+export interface SessionData {
+	sessionId: string;
+	messages: UIMessage[];
+	metadata: {
+		cwd: string;
+		gitBranch?: string;
+		version?: string;
+		messageCount: number;
+		recordCount: number;
+		lastModified: Date;
+	};
+}
+
+/**
+ * JSONL records can be any SDKMessage type.
+ * We extract metadata from system messages and convert user/assistant messages.
+ */
+type JSONLRecord = SDKMessage & {
+	// Additional fields that may appear in JSONL but aren't in SDK types
+	gitBranch?: string;
+	version?: string;
+};
+
+// ============================================================================
+// Path Utilities
+// ============================================================================
+
 /**
  * Encode a file path for use in Claude's directory structure.
  * Claude uses a simple encoding where / becomes -
  */
 function encodePathForClaude(path: string): string {
-	// Replace all slashes with dashes (including leading slash)
 	return path.replace(/\//g, "-");
 }
 
@@ -44,6 +81,10 @@ export function getSessionDirectoryForCwd(cwd: string): string {
 	return join(getClaudeProjectsDir(), encoded);
 }
 
+// ============================================================================
+// Session Discovery
+// ============================================================================
+
 /**
  * Discover all available sessions for a given working directory
  */
@@ -54,18 +95,16 @@ export async function discoverSessions(
 	const sessions: ClaudeSessionInfo[] = [];
 
 	try {
-		// Check if directory exists first
+		// Check if directory exists
 		try {
 			await stat(sessionDir);
 		} catch {
-			// Directory doesn't exist yet - return empty array
 			return sessions;
 		}
 
 		const entries = await readdir(sessionDir, { withFileTypes: true });
 
 		for (const entry of entries) {
-			// Look for .jsonl files that are not in subdirectories
 			if (entry.isFile() && entry.name.endsWith(".jsonl")) {
 				const filePath = join(sessionDir, entry.name);
 				const sessionId = entry.name.replace(/\.jsonl$/, "");
@@ -88,7 +127,6 @@ export async function discoverSessions(
 			}
 		}
 	} catch (error) {
-		// Directory doesn't exist or can't be read
 		console.warn(`Failed to read session directory ${sessionDir}:`, error);
 	}
 
@@ -98,146 +136,17 @@ export async function discoverSessions(
 	return sessions;
 }
 
+// ============================================================================
+// Session Loading
+// ============================================================================
+
 /**
- * JSONL record types - these closely match SDK types with additional metadata
+ * Load messages from a Claude SDK session file.
+ * Tool results are merged into their corresponding dynamic-tool parts.
  *
- * The JSONL format stores messages similar to SDKUserMessage/SDKAssistantMessage
- * but with enriched metadata:
- * - cwd, gitBranch, version, timestamp
- * - parentUuid, isSidechain, userType
- * - permissionMode (for user messages)
- * - requestId (for assistant messages)
- *
- * Message content follows Anthropic API format:
- * - User messages: { role: "user", content: string | ContentBlock[] }
- * - Assistant messages: { id, role: "assistant", content: ContentBlock[], ... }
- */
-interface BaseJSONLRecord {
-	type: string;
-	uuid?: string;
-	timestamp?: string;
-	sessionId?: string;
-	cwd?: string;
-	gitBranch?: string;
-	version?: string;
-	parentUuid?: string | null;
-	isSidechain?: boolean;
-	userType?: string;
-	slug?: string;
-}
-
-/**
- * User message record - similar to SDKUserMessage with metadata
- */
-interface UserMessageRecord extends BaseJSONLRecord {
-	type: "user";
-	message: {
-		role: "user";
-		content: string | ContentBlock[];
-	};
-	permissionMode?: string;
-}
-
-/**
- * Assistant message record - similar to SDKAssistantMessage with metadata
- */
-interface AssistantMessageRecord extends BaseJSONLRecord {
-	type: "assistant";
-	message: {
-		id: string;
-		role: "assistant";
-		content: ContentBlock[];
-		model?: string;
-		stop_reason?: string;
-		usage?: unknown;
-	};
-	requestId?: string;
-}
-
-/**
- * Generic message record (same as assistant)
- */
-interface MessageRecord extends BaseJSONLRecord {
-	type: "message";
-	message: {
-		id: string;
-		role: "assistant";
-		content: ContentBlock[];
-		model?: string;
-		stop_reason?: string;
-		usage?: unknown;
-	};
-	requestId?: string;
-}
-
-/**
- * Progress tracking record
- */
-interface ProgressRecord extends BaseJSONLRecord {
-	type: "progress";
-	data: {
-		type: "hook_progress" | "agent_progress" | "bash_progress" | string;
-		hookEvent?: string;
-		hookName?: string;
-		command?: string;
-		[key: string]: unknown;
-	};
-	toolUseID?: string;
-	parentToolUseID?: string;
-}
-
-/**
- * Queue operation record (session lifecycle events)
- */
-interface QueueOperationRecord {
-	type: "queue-operation";
-	operation: string; // "dequeue", etc.
-	sessionId: string;
-	timestamp: string;
-}
-
-type ClaudeJSONLRecord =
-	| UserMessageRecord
-	| AssistantMessageRecord
-	| MessageRecord
-	| ProgressRecord
-	| QueueOperationRecord
-	| BaseJSONLRecord;
-
-/**
- * Content block types from Anthropic SDK
- */
-type ContentBlock = TextBlock | ToolUseBlock | ToolResultBlock | ThinkingBlock;
-
-interface TextBlock {
-	type: "text";
-	text: string;
-}
-
-interface ToolUseBlock {
-	type: "tool_use";
-	id: string;
-	name: string;
-	input: unknown;
-}
-
-interface ToolResultBlock {
-	type: "tool_result";
-	tool_use_id: string;
-	content: string | unknown;
-	is_error?: boolean;
-}
-
-/**
- * Extended thinking block (when extended thinking is enabled)
- */
-interface ThinkingBlock {
-	type: "thinking";
-	thinking: string;
-}
-
-/**
- * Load messages from a Claude SDK session file with comprehensive parsing
+ * Note: Claude Code writes partial/incremental updates to JSONL files. Multiple
+ * records can have the same message.id but different uuid. We merge these records
+ * by message.id to reconstruct complete messages.
  */
 export async function loadSessionMessages(
 	sessionId: string,
@@ -249,69 +158,90 @@ export async function loadSessionMessages(
 	try {
 		const content = await readFile(filePath, "utf-8");
 		const lines = content.trim().split("\n");
-		const messages: UIMessage[] = [];
 
-		// Track tool results to merge them into tool calls
-		const toolResults = new Map<string, ToolResultBlock>();
-
-		// First pass: collect tool results
+		// Parse all records
+		const records: JSONLRecord[] = [];
 		for (const line of lines) {
 			if (!line.trim()) continue;
-
 			try {
-				const record = JSON.parse(line) as ClaudeJSONLRecord;
-
-				if (
-					(record.type === "user" ||
-						record.type === "assistant" ||
-						record.type === "message") &&
-					"message" in record &&
-					record.message
-				) {
-					const content = getMessageContent(record.message);
-					for (const block of content) {
-						if (block.type === "tool_result") {
-							toolResults.set(block.tool_use_id, block);
-						}
-					}
-				}
-			} catch (_error) {
-				// Skip invalid lines
+				records.push(JSON.parse(line) as JSONLRecord);
+			} catch (error) {
+				console.warn(`Failed to parse JSONL line:`, error);
 			}
 		}
 
-		// Second pass: build messages
-		for (const line of lines) {
-			if (!line.trim()) continue;
+		// Build messages by merging consecutive assistant messages into one.
+		// In an agentic loop, multiple API calls produce multiple assistant messages,
+		// but they should be rendered as ONE assistant response with multiple steps.
+		//
+		// Pattern: user (prompt) → [assistant → user (tool_result)]* → assistant (final)
+		// All assistants in that sequence merge into one UIMessage.
 
-			try {
-				const record = JSON.parse(line) as ClaudeJSONLRecord;
+		const messages: UIMessage[] = [];
+		// Map toolCallId → dynamic-tool part for merging tool results
+		const toolParts = new Map<string, DynamicToolUIPart>();
+		// Accumulate assistant records for the current turn
+		let currentAssistantRecords: SDKAssistantMessage[] = [];
+		let currentAssistantMessageId: string | null = null;
 
-				// Process user and assistant messages (only if they have a uuid)
-				if (
-					(record.type === "user" ||
-						record.type === "assistant" ||
-						record.type === "message") &&
-					"message" in record &&
-					record.message &&
-					record.uuid
-				) {
-					const uiMessage = claudeMessageToUIMessage(
-						record as (
-							| UserMessageRecord
-							| AssistantMessageRecord
-							| MessageRecord
-						) & {
-							uuid: string;
-						},
-						toolResults,
-					);
+		for (const record of records) {
+			if (record.type === "assistant") {
+				// Accumulate assistant records
+				// Use the first assistant message's ID for the merged message
+				if (currentAssistantMessageId === null) {
+					currentAssistantMessageId = record.message.id;
+				}
+				currentAssistantRecords.push(record);
+			} else if (record.type === "user" && record.uuid) {
+				// Check if this user message has actual content (not just tool_results)
+				const hasTextContent = userMessageHasTextContent(record);
+
+				if (hasTextContent) {
+					// This is a real user message (new prompt)
+					// First, finalize any pending assistant turn
+					if (currentAssistantRecords.length > 0 && currentAssistantMessageId) {
+						const uiMessage = mergeAssistantRecordsIntoOne(
+							currentAssistantRecords,
+							currentAssistantMessageId,
+							toolParts,
+						);
+						if (uiMessage) {
+							messages.push(uiMessage);
+						}
+						currentAssistantRecords = [];
+						currentAssistantMessageId = null;
+					}
+
+					// Add the user message
+					const uiMessage = userRecordToUIMessage(record, toolParts);
 					if (uiMessage) {
 						messages.push(uiMessage);
 					}
+				} else {
+					// This is a tool_result-only user message
+					// First, ensure tool parts from accumulated records are registered
+					if (currentAssistantRecords.length > 0 && currentAssistantMessageId) {
+						registerToolPartsFromRecords(
+							currentAssistantRecords,
+							currentAssistantMessageId,
+							toolParts,
+						);
+					}
+					// Now merge tool results into the registered tool parts
+					mergeToolResultsFromUserMessage(record, toolParts);
 				}
-			} catch (error) {
-				console.warn(`Failed to parse JSONL line:`, error);
+			}
+		}
+
+		// Finalize any remaining assistant turn
+		if (currentAssistantRecords.length > 0 && currentAssistantMessageId) {
+			const uiMessage = mergeAssistantRecordsIntoOne(
+				currentAssistantRecords,
+				currentAssistantMessageId,
+				toolParts,
+			);
+			if (uiMessage) {
+				messages.push(uiMessage);
 			}
 		}
 
@@ -323,94 +253,292 @@ export async function loadSessionMessages(
 }
 
 /**
- * Extract content from a message (handles both user and assistant message types)
+ * Register tool_use blocks from accumulated assistant records into the toolParts map.
+ * This must be called BEFORE merging tool results so the parts exist to merge into.
  */
-function getMessageContent(message: {
-	content: string | ContentBlock[];
-}): ContentBlock[] {
-	const content = message.content;
-	if (typeof content === "string") {
-		return [{ type: "text", text: content }];
+function registerToolPartsFromRecords(
+	records: SDKAssistantMessage[],
+	_messageId: string,
+	toolParts: Map<string, DynamicToolUIPart>,
+): void {
+	for (const record of records) {
+		const content = record.message.content;
+		for (let index = 0; index < content.length; index++) {
+			const block = content[index];
+			if (block.type === "tool_use" && !toolParts.has(block.id)) {
+				// Create and register the tool part
+				const part: DynamicToolUIPart = {
+					type: "dynamic-tool",
+					toolCallId: block.id,
+					toolName: block.name,
+					state: "input-available",
+					input: block.input,
+				};
+				toolParts.set(block.id, part);
+			}
+		}
 	}
-	return content as ContentBlock[];
 }
 
 /**
- * Convert Claude JSONL message to UIMessage format with comprehensive content support
+ * Check if a user message has actual text content (not just tool_results).
  */
-function claudeMessageToUIMessage(
-	record:
-		| (UserMessageRecord & { uuid: string })
-		| (AssistantMessageRecord & { uuid: string })
-		| (MessageRecord & { uuid: string }),
-	toolResults: Map<string, ToolResultBlock>,
-): UIMessage | null {
-	if (!record.message) return null;
+function userMessageHasTextContent(record: SDKUserMessage): boolean {
+	const content = record.message.content;
+	if (typeof content === "string") {
+		return content.trim().length > 0;
+	}
+	if (Array.isArray(content)) {
+		return content.some(
+			(block) => block.type === "text" && block.text.trim().length > 0,
+		);
+	}
+	return false;
+}
 
-	const role =
-		"role" in record.message
-			? record.message.role === "assistant"
-				? "assistant"
-				: "user"
-			: "assistant";
-	const parts: UIMessage["parts"] = [];
+/**
+ * Merge tool results from a user message into the tool parts map.
+ */
+function mergeToolResultsFromUserMessage(
+	record: SDKUserMessage,
+	toolParts: Map<string, DynamicToolUIPart>,
+): void {
+	const content = record.message.content;
+	if (!Array.isArray(content)) return;
 
-	const content = getMessageContent(record.message);
-
-	// Process content blocks in order
 	for (const block of content) {
-		if (block.type === "text") {
-			// Add text content
-			parts.push({
-				type: "text",
-				text: block.text,
-			});
-		} else if (block.type === "thinking") {
-			// Add thinking/reasoning content (extended thinking feature)
-			parts.push({
-				type: "reasoning",
-				text: block.thinking,
-			});
-		} else if (block.type === "tool_use") {
-			// Add tool call with optional result
-			const toolResult = toolResults.get(block.id);
-
-			const toolPart: any = {
-				type: "dynamic-tool",
-				toolCallId: block.id,
-				toolName: block.name,
-				state: toolResult ? "output-available" : "input-available",
-				input: block.input,
-			};
-
-			// Include tool result if available
-			if (toolResult) {
-				if (toolResult.is_error) {
+		if (block.type === "tool_result") {
+			const toolPart = toolParts.get(block.tool_use_id);
+			if (toolPart) {
+				if (block.is_error) {
 					toolPart.state = "output-error";
-					toolPart.errorText =
-						typeof toolResult.content === "string"
-							? toolResult.content
-							: JSON.stringify(toolResult.content);
+					toolPart.errorText = String(block.content ?? "Tool call failed");
 				} else {
-					toolPart.output =
-						typeof toolResult.content === "string"
-							? toolResult.content
-							: JSON.stringify(toolResult.content);
+					toolPart.state = "output-available";
+					toolPart.output = block.content;
 				}
 			}
-
-			parts.push(toolPart);
 		}
-		// Skip tool_result blocks as they're merged into tool_use
+	}
+}
+
+/**
+ * Merge multiple assistant records from an agentic loop into a single UIMessage.
+ * This combines all API calls in a turn into one response with multiple parts.
+ * Inserts `step-start` parts at boundaries between API calls (steps).
+ */
+function mergeAssistantRecordsIntoOne(
+	records: SDKAssistantMessage[],
+	messageId: string,
+	toolParts: Map<string, DynamicToolUIPart>,
+): UIMessage | null {
+	if (records.length === 0) return null;
+
+	const parts: UIMessage["parts"] = [];
+
+	// Collect all content blocks from all records
+	// Use a set to track which block IDs we've seen (for tool_use deduplication)
+	const seenToolIds = new Set<string>();
+
+	for (let recordIndex = 0; recordIndex < records.length; recordIndex++) {
+		const record = records[recordIndex];
+
+		// Insert step-start part at the beginning of each step after the first
+		// This marks step boundaries so the UI can render them consistently
+		// whether content is streamed or loaded from disk
+		if (recordIndex > 0) {
+			parts.push({ type: "step-start" } as UIMessage["parts"][number]);
+		}
+
+		const content = record.message.content;
+		for (let index = 0; index < content.length; index++) {
+			const block = content[index];
+
+			// For tool_use blocks, use already-registered part (with tool results merged)
+			if (block.type === "tool_use") {
+				if (seenToolIds.has(block.id)) continue;
+				seenToolIds.add(block.id);
+
+				// Use existing part from toolParts map (has tool results already merged)
+				// or create a new one if not registered yet
+				const existingPart = toolParts.get(block.id);
+				if (existingPart) {
+					parts.push(existingPart as UIMessage["parts"][number]);
+				} else {
+					const part = contentBlockToPart(block, messageId, index);
+					if (part) {
+						parts.push(part);
+						if (part.type === "dynamic-tool") {
+							toolParts.set(part.toolCallId, part as DynamicToolUIPart);
+						}
+					}
+				}
+				continue;
+			}
+
+			const part = contentBlockToPart(block, messageId, index);
+			if (part) {
+				parts.push(part);
+			}
+		}
 	}
 
 	if (parts.length === 0) return null;
 
 	return {
-		id: record.uuid,
-		role,
+		id: messageId,
+		role: "assistant",
 		parts,
 	};
+}
+
+/**
+ * Convert an SDKUserMessage to UIMessage.
+ * Tool results are merged into their corresponding dynamic-tool parts (not added as new parts).
+ * Returns null if the message only contained tool_results (which have been merged).
+ */
+function userRecordToUIMessage(
+	record: SDKUserMessage,
+	toolParts: Map<string, DynamicToolUIPart>,
+): UIMessage | null {
+	const parts: UIMessage["parts"] = [];
+	const messageContent = record.message.content;
+
+	// User message content can be string or array
+	if (typeof messageContent === "string") {
+		parts.push({ type: "text", text: messageContent });
+	} else if (Array.isArray(messageContent)) {
+		for (const block of messageContent) {
+			// User messages can have text blocks or tool_result blocks
+			if (block.type === "text") {
+				parts.push({ type: "text", text: block.text });
+			} else if (block.type === "tool_result") {
+				// Merge tool result into existing dynamic-tool part
+				const toolPart = toolParts.get(block.tool_use_id);
+				if (toolPart) {
+					// Update the existing dynamic-tool with output
+					if (block.is_error) {
+						toolPart.state = "output-error";
+						toolPart.errorText = String(block.content ?? "Tool call failed");
+					} else {
+						toolPart.state = "output-available";
+						toolPart.output = block.content;
+					}
+				}
+				// Don't add tool_result as a separate part - it's been merged
+			}
+		}
+	}
+
+	// Return null if message only contained tool_results (no remaining parts)
+	if (parts.length === 0) return null;
+
+	return {
+		id: record.uuid ?? `user-${Date.now()}`,
+		role: "user",
+		parts,
+	};
+}
+
+/**
+ * Convert a BetaContentBlock to a UIMessage part.
+ */
+function contentBlockToPart(
+	block: BetaContentBlock,
+	_uuid: string,
+	_index: number,
+): UIMessage["parts"][number] | null {
+	switch (block.type) {
+		case "text": {
+			return {
+				type: "text",
+				text: block.text,
+			};
+		}
+
+		case "thinking": {
+			return {
+				type: "reasoning",
+				text: block.thinking,
+			};
+		}
+
+		case "tool_use": {
+			return {
+				type: "dynamic-tool",
+				toolCallId: block.id,
+				toolName: block.name,
+				state: "input-available",
+				input: block.input,
+			} as UIMessage["parts"][number];
+		}
+
+		default:
+			// Many other BetaContentBlock types exist (server tools, MCP, etc.)
+			// that we don't need to convert to UI parts
+			return null;
+	}
+}
+
+// ============================================================================
+// Full Session Data Loading
+// ============================================================================
+
+/**
+ * Load full session data including metadata.
+ */
+export async function loadFullSessionData(
+	sessionId: string,
+	cwd: string,
+): Promise<SessionData | null> {
+	const sessionDir = getSessionDirectoryForCwd(cwd);
+	const filePath = join(sessionDir, `${sessionId}.jsonl`);
+
+	try {
+		const content = await readFile(filePath, "utf-8");
+		const lines = content.trim().split("\n");
+		const stats = await stat(filePath);
+
+		// Extract metadata from records
+		let gitBranch: string | undefined;
+		let version: string | undefined;
+
+		for (const line of lines) {
+			if (!line.trim()) continue;
+			try {
+				const record = JSON.parse(line) as JSONLRecord;
+				if (!gitBranch && record.gitBranch) {
+					gitBranch = record.gitBranch;
+				}
+				if (!version && record.version) {
+					version = record.version;
+				}
+				// Break early once we have both
+				if (gitBranch && version) break;
+			} catch {
+				// Skip invalid lines
+			}
+		}
+
+		// Load messages using the standard function
+		const messages = await loadSessionMessages(sessionId, cwd);
+
+		return {
+			sessionId,
+			messages,
+			metadata: {
+				cwd,
+				gitBranch,
+				version,
+				messageCount: messages.length,
+				recordCount: lines.length,
+				lastModified: stats.mtime,
+			},
+		};
+	} catch (error) {
+		console.warn(`Failed to load full session data:`, error);
+		return null;
+	}
 }
 
 /**
@@ -435,147 +563,7 @@ export async function getSessionMetadata(
 			lastModified: stats.mtime,
 			messageCount: lines.length,
 		};
-	} catch (_error) {
-		return null;
-	}
-}
-
-/**
- * Load full session data including progress records and metadata
- */
-export interface SessionData {
-	sessionId: string;
-	messages: UIMessage[];
-	metadata: {
-		cwd: string;
-		gitBranch?: string;
-		version?: string;
-		messageCount: number;
-		recordCount: number;
-		lastModified: Date;
-	};
-	progress?: Array<{
-		type: string;
-		timestamp?: string;
-		data?: unknown;
-	}>;
-}
-
-export async function loadFullSessionData(
-	sessionId: string,
-	cwd: string,
-): Promise<SessionData | null> {
-	const sessionDir = getSessionDirectoryForCwd(cwd);
-	const filePath = join(sessionDir, `${sessionId}.jsonl`);
-
-	try {
-		const content = await readFile(filePath, "utf-8");
-		const lines = content.trim().split("\n");
-		const stats = await stat(filePath);
-
-		const messages: UIMessage[] = [];
-		const progress: SessionData["progress"] = [];
-		const toolResults = new Map<string, ToolResultBlock>();
-
-		let gitBranch: string | undefined;
-		let version: string | undefined;
-
-		// First pass: collect metadata and tool results
-		for (const line of lines) {
-			if (!line.trim()) continue;
-
-			try {
-				const record = JSON.parse(line) as ClaudeJSONLRecord;
-
-				// Extract metadata (only from records that have these fields)
-				if (record.type !== "queue-operation") {
-					if (!gitBranch && "gitBranch" in record && record.gitBranch) {
-						gitBranch = record.gitBranch;
-					}
-					if (!version && "version" in record && record.version) {
-						version = record.version;
-					}
-				}
-
-				// Collect tool results
-				if (
-					(record.type === "user" ||
-						record.type === "assistant" ||
-						record.type === "message") &&
-					"message" in record &&
-					record.message
-				) {
-					const content = getMessageContent(record.message);
-					for (const block of content) {
-						if (block.type === "tool_result") {
-							toolResults.set(block.tool_use_id, block);
-						}
-					}
-				}
-
-				// Collect progress records
-				if (record.type === "progress" && "data" in record) {
-					progress.push({
-						type: record.data?.type || "unknown",
-						timestamp: record.timestamp,
-						data: record.data,
-					});
-				}
-			} catch (_error) {
-				// Skip invalid lines
-			}
-		}
-
-		// Second pass: build messages
-		for (const line of lines) {
-			if (!line.trim()) continue;
-
-			try {
-				const record = JSON.parse(line) as ClaudeJSONLRecord;
-
-				// Process user and assistant messages (only if they have a uuid)
-				if (
-					(record.type === "user" ||
-						record.type === "assistant" ||
-						record.type === "message") &&
-					"message" in record &&
-					record.message &&
-					record.uuid
-				) {
-					const uiMessage = claudeMessageToUIMessage(
-						record as (
-							| UserMessageRecord
-							| AssistantMessageRecord
-							| MessageRecord
-						) & {
-							uuid: string;
-						},
-						toolResults,
-					);
-					if (uiMessage) {
-						messages.push(uiMessage);
-					}
-				}
-			} catch (_error) {
-				// Skip invalid lines
-			}
-		}
-
-		return {
-			sessionId,
-			messages,
-			metadata: {
-				cwd,
-				gitBranch,
-				version,
-				messageCount: messages.length,
-				recordCount: lines.length,
-				lastModified: stats.mtime,
-			},
-			progress,
-		};
-	} catch (error) {
-		console.warn(`Failed to load full session data:`, error);
+	} catch {
 		return null;
 	}
 }

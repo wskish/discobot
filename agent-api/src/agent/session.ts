@@ -5,6 +5,8 @@ import type { UIMessage } from "ai";
  *
  * Each session is independent and maintains its own state. The agent manages multiple
  * sessions and can switch between them.
+ *
+ * Messages are read from Claude SDK's JSONL files on disk.
  */
 export interface Session {
 	/**
@@ -14,26 +16,12 @@ export interface Session {
 
 	/**
 	 * Get all messages in this session.
+	 * Messages are loaded from Claude SDK's session files.
 	 */
 	getMessages(): UIMessage[];
 
 	/**
-	 * Add a message to this session.
-	 */
-	addMessage(message: UIMessage): void;
-
-	/**
-	 * Update an existing message by ID.
-	 */
-	updateMessage(id: string, updates: Partial<UIMessage>): void;
-
-	/**
-	 * Get the last assistant message (for updating during streaming).
-	 */
-	getLastAssistantMessage(): UIMessage | undefined;
-
-	/**
-	 * Clear all messages in this session.
+	 * Clear the cached messages in this session.
 	 */
 	clearMessages(): void;
 }

@@ -17,11 +17,7 @@ describe("GET /chat SSE endpoint", () => {
 	let app: ReturnType<typeof createApp>["app"];
 
 	before(async () => {
-		// Use 'true' command which exits immediately with success
-		// This prevents the ACP client from trying to parse invalid JSON
 		const result = createApp({
-			agentCommand: "true",
-			agentArgs: [],
 			agentCwd: process.cwd(),
 			enableLogging: false,
 		});
@@ -172,8 +168,6 @@ describe("POST /chat conflict handling", () => {
 
 	before(async () => {
 		const result = createApp({
-			agentCommand: "true",
-			agentArgs: [],
 			agentCwd: process.cwd(),
 			enableLogging: false,
 		});
@@ -254,8 +248,6 @@ describe("GET /chat/status", () => {
 
 	before(async () => {
 		const result = createApp({
-			agentCommand: "true",
-			agentArgs: [],
 			agentCwd: process.cwd(),
 			enableLogging: false,
 		});
@@ -360,8 +352,6 @@ describe("GET /commits endpoint", () => {
 
 		// Create app with test repo as workspace
 		const result = createApp({
-			agentCommand: "true",
-			agentArgs: [],
 			agentCwd: testDir,
 			enableLogging: false,
 		});

@@ -49,10 +49,7 @@ describe("Git user configuration via headers", () => {
 		await git(testDir, "commit", "-m", "Initial commit");
 
 		// Create app with test directory as workspace
-		// Use "node -e ''" as a cross-platform no-op command (instead of "true" which isn't available on all CI runners)
 		const result = createApp({
-			agentCommand: "node",
-			agentArgs: ["-e", ""],
 			agentCwd: testDir,
 			enableLogging: false,
 		});

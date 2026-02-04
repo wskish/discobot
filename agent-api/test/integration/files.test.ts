@@ -56,8 +56,6 @@ describe("File System API Endpoints", () => {
 
 		// Create app with test directory as workspace root
 		const result = createApp({
-			agentCommand: "true",
-			agentArgs: [],
 			agentCwd: testDir,
 			enableLogging: false,
 		});
@@ -557,8 +555,6 @@ describe("Git Diff API - All Change Types", () => {
 
 		// Create app with git test directory
 		const result = createApp({
-			agentCommand: "true",
-			agentArgs: [],
 			agentCwd: gitTestDir,
 			enableLogging: false,
 		});
@@ -863,8 +859,6 @@ describe("Git Diff API - automatic merge-base calculation", () => {
 
 		// Create app with clone directory as workspace
 		const result = createApp({
-			agentCommand: "true",
-			agentArgs: [],
 			agentCwd: cloneDir,
 			enableLogging: false,
 		});
@@ -978,8 +972,6 @@ describe("Git Diff API - merge-base with remote updates", () => {
 
 		// Create app with clone directory as workspace
 		const result = createApp({
-			agentCommand: "true",
-			agentArgs: [],
 			agentCwd: cloneDir,
 			enableLogging: false,
 		});
@@ -1040,8 +1032,6 @@ describe("Git Diff API - no remote (local repo only)", () => {
 
 		// Create app with git test directory
 		const result = createApp({
-			agentCommand: "true",
-			agentArgs: [],
 			agentCwd: gitTestDir,
 			enableLogging: false,
 		});

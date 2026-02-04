@@ -1,153 +1,342 @@
+/**
+ * Translates Claude SDK messages to UIMessageChunk events.
+ *
+ * This module converts SDKMessage types from @anthropic-ai/claude-agent-sdk
+ * to the UIMessageChunk protocol used by the Vercel AI SDK.
+ *
+ * Key design principles:
+ * - No external state dependencies - TranslationState is local per message
+ * - Deterministic ID generation using {type}-{uuid}-{index} pattern
+ * - Exhaustive content block handling with type safety
+ * - Uses stream event index field for proper block correlation
+ */
+
 import type {
 	SDKAssistantMessage,
 	SDKMessage,
 	SDKPartialAssistantMessage,
+	SDKUserMessage,
 } from "@anthropic-ai/claude-agent-sdk";
+import type {
+	BetaContentBlock,
+	BetaRawContentBlockDeltaEvent,
+	BetaRawContentBlockStartEvent,
+	BetaRawContentBlockStopEvent,
+	BetaRawMessageStartEvent,
+	BetaRawMessageStreamEvent,
+	BetaTextBlock,
+	BetaThinkingBlock,
+	BetaToolUseBlock,
+} from "@anthropic-ai/sdk/resources/beta/messages/messages";
 import type { UIMessageChunk } from "ai";
-import type { StreamBlockIds, StreamState } from "../server/stream.js";
-import {
-	createFinishChunks,
-	createReasoningChunks,
-	createStartChunk,
-	createTextChunks,
-} from "../server/stream.js";
 
-// Type for streaming events from the SDK
-// Using a loose type since the SDK doesn't export these event types
-interface StreamEvent {
-	type?: string;
-	index?: number;
-	content_block?: {
-		type?: string;
-		id?: string;
-		name?: string;
-		input?: unknown;
-		text?: string;
-		thinking?: string;
+// ============================================================================
+// Types
+// ============================================================================
+
+/**
+ * Local state for tracking streaming translation.
+ * Scoped to an entire agentic loop (multiple API calls per prompt).
+ */
+export interface TranslationState {
+	/** UUID of the current message being translated */
+	messageUuid: string;
+	/** Track which indices have open text blocks (need text-end on stop) */
+	openTextIndices: Set<number>;
+	/** Track which indices have open reasoning blocks (need reasoning-end on stop) */
+	openReasoningIndices: Set<number>;
+	/** Map block index to toolCallId for proper correlation */
+	indexToToolCallId: Map<number, string>;
+	/** Tool state tracking by toolCallId */
+	toolStates: Map<string, ToolState>;
+	/** Whether we've emitted the initial 'start' event for this prompt */
+	hasEmittedStart: boolean;
+	/** The message ID used for the overall response (first message's ID) */
+	responseMessageId: string;
+	/** Whether we need to emit finish-step (deferred until tool results arrive) */
+	needsFinishStep: boolean;
+}
+
+interface ToolState {
+	/** Whether tool-input-available has been sent */
+	inputAvailableSent: boolean;
+	/** Tool name for display */
+	toolName: string;
+	/** Accumulated input object */
+	input: unknown;
+	/** Buffer for streaming JSON input */
+	inputJsonBuffer: string;
+	/** Block index this tool belongs to */
+	index: number;
+}
+
+/**
+ * Content block types that we handle for translation.
+ * This is a subset of BetaContentBlock that we care about.
+ */
+type TranslatableContentBlock =
+	| BetaTextBlock
+	| BetaThinkingBlock
+	| BetaToolUseBlock
+	| {
+			type: "tool_result";
+			tool_use_id: string;
+			content?: unknown;
+			is_error?: boolean;
+	  };
+
+// ============================================================================
+// ID Generation
+// ============================================================================
+
+/**
+ * Generate a deterministic block ID from message uuid, block index, and type.
+ * This ensures IDs are consistent between streaming and JSONL reading.
+ */
+export function generateBlockId(
+	uuid: string,
+	index: number,
+	type: "text" | "reasoning",
+): string {
+	return `${type}-${uuid}-${index}`;
+}
+
+// ============================================================================
+// State Management
+// ============================================================================
+
+/**
+ * Create a new TranslationState for a message.
+ */
+export function createTranslationState(messageUuid: string): TranslationState {
+	return {
+		messageUuid,
+		openTextIndices: new Set(),
+		openReasoningIndices: new Set(),
+		indexToToolCallId: new Map(),
+		toolStates: new Map(),
+		hasEmittedStart: false,
+		responseMessageId: "",
+		needsFinishStep: false,
 	};
-	delta?: {
-		type?: string;
-		text?: string;
-		thinking?: string;
-		partial_json?: string;
-	};
 }
 
-// Type for thinking content blocks
-interface ThinkingBlock {
-	type: "thinking";
-	thinking: string;
-}
+// ============================================================================
+// Main Entry Points
+// ============================================================================
 
-// Type for tool result blocks
-interface ToolResultBlock {
-	type: "tool_result";
-	tool_use_id: string;
-	is_error?: boolean;
-	content: string;
-}
-
-export function sdkMessageToChunks(
+/**
+ * Translate an SDKMessage to UIMessageChunks.
+ * Handles all message types: assistant, stream_event, result, system, user.
+ *
+ * IMPORTANT: During streaming, the SDK emits both incremental stream_events AND
+ * complete assistant message snapshots. We ONLY process stream_events during
+ * streaming to avoid duplicating content. The assistant messages are used when
+ * loading from disk (via translateAssistantMessage directly).
+ */
+export function translateSDKMessage(
 	msg: SDKMessage,
-	state: StreamState,
-	ids: StreamBlockIds,
+	state: TranslationState,
+): UIMessageChunk[] {
+	switch (msg.type) {
+		case "assistant":
+			// During streaming, ignore assistant messages - they're snapshots of
+			// content we're already receiving via stream_events. Processing both
+			// causes duplicate content and out-of-order events.
+			// Assistant messages are only used when loading complete messages from disk.
+			return [];
+
+		case "stream_event":
+			return translateStreamEvent(msg, state);
+
+		case "result":
+			return createFinishChunks(state);
+
+		case "user":
+			// User messages may contain tool_result blocks
+			return translateUserMessage(msg);
+
+		case "system":
+			// No chunks emitted for system messages
+			return [];
+
+		default:
+			// Handle other SDK message types that don't produce UI chunks
+			// (SDKStatusMessage, SDKHookProgressMessage, etc.)
+			return [];
+	}
+}
+
+/**
+ * Translate a complete SDKAssistantMessage to UIMessageChunks.
+ * Used when processing non-streaming or complete messages.
+ */
+export function translateAssistantMessage(
+	msg: SDKAssistantMessage,
+): UIMessageChunk[] {
+	const chunks: UIMessageChunk[] = [];
+	// Use the actual API message ID for consistency with streaming
+	const messageId = msg.message.id;
+
+	// Emit start chunk
+	chunks.push({ type: "start", messageId });
+
+	// Process content blocks
+	const content = msg.message.content;
+	for (let index = 0; index < content.length; index++) {
+		const block = content[index];
+		chunks.push(...translateContentBlock(block, messageId, index));
+	}
+
+	// Emit finish chunk
+	chunks.push({ type: "finish" });
+
+	return chunks;
+}
+
+// ============================================================================
+// Content Block Translation
+// ============================================================================
+
+/**
+ * Translate a single content block to UIMessageChunks.
+ * Used for both streaming (complete blocks) and JSONL reading.
+ */
+export function translateContentBlock(
+	block: BetaContentBlock | TranslatableContentBlock,
+	uuid: string,
+	index: number,
 ): UIMessageChunk[] {
 	const chunks: UIMessageChunk[] = [];
 
-	// Debug logging for tool-related events
-	if (msg.type === "stream_event") {
-		const event = (msg as { event: StreamEvent }).event;
-		if (
-			event.type === "content_block_start" ||
-			event.type === "content_block_delta" ||
-			event.type === "content_block_stop"
-		) {
-			console.log(
-				`[SDK] stream_event: ${event.type}`,
-				JSON.stringify(event, null, 2).substring(0, 500),
-			);
+	switch (block.type) {
+		case "text": {
+			// TypeScript narrows block to BetaTextBlock here
+			const blockId = generateBlockId(uuid, index, "text");
+			chunks.push({ type: "text-start", id: blockId });
+			if (block.text) {
+				chunks.push({ type: "text-delta", id: blockId, delta: block.text });
+			}
+			chunks.push({ type: "text-end", id: blockId });
+			break;
 		}
-	}
 
-	switch (msg.type) {
-		case "assistant":
-			chunks.push(...translateAssistantMessage(msg, state, ids));
+		case "thinking": {
+			// TypeScript narrows block to BetaThinkingBlock here
+			const blockId = generateBlockId(uuid, index, "reasoning");
+			chunks.push({ type: "reasoning-start", id: blockId });
+			if (block.thinking) {
+				chunks.push({
+					type: "reasoning-delta",
+					id: blockId,
+					delta: block.thinking,
+				});
+			}
+			chunks.push({ type: "reasoning-end", id: blockId });
 			break;
+		}
 
-		case "result":
-			chunks.push(...createFinishChunks(state, ids));
+		case "tool_use": {
+			// TypeScript narrows block to BetaToolUseBlock here
+			chunks.push({
+				type: "tool-input-start",
+				toolCallId: block.id,
+				toolName: block.name,
+				dynamic: true,
+			});
+			chunks.push({
+				type: "tool-input-available",
+				toolCallId: block.id,
+				toolName: block.name,
+				input: block.input ?? {},
+				dynamic: true,
+			});
 			break;
+		}
 
-		case "stream_event":
-			// Handle partial streaming events
-			chunks.push(...translateStreamEvent(msg, state, ids));
+		case "tool_result": {
+			// TypeScript narrows block to TranslatableContentBlock's tool_result
+			chunks.push(
+				block.is_error
+					? {
+							type: "tool-output-error",
+							toolCallId: block.tool_use_id,
+							errorText: String(block.content ?? "Tool call failed"),
+							dynamic: true,
+						}
+					: {
+							type: "tool-output-available",
+							toolCallId: block.tool_use_id,
+							output: block.content,
+							dynamic: true,
+						},
+			);
 			break;
+		}
 
-		case "system":
-		case "user":
-			// No chunks for these
-			break;
+		default: {
+			// Unknown block type - log and skip
+			// Many BetaContentBlock types exist that we don't need to handle
+			// (e.g., server tool results, MCP blocks, etc.)
+		}
 	}
 
 	return chunks;
 }
 
-function translateAssistantMessage(
-	msg: SDKAssistantMessage,
-	state: StreamState,
-	ids: StreamBlockIds,
-): UIMessageChunk[] {
-	const chunks: UIMessageChunk[] = [];
+// ============================================================================
+// User Message Translation (for tool results)
+// ============================================================================
 
-	// If this is the first message part, emit start chunk
-	if (!state.currentTextBlockId && !state.currentReasoningBlockId) {
-		chunks.push(createStartChunk(ids.messageId));
+/**
+ * Translate an SDKUserMessage to UIMessageChunks.
+ * Extracts tool_result blocks and emits tool-output-available/error chunks.
+ */
+function translateUserMessage(msg: SDKUserMessage): UIMessageChunk[] {
+	const chunks: UIMessageChunk[] = [];
+	const content = msg.message.content;
+
+	// User messages can be a string or array of content blocks
+	if (typeof content === "string") {
+		// Plain text user message - no chunks needed
+		return [];
 	}
 
-	// Process content blocks from the API message
-	const content = msg.message.content;
+	// Process content blocks looking for tool_result
 	for (const block of content) {
-		if (block.type === "text") {
-			chunks.push(...createTextChunks(block.text, state, ids));
-		} else if (block.type === "thinking") {
-			// Extended thinking/reasoning block
-			const thinkingBlock = block as ThinkingBlock;
-			chunks.push(...createReasoningChunks(thinkingBlock.thinking, state, ids));
-		} else if (block.type === "tool_use") {
-			// Tool calls will be handled in streaming events
-			// This block appears in final assistant messages after tool execution
-		} else if (block.type === "tool_result") {
-			// Tool result - emit output-available chunk
-			const toolResult = block as ToolResultBlock;
-			const toolCallId = toolResult.tool_use_id;
+		if (block.type === "tool_result") {
+			// Extract tool result content
+			const toolUseId = block.tool_use_id;
+			const isError = block.is_error === true;
 
-			console.log(
-				`[SDK] Translating tool result for ${toolCallId}`,
-				toolResult.is_error ? "(ERROR)" : "(SUCCESS)",
-			);
+			// Content can be string or array of content blocks
+			let outputContent: unknown;
+			if (typeof block.content === "string") {
+				outputContent = block.content;
+			} else if (Array.isArray(block.content)) {
+				// Extract text from content blocks
+				const textParts = block.content
+					.filter((c): c is { type: "text"; text: string } => c.type === "text")
+					.map((c) => c.text);
+				outputContent = textParts.join("\n");
+			} else {
+				outputContent = block.content;
+			}
 
-			if (toolResult.is_error) {
+			if (isError) {
 				chunks.push({
 					type: "tool-output-error",
-					toolCallId,
-					errorText: toolResult.content,
+					toolCallId: toolUseId,
+					errorText: String(outputContent ?? "Tool call failed"),
 					dynamic: true,
 				});
 			} else {
 				chunks.push({
 					type: "tool-output-available",
-					toolCallId,
-					output: toolResult.content,
+					toolCallId: toolUseId,
+					output: outputContent,
 					dynamic: true,
 				});
-			}
-
-			// Update tool state
-			const toolState = state.toolStates.get(toolCallId);
-			if (toolState) {
-				toolState.state = toolResult.is_error
-					? "output-error"
-					: "output-available";
 			}
 		}
 	}
@@ -155,179 +344,273 @@ function translateAssistantMessage(
 	return chunks;
 }
 
+// ============================================================================
+// Stream Event Translation
+// ============================================================================
+
+/**
+ * Translate a streaming event to UIMessageChunks.
+ */
 function translateStreamEvent(
 	msg: SDKPartialAssistantMessage,
-	state: StreamState,
-	ids: StreamBlockIds,
+	state: TranslationState,
 ): UIMessageChunk[] {
-	// Handle streaming events from includePartialMessages
-	// This provides real-time updates as the SDK generates content
-	const event = msg.event;
+	const event: BetaRawMessageStreamEvent = msg.event;
 
 	switch (event.type) {
-		case "content_block_start":
-			return handleContentBlockStart(event, state, ids);
-		case "content_block_delta":
-			return handleContentBlockDelta(event, state, ids);
-		case "content_block_stop":
-			return handleContentBlockStop(event, state, ids);
 		case "message_start":
-			// Start of assistant message
-			return [createStartChunk(ids.messageId)];
+			return handleMessageStart(msg, event, state);
+
+		case "content_block_start":
+			return handleContentBlockStart(event, state);
+
+		case "content_block_delta":
+			return handleContentBlockDelta(event, state);
+
+		case "content_block_stop":
+			return handleContentBlockStop(event, state);
+
+		case "message_delta":
+			// message_delta contains usage/stop info - no chunks needed
+			return [];
+
+		case "message_stop":
+			// Defer finish-step until we've received tool results (if any)
+			// This ensures tool-output-available comes before finish-step
+			state.needsFinishStep = true;
+			return [];
+
 		default:
 			return [];
 	}
 }
 
-function handleContentBlockStart(
-	event: StreamEvent,
-	state: StreamState,
-	_ids: StreamBlockIds,
+function handleMessageStart(
+	_msg: SDKPartialAssistantMessage,
+	event: BetaRawMessageStartEvent,
+	state: TranslationState,
 ): UIMessageChunk[] {
 	const chunks: UIMessageChunk[] = [];
 
-	// Check what type of content block is starting
-	if (event.content_block?.type === "tool_use") {
-		const toolUse = event.content_block;
-		const toolCallId = toolUse.id;
-		const toolName = toolUse.name;
-
-		// Ensure required fields are present
-		if (!toolCallId || !toolName) {
-			return chunks;
-		}
-
-		const toolInput = toolUse.input || {}; // Capture initial input if available
-
-		console.log(
-			`[SDK] Tool use starting: ${toolName} (${toolCallId})`,
-			`Input:`,
-			JSON.stringify(toolInput),
-		);
-
-		// Emit tool-input-start
-		chunks.push({
-			type: "tool-input-start",
-			toolCallId,
-			toolName,
-			dynamic: true,
-		});
-
-		// Initialize tool tracking state with input
-		if (!state.toolStates.has(toolCallId)) {
-			state.toolStates.set(toolCallId, {
-				state: "input-streaming",
-				inputAvailableSent: false,
-				lastRawInput: toolInput, // Store the initial (empty) input
-				lastTitle: toolName,
-				inputJsonBuffer: "", // Buffer for accumulating input_json_delta
-			});
-		}
+	// Emit deferred finish-step from previous API call (after tool results)
+	if (state.needsFinishStep) {
+		chunks.push({ type: "finish-step" } as UIMessageChunk);
+		state.needsFinishStep = false;
 	}
 
-	// Extended thinking/reasoning block
-	if (event.content_block?.type === "thinking") {
-		// Thinking blocks will emit reasoning-start via createReasoningChunks
-		// when the first delta arrives
+	// Use the actual API message ID (consistent across partial updates)
+	const messageId = event.message.id;
+	state.messageUuid = messageId;
+
+	if (!state.hasEmittedStart) {
+		// First message_start in the agentic loop - emit 'start' for the overall response
+		state.hasEmittedStart = true;
+		state.responseMessageId = messageId;
+		chunks.push({ type: "start", messageId });
+	} else {
+		// Subsequent message_start (after tool use) - emit 'start-step' for this API call
+		// Use the original response messageId for consistency
+		chunks.push({ type: "start-step" } as UIMessageChunk);
+	}
+
+	// Reset block tracking state for new API call
+	state.openTextIndices.clear();
+	state.openReasoningIndices.clear();
+	state.indexToToolCallId.clear();
+	state.toolStates.clear();
+
+	return chunks;
+}
+
+function handleContentBlockStart(
+	event: BetaRawContentBlockStartEvent,
+	state: TranslationState,
+): UIMessageChunk[] {
+	const chunks: UIMessageChunk[] = [];
+	const { index, content_block: block } = event;
+
+	switch (block.type) {
+		case "text": {
+			const blockId = generateBlockId(state.messageUuid, index, "text");
+			state.openTextIndices.add(index);
+			chunks.push({ type: "text-start", id: blockId });
+			break;
+		}
+
+		case "thinking": {
+			const blockId = generateBlockId(state.messageUuid, index, "reasoning");
+			state.openReasoningIndices.add(index);
+			chunks.push({ type: "reasoning-start", id: blockId });
+			break;
+		}
+
+		case "tool_use": {
+			// TypeScript narrows block to BetaToolUseBlock here
+			// Track index → toolCallId mapping
+			state.indexToToolCallId.set(index, block.id);
+			state.toolStates.set(block.id, {
+				inputAvailableSent: false,
+				toolName: block.name,
+				input: block.input ?? {},
+				inputJsonBuffer: "",
+				index,
+			});
+
+			chunks.push({
+				type: "tool-input-start",
+				toolCallId: block.id,
+				toolName: block.name,
+				dynamic: true,
+			});
+			break;
+		}
+
+		default:
+			// Other block types (server tools, MCP, etc.) - no UI chunks needed
+			break;
 	}
 
 	return chunks;
 }
 
 function handleContentBlockDelta(
-	event: StreamEvent,
-	state: StreamState,
-	ids: StreamBlockIds,
+	event: BetaRawContentBlockDeltaEvent,
+	state: TranslationState,
 ): UIMessageChunk[] {
-	// Incremental content update
-	if (event.delta?.type === "text_delta" && event.delta.text) {
-		return createTextChunks(event.delta.text, state, ids);
-	}
+	const chunks: UIMessageChunk[] = [];
+	const { index, delta } = event;
 
-	// Extended thinking/reasoning delta
-	if (event.delta?.type === "thinking_delta" && event.delta.thinking) {
-		return createReasoningChunks(event.delta.thinking, state, ids);
-	}
-
-	// Tool input is being streamed
-	if (event.delta?.type === "input_json_delta") {
-		const chunks: UIMessageChunk[] = [];
-		const partialJson = event.delta.partial_json ?? "";
-
-		// Find the tool state for this block index
-		// Since we don't have the tool ID in the delta event, we need to find the most recent
-		// tool that's in input-streaming state
-		for (const [toolCallId, toolState] of state.toolStates.entries()) {
-			if (
-				toolState.state === "input-streaming" &&
-				!toolState.inputAvailableSent
-			) {
-				// Accumulate the JSON string
-				if (!toolState.inputJsonBuffer) {
-					toolState.inputJsonBuffer = "";
-				}
-				toolState.inputJsonBuffer += partialJson;
-
-				// Emit the text delta immediately for streaming display
-				if (partialJson) {
-					chunks.push({
-						type: "tool-input-delta",
-						toolCallId,
-						inputTextDelta: partialJson,
-					});
-				}
-
-				// Try to parse the accumulated JSON to update lastRawInput
-				try {
-					const parsed = JSON.parse(toolState.inputJsonBuffer);
-					toolState.lastRawInput = parsed;
-				} catch {
-					// Not yet complete JSON, wait for more deltas
-				}
-
-				// Only process the first matching tool
-				break;
-			}
+	switch (delta.type) {
+		case "text_delta": {
+			// TypeScript narrows delta to BetaTextDelta
+			const blockId = generateBlockId(state.messageUuid, index, "text");
+			chunks.push({ type: "text-delta", id: blockId, delta: delta.text });
+			break;
 		}
 
-		return chunks;
+		case "thinking_delta": {
+			// TypeScript narrows delta to BetaThinkingDelta
+			const blockId = generateBlockId(state.messageUuid, index, "reasoning");
+			chunks.push({
+				type: "reasoning-delta",
+				id: blockId,
+				delta: delta.thinking,
+			});
+			break;
+		}
+
+		case "input_json_delta": {
+			// TypeScript narrows delta to BetaInputJSONDelta
+			// Find the tool for this index
+			const toolCallId = state.indexToToolCallId.get(index);
+			if (!toolCallId) {
+				console.warn(`[translate] No tool found for index ${index}`);
+				break;
+			}
+
+			const toolState = state.toolStates.get(toolCallId);
+			if (!toolState) break;
+
+			// Accumulate JSON
+			toolState.inputJsonBuffer += delta.partial_json;
+
+			// Emit delta for streaming display
+			chunks.push({
+				type: "tool-input-delta",
+				toolCallId,
+				inputTextDelta: delta.partial_json,
+			});
+
+			// Try to parse accumulated JSON
+			try {
+				toolState.input = JSON.parse(toolState.inputJsonBuffer);
+			} catch {
+				// Not yet complete JSON, continue accumulating
+			}
+			break;
+		}
+
+		case "signature_delta":
+			// Thinking block signature - not exposed in UI
+			break;
 	}
 
-	return [];
+	return chunks;
 }
 
 function handleContentBlockStop(
-	_event: StreamEvent,
-	state: StreamState,
-	_ids: StreamBlockIds,
+	event: BetaRawContentBlockStopEvent,
+	state: TranslationState,
 ): UIMessageChunk[] {
 	const chunks: UIMessageChunk[] = [];
+	const { index } = event;
 
-	// Find the tool use block that just stopped
-	// We need to check if this is a tool block by looking at the tool states
-	// When a tool_use block stops, we emit tool-input-available
+	// Close text block if open
+	if (state.openTextIndices.has(index)) {
+		const blockId = generateBlockId(state.messageUuid, index, "text");
+		chunks.push({ type: "text-end", id: blockId });
+		state.openTextIndices.delete(index);
+	}
 
-	// Note: The SDK doesn't give us the full content_block in the stop event
-	// We need to track the block index and match it to tool state
-	// For now, we'll emit tool-input-available for all pending tools
+	// Close reasoning block if open
+	if (state.openReasoningIndices.has(index)) {
+		const blockId = generateBlockId(state.messageUuid, index, "reasoning");
+		chunks.push({ type: "reasoning-end", id: blockId });
+		state.openReasoningIndices.delete(index);
+	}
 
-	for (const [toolCallId, toolState] of state.toolStates.entries()) {
-		if (
-			toolState.state === "input-streaming" &&
-			!toolState.inputAvailableSent
-		) {
+	// Finalize tool if this index has a tool
+	const toolCallId = state.indexToToolCallId.get(index);
+	if (toolCallId) {
+		const toolState = state.toolStates.get(toolCallId);
+		if (toolState && !toolState.inputAvailableSent) {
 			chunks.push({
 				type: "tool-input-available",
 				toolCallId,
-				toolName: toolState.lastTitle || "unknown",
-				input: toolState.lastRawInput || {},
+				toolName: toolState.toolName,
+				input: toolState.input,
 				dynamic: true,
 			});
-
 			toolState.inputAvailableSent = true;
-			toolState.state = "input-available";
 		}
 	}
+
+	return chunks;
+}
+
+// ============================================================================
+// Finish Handling
+// ============================================================================
+
+/**
+ * Create finish chunks for the result message.
+ * Closes any orphaned blocks and emits the final finish.
+ */
+function createFinishChunks(state: TranslationState): UIMessageChunk[] {
+	const chunks: UIMessageChunk[] = [];
+
+	// Emit deferred finish-step from the last API call
+	if (state.needsFinishStep) {
+		chunks.push({ type: "finish-step" } as UIMessageChunk);
+		state.needsFinishStep = false;
+	}
+
+	// Close any remaining open text blocks (safety net)
+	for (const index of state.openTextIndices) {
+		const blockId = generateBlockId(state.messageUuid, index, "text");
+		chunks.push({ type: "text-end", id: blockId });
+	}
+	state.openTextIndices.clear();
+
+	// Close any remaining open reasoning blocks (safety net)
+	for (const index of state.openReasoningIndices) {
+		const blockId = generateBlockId(state.messageUuid, index, "reasoning");
+		chunks.push({ type: "reasoning-end", id: blockId });
+	}
+	state.openReasoningIndices.clear();
+
+	// Emit finish for the overall message/response
+	chunks.push({ type: "finish" });
 
 	return chunks;
 }

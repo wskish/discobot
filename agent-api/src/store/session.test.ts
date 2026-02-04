@@ -1,25 +1,15 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, rmSync } from "node:fs";
-import { readFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { after, before, beforeEach, describe, it } from "node:test";
-import type { UIMessage, UIMessageChunk } from "ai";
+import { after, before, describe, it } from "node:test";
+import type { UIMessageChunk } from "ai";
 import {
 	addCompletionEvent,
-	addMessage,
 	clearCompletionEvents,
-	clearMessages,
 	finishCompletion,
 	getCompletionEvents,
 	getCompletionState,
 	isCompletionRunning,
-	saveMessages,
 	startCompletion,
 } from "./session.js";
-
-// Test directory for message persistence tests
-const TEST_DATA_DIR = join(tmpdir(), `discobot-test-${process.pid}`);
 
 describe("Completion State", () => {
 	// Reset state before each test
@@ -318,164 +308,5 @@ describe("Completion events workflow", () => {
 		assert.equal(getCompletionState().completionId, "first");
 
 		await finishCompletion();
-	});
-});
-
-describe("Message persistence on completion", () => {
-	// Set up a test directory for message files
-	const testMessagesFile = join(TEST_DATA_DIR, "test-messages.json");
-
-	before(() => {
-		// Create test directory
-		if (!existsSync(TEST_DATA_DIR)) {
-			mkdirSync(TEST_DATA_DIR, { recursive: true });
-		}
-		// Set env var for test messages file
-		process.env.MESSAGES_FILE = testMessagesFile;
-	});
-
-	beforeEach(() => {
-		// Clear messages before each test
-		clearMessages();
-		// Remove test file if exists
-		if (existsSync(testMessagesFile)) {
-			rmSync(testMessagesFile);
-		}
-	});
-
-	after(async () => {
-		await finishCompletion();
-		clearMessages();
-		// Clean up test directory
-		if (existsSync(TEST_DATA_DIR)) {
-			rmSync(TEST_DATA_DIR, { recursive: true, force: true });
-		}
-		// Restore env var
-		delete process.env.MESSAGES_FILE;
-	});
-
-	it("saves messages to disk on successful completion", async () => {
-		// Add messages
-		const msg1: UIMessage = {
-			id: "msg-1",
-			role: "user",
-			parts: [{ type: "text", text: "Hello" }],
-		};
-		const msg2: UIMessage = {
-			id: "msg-2",
-			role: "assistant",
-			parts: [{ type: "text", text: "Hi there!" }],
-		};
-		addMessage(msg1);
-		addMessage(msg2);
-
-		// Start and finish completion successfully
-		startCompletion("save-test");
-		await finishCompletion(undefined, async () => {
-			await saveMessages();
-		});
-
-		// Verify file was created
-		assert.ok(existsSync(testMessagesFile), "Messages file should exist");
-
-		// Verify content
-		const content = await readFile(testMessagesFile, "utf-8");
-		const savedMessages = JSON.parse(content) as UIMessage[];
-		assert.equal(savedMessages.length, 2);
-		assert.equal(savedMessages[0].id, "msg-1");
-		assert.equal(savedMessages[1].id, "msg-2");
-	});
-
-	it("does not save messages on failed completion", async () => {
-		// Add messages
-		const msg: UIMessage = {
-			id: "msg-fail",
-			role: "user",
-			parts: [{ type: "text", text: "Hello" }],
-		};
-		addMessage(msg);
-
-		// Start and finish completion with error
-		startCompletion("fail-test");
-		await finishCompletion("Some error occurred");
-
-		// Verify file was NOT created
-		assert.ok(
-			!existsSync(testMessagesFile),
-			"Messages file should not exist after failed completion",
-		);
-	});
-
-	it("does not save during message updates (no debounce)", async () => {
-		// Add a message
-		const msg: UIMessage = {
-			id: "msg-no-debounce",
-			role: "user",
-			parts: [{ type: "text", text: "Hello" }],
-		};
-		addMessage(msg);
-
-		// Wait a bit (longer than old 500ms debounce)
-		await new Promise((resolve) => setTimeout(resolve, 600));
-
-		// File should NOT exist since we haven't finished a completion
-		assert.ok(
-			!existsSync(testMessagesFile),
-			"Messages file should not exist without completion",
-		);
-	});
-
-	it("saveMessages can be called directly for manual saves", async () => {
-		// Add messages
-		const msg: UIMessage = {
-			id: "msg-manual",
-			role: "user",
-			parts: [{ type: "text", text: "Manual save test" }],
-		};
-		addMessage(msg);
-
-		// Call saveMessages directly
-		await saveMessages();
-
-		// Verify file was created
-		assert.ok(existsSync(testMessagesFile), "Messages file should exist");
-
-		const content = await readFile(testMessagesFile, "utf-8");
-		const savedMessages = JSON.parse(content) as UIMessage[];
-		assert.equal(savedMessages.length, 1);
-		assert.equal(savedMessages[0].id, "msg-manual");
-	});
-
-	it("preserves messages across multiple completions", async () => {
-		// First completion
-		const msg1: UIMessage = {
-			id: "msg-first",
-			role: "user",
-			parts: [{ type: "text", text: "First" }],
-		};
-		addMessage(msg1);
-		startCompletion("first-completion");
-		await finishCompletion(undefined, async () => {
-			await saveMessages();
-		});
-
-		// Second completion adds more messages
-		const msg2: UIMessage = {
-			id: "msg-second",
-			role: "user",
-			parts: [{ type: "text", text: "Second" }],
-		};
-		addMessage(msg2);
-		startCompletion("second-completion");
-		await finishCompletion(undefined, async () => {
-			await saveMessages();
-		});
-
-		// Verify both messages are in the file
-		const content = await readFile(testMessagesFile, "utf-8");
-		const savedMessages = JSON.parse(content) as UIMessage[];
-		assert.equal(savedMessages.length, 2);
-		assert.equal(savedMessages[0].id, "msg-first");
-		assert.equal(savedMessages[1].id, "msg-second");
 	});
 });

@@ -1,12 +1,8 @@
 import { exec } from "node:child_process";
 import { promisify } from "node:util";
-import type { UIMessage, UIMessageChunk } from "ai";
-import type { ACPClient } from "../acp/client.js";
+import type { UIMessage } from "ai";
 import type { Agent } from "../agent/interface.js";
-import { createUIMessage, generateMessageId } from "../agent/utils.js";
-
-const execAsync = promisify(exec);
-
+import { generateMessageId } from "../agent/utils.js";
 import type {
 	ChatConflictResponse,
 	ChatRequest,
@@ -22,7 +18,8 @@ import {
 	isCompletionRunning,
 	startCompletion,
 } from "../store/session.js";
-import { createErrorChunk, createStartChunk } from "./stream.js";
+
+const execAsync = promisify(exec);
 
 export type StartCompletionResult =
 	| { ok: true; status: 202; response: ChatStartedResponse }
@@ -85,7 +82,10 @@ export function tryStartCompletion(
 	if (!startCompletion(completionId)) {
 		// Race condition - another request started between our check and now
 		const state = getCompletionState();
-		log({ event: "conflict_race", existingCompletionId: state.completionId });
+		log({
+			event: "conflict_race",
+			existingCompletionId: state.completionId,
+		});
 		return {
 			ok: false,
 			status: 409,
@@ -188,52 +188,21 @@ function runCompletion(
 				...lastUserMessage,
 				id: lastUserMessage.id || generateMessageId(),
 			};
-			session.addMessage(userMessage);
 
-			// Create assistant message placeholder
-			const assistantMessage = createUIMessage("assistant");
-			session.addMessage(assistantMessage);
-
-			// Send start event
-			const startChunk = createStartChunk(assistantMessage.id);
-			addCompletionEvent(startChunk);
-
-			// Set up update callback to forward chunks to SSE stream
-			// The agent implementation handles updating its internal message store
-			agent.setUpdateCallback((chunk: UIMessageChunk) => {
+			// Stream chunks from the agent's prompt generator
+			// The SDK emits start (via message_start) and finish (via result) events
+			for await (const chunk of agent.prompt(userMessage, sessionId)) {
 				addCompletionEvent(chunk);
-			}, sessionId);
-
-			// Send prompt to agent and wait for completion
-			// The agent handles translation from UIMessage to its protocol format
-			await agent.prompt(userMessage, sessionId);
-
-			// Send finish event
-			addCompletionEvent({ type: "finish" });
+			}
 
 			log({ event: "completed" });
-
-			// Create save function for per-session persistence
-			const saveMessagesFn = async () => {
-				// Check if agent is ACPClient and has saveSessionMessages method
-				if (
-					"saveSessionMessages" in agent &&
-					typeof agent.saveSessionMessages === "function"
-				) {
-					const acpClient = agent as ACPClient;
-					await acpClient.saveSessionMessages(sessionId || "default");
-				}
-			};
-
-			await finishCompletion(undefined, saveMessagesFn);
+			await finishCompletion();
 		} catch (error) {
 			const errorText = extractErrorMessage(error);
 			log({ event: "error", error: errorText });
 			// Send error event to SSE stream so the client receives it
-			addCompletionEvent(createErrorChunk(errorText));
+			addCompletionEvent({ type: "error", errorText });
 			await finishCompletion(errorText);
-		} finally {
-			agent.setUpdateCallback(null, sessionId);
 		}
 	})();
 }

@@ -10,12 +10,9 @@ import {
 const config = loadConfig();
 
 const { app, getServicePort } = createApp({
-	agentCommand: config.agentCommand,
-	agentArgs: config.agentArgs,
 	agentCwd: config.agentCwd,
 	enableLogging: true,
 	sharedSecretHash: config.sharedSecretHash,
-	persistMessages: config.persistMessages,
 });
 
 // Use Bun's native serve if available, otherwise fall back to Node
@@ -145,9 +142,6 @@ async function startServer() {
 
 async function main() {
 	console.log(`Starting agent service on port ${config.port}`);
-	console.log(
-		`Agent command: ${config.agentCommand} ${config.agentArgs.join(" ")}`,
-	);
 	console.log(`Agent cwd: ${config.agentCwd}`);
 	console.log(
 		`Auth enforcement: ${config.sharedSecretHash ? "enabled" : "disabled"}`,

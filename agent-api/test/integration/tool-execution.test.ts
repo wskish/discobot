@@ -3,6 +3,16 @@ import { after, before, describe, it } from "node:test";
 import type { UIMessage, UIMessageChunk } from "ai";
 import { ClaudeSDKClient } from "../../src/claude-sdk/client.js";
 
+// Tool part type for testing (subset of DynamicToolUIPart)
+interface ToolPart {
+	type: string;
+	toolName?: string;
+	toolCallId?: string;
+	state?: string;
+	input?: unknown;
+	output?: unknown;
+}
+
 const TIMEOUT_MS = 120000; // 2 minutes
 const TEST_CWD = process.cwd();
 
@@ -42,20 +52,6 @@ describe("Tool Execution Integration", { skip: shouldSkip }, () => {
 
 				await client.ensureSession(sessionId);
 
-				// Set up callback to capture all chunks
-				client.setUpdateCallback((chunk) => {
-					allChunks.push(chunk as UIMessageChunk);
-					if (
-						chunk.type === "tool-input-start" ||
-						chunk.type === "tool-input-delta" ||
-						chunk.type === "tool-input-available" ||
-						chunk.type === "tool-output-available" ||
-						chunk.type === "tool-output-error"
-					) {
-						toolChunks.push(chunk as UIMessageChunk);
-					}
-				}, sessionId);
-
 				const userMessage: UIMessage = {
 					id: "msg-bash-test",
 					role: "user",
@@ -67,7 +63,19 @@ describe("Tool Execution Integration", { skip: shouldSkip }, () => {
 					],
 				};
 
-				await client.prompt(userMessage, sessionId);
+				// Iterate over the async generator to capture all chunks
+				for await (const chunk of client.prompt(userMessage, sessionId)) {
+					allChunks.push(chunk as UIMessageChunk);
+					if (
+						chunk.type === "tool-input-start" ||
+						chunk.type === "tool-input-delta" ||
+						chunk.type === "tool-input-available" ||
+						chunk.type === "tool-output-available" ||
+						chunk.type === "tool-output-error"
+					) {
+						toolChunks.push(chunk as UIMessageChunk);
+					}
+				}
 
 				console.log(
 					`\nReceived ${allChunks.length} total chunks, ${toolChunks.length} tool-related chunks`,
@@ -175,7 +183,7 @@ describe("Tool Execution Integration", { skip: shouldSkip }, () => {
 				console.log(`\n✓ Found ${toolParts.length} dynamic-tool part(s)`);
 
 				for (const toolPart of toolParts) {
-					const tool = toolPart as any;
+					const tool = toolPart as ToolPart;
 					console.log(`\nTool part details:`);
 					console.log(`  toolName: ${tool.toolName}`);
 					console.log(`  toolCallId: ${tool.toolCallId}`);
@@ -218,18 +226,6 @@ describe("Tool Execution Integration", { skip: shouldSkip }, () => {
 
 				await client.ensureSession(sessionId);
 
-				client.setUpdateCallback((chunk) => {
-					allChunks.push(chunk as UIMessageChunk);
-					if (
-						chunk.type === "tool-input-start" ||
-						chunk.type === "tool-input-available" ||
-						chunk.type === "tool-output-available" ||
-						chunk.type === "tool-output-error"
-					) {
-						toolChunks.push(chunk as UIMessageChunk);
-					}
-				}, sessionId);
-
 				const userMessage: UIMessage = {
 					id: "msg-read-test",
 					role: "user",
@@ -241,7 +237,18 @@ describe("Tool Execution Integration", { skip: shouldSkip }, () => {
 					],
 				};
 
-				await client.prompt(userMessage, sessionId);
+				// Iterate over the async generator to capture all chunks
+				for await (const chunk of client.prompt(userMessage, sessionId)) {
+					allChunks.push(chunk as UIMessageChunk);
+					if (
+						chunk.type === "tool-input-start" ||
+						chunk.type === "tool-input-available" ||
+						chunk.type === "tool-output-available" ||
+						chunk.type === "tool-output-error"
+					) {
+						toolChunks.push(chunk as UIMessageChunk);
+					}
+				}
 
 				console.log(
 					`\nReceived ${allChunks.length} total chunks, ${toolChunks.length} tool-related chunks`,
@@ -302,10 +309,10 @@ describe("Tool Execution Integration", { skip: shouldSkip }, () => {
 				);
 
 				const readToolPart = toolParts.find(
-					(p) => (p as any).toolName === "Read",
+					(p) => (p as ToolPart).toolName === "Read",
 				);
 				if (readToolPart) {
-					const tool = readToolPart as any;
+					const tool = readToolPart as ToolPart;
 					console.log(`\n✓ Read tool found in final message:`);
 					console.log(`  State: ${tool.state}`);
 					console.log(`  Input: ${JSON.stringify(tool.input, null, 2)}`);
@@ -336,22 +343,6 @@ describe("Tool Execution Integration", { skip: shouldSkip }, () => {
 
 				await client.ensureSession(sessionId);
 
-				client.setUpdateCallback((chunk) => {
-					if (
-						chunk.type === "tool-input-start" ||
-						chunk.type === "tool-input-available" ||
-						chunk.type === "tool-output-available" ||
-						chunk.type === "tool-output-error"
-					) {
-						const toolChunk = chunk as any;
-						toolStates.push({
-							toolCallId: toolChunk.toolCallId || "unknown",
-							state: chunk.type,
-							timestamp: Date.now(),
-						});
-					}
-				}, sessionId);
-
 				const userMessage: UIMessage = {
 					id: "msg-state-test",
 					role: "user",
@@ -363,7 +354,22 @@ describe("Tool Execution Integration", { skip: shouldSkip }, () => {
 					],
 				};
 
-				await client.prompt(userMessage, sessionId);
+				// Iterate over the async generator to capture tool states
+				for await (const chunk of client.prompt(userMessage, sessionId)) {
+					if (
+						chunk.type === "tool-input-start" ||
+						chunk.type === "tool-input-available" ||
+						chunk.type === "tool-output-available" ||
+						chunk.type === "tool-output-error"
+					) {
+						const toolChunk = chunk as ToolPart;
+						toolStates.push({
+							toolCallId: toolChunk.toolCallId || "unknown",
+							state: chunk.type,
+							timestamp: Date.now(),
+						});
+					}
+				}
 
 				console.log(
 					`\n✓ Captured ${toolStates.length} tool state transitions:`,

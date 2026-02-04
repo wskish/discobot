@@ -6,8 +6,8 @@ The Discobot Agent API is a Node-based container service that bridges the IDE ch
 
 The agent runs inside a Docker container alongside the user's workspace. It:
 - Exposes an HTTP endpoint for chat messages
-- Manages Claude Code sessions via the Claude Agent SDK (default) or ACP protocol
-- Translates between Vercel AI SDK message format and agent protocol
+- Manages Claude Code sessions via the Claude Agent SDK
+- Translates between Vercel AI SDK message format and Claude SDK protocol
 - Streams responses back to the Go server via SSE
 - Automatically persists and resumes sessions from `~/.claude/projects/`
 
@@ -19,13 +19,12 @@ The agent runs inside a Docker container alongside the user's workspace. It:
 │                                                                  │
 │  ┌─────────────┐    ┌─────────────────┐    ┌────────────────┐  │
 │  │   Hono      │───▶│     Agent       │───▶│  Claude Agent  │  │
-│  │   Server    │    │   Interface     │    │  SDK (default) │  │
-│  │   :3002     │◀───│  - ClaudeSDK    │◀───│  or ACP        │  │
-│  └─────────────┘    │  - ACPClient    │    └────────────────┘  │
-│         │           └─────────────────┘                          │
-│         │ SSE Response        │                                  │
-│         ▼                     ▼                                  │
-│                      ~/.claude/projects/                         │
+│  │   Server    │    │   Interface     │    │      SDK       │  │
+│  │   :3002     │◀───│  (ClaudeSDK)    │◀───│                │  │
+│  └─────────────┘    └─────────────────┘    └────────────────┘  │
+│         │                    │                                   │
+│         │ SSE Response       ▼                                   │
+│         ▼            ~/.claude/projects/                         │
 │                     (session persistence)                        │
 └─────────────────────────────────────────────────────────────────┘
           │
@@ -33,17 +32,14 @@ The agent runs inside a Docker container alongside the user's workspace. It:
     Go Server → Frontend
 ```
 
-The Agent API uses an `Agent` interface to abstract the underlying protocol:
-- **ClaudeSDKClient** (default): Uses Claude Agent SDK v1 with automatic session persistence
-- **ACPClient** (legacy): Spawns Claude Code as a child process via ACP protocol
+The Agent API uses an `Agent` interface implemented by `ClaudeSDKClient`, which uses Claude Agent SDK with automatic session persistence.
 
 ## Documentation
 
 - [Architecture Overview](./docs/ARCHITECTURE.md) - System design and data flow
 - [Server Module](./docs/design/server.md) - HTTP API and routing
 - [Agent Interface](./docs/design/agent.md) - Agent abstraction layer
-- [Claude SDK Module](./docs/design/claude-sdk.md) - Claude Agent SDK integration (default)
-- [ACP Module](./docs/design/acp.md) - Agent Client Protocol integration (legacy)
+- [Claude SDK Module](./docs/design/claude-sdk.md) - Claude Agent SDK integration
 - [Store Module](./docs/design/store.md) - Session and message storage
 
 ## Getting Started
@@ -53,7 +49,6 @@ The Agent API uses an `Agent` interface to abstract the underlying protocol:
 - Node.js 20+
 - Anthropic API key
 - Claude Code CLI binary (for local development)
-- (Optional) Claude Code ACP binary for legacy mode
 
 **Installing Claude Code CLI (Local Development):**
 
@@ -96,16 +91,11 @@ pnpm start
 |----------|---------|-------------|
 | `PORT` | `3002` | HTTP server port |
 | `ANTHROPIC_API_KEY` | (required) | Anthropic API key for Claude Agent SDK |
-| `AGENT_TYPE` | `claude-sdk` | Agent implementation: `claude-sdk` or `acp` |
-| `AGENT_MODEL` | `claude-sonnet-4-5-20250929` | Claude model to use (Claude SDK only) |
+| `AGENT_MODEL` | `claude-sonnet-4-5-20250929` | Claude model to use |
 | `AGENT_CWD` | `process.cwd()` | Working directory for agent |
-| `CLAUDE_CLI_PATH` | (auto-discovered) | Path to Claude CLI binary (Claude SDK only) |
-| `AGENT_COMMAND` | `claude-code-acp` | Command to spawn agent (ACP mode only) |
-| `AGENT_ARGS` | (empty) | Space-separated arguments (ACP mode only) |
-| `PERSIST_MESSAGES` | `true` | Enable message persistence (ACP mode only; always enabled for Claude SDK) |
-| `SESSION_BASE_DIR` | `/home/discobot/.config/discobot/sessions` | Base directory for per-session storage (ACP mode only) |
+| `CLAUDE_CLI_PATH` | (auto-discovered) | Path to Claude CLI binary |
 
-**Note**: Claude SDK automatically saves all sessions to `~/.claude/projects/` and cannot be disabled.
+**Note**: Claude SDK automatically saves all sessions to `~/.claude/projects/`.
 
 ### Docker
 
@@ -130,7 +120,7 @@ docker run -p 8080:3002 \
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/` | Service status |
-| GET | `/health` | Health check with ACP status |
+| GET | `/health` | Health check with agent status |
 | GET | `/chat` | Get all messages (default session) |
 | POST | `/chat` | Send message, stream response (default session) |
 | DELETE | `/chat` | Clear default session |
@@ -181,9 +171,10 @@ agent-api/
 │   ├── agent/
 │   │   ├── interface.ts  # Agent abstraction layer
 │   │   └── utils.ts      # UIMessage utilities (generateMessageId, createUIMessage)
-│   ├── acp/
-│   │   ├── client.ts     # ACP client implementation
-│   │   └── translate.ts  # ACP-specific type conversions
+│   ├── claude-sdk/
+│   │   ├── client.ts     # Claude SDK client implementation
+│   │   ├── translate.ts  # SDK message to UIMessageChunk translation
+│   │   └── persistence.ts # Session loading from disk
 │   └── store/
 │       └── session.ts    # Session storage
 ├── test/
@@ -198,7 +189,7 @@ agent-api/
 
 | Package | Purpose |
 |---------|---------|
-| `@agentclientprotocol/sdk` | ACP protocol client |
+| `@anthropic-ai/claude-agent-sdk` | Claude Agent SDK |
 | `hono` | HTTP framework |
 | `@hono/node-server` | Node.js adapter |
 | `ai` | Vercel AI SDK types |

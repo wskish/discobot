@@ -4,15 +4,9 @@ import {
 	query,
 	type SDKMessage,
 } from "@anthropic-ai/claude-agent-sdk";
-import type { UIMessage } from "ai";
-import type {
-	Agent,
-	AgentUpdateCallback,
-	EnvironmentUpdate,
-} from "../agent/interface.js";
+import type { TextUIPart, UIMessage, UIMessageChunk } from "ai";
+import type { Agent, EnvironmentUpdate } from "../agent/interface.js";
 import type { Session } from "../agent/session.js";
-import type { StreamBlockIds, StreamState } from "../server/stream.js";
-import { createBlockIds, createStreamState } from "../server/stream.js";
 import {
 	clearSession as clearStoredSession,
 	getSessionData,
@@ -26,15 +20,17 @@ import {
 	loadFullSessionData,
 	type SessionData,
 } from "./persistence.js";
-import { sdkMessageToChunks } from "./translate.js";
+import {
+	createTranslationState,
+	type TranslationState,
+	translateSDKMessage,
+} from "./translate.js";
 
 interface SessionContext {
 	sessionId: string;
 	claudeSessionId: string | null;
 	session: Session;
-	callback: AgentUpdateCallback | null;
-	streamState: StreamState | null;
-	blockIds: StreamBlockIds | null;
+	translationState: TranslationState | null;
 }
 
 export interface ClaudeSDKClientOptions {
@@ -141,17 +137,16 @@ export class ClaudeSDKClient implements Agent {
 		let ctx = this.sessions.get(sid);
 
 		if (!ctx) {
-			// Create DiskBackedSession and initialize cache (load returns empty for non-existent files)
+			// Create DiskBackedSession - don't call load() here since the discobot session ID
+			// won't match the Claude CLI's session ID. loadSessionFromDisk will handle loading
+			// messages using the correct claudeSessionId mapping.
 			const session = new DiskBackedSession(sid, this.options.cwd);
-			await session.load();
 
 			ctx = {
 				sessionId: sid,
 				claudeSessionId: null,
 				session,
-				callback: null,
-				streamState: null,
-				blockIds: null,
+				translationState: null,
 			};
 			this.sessions.set(sid, ctx);
 
@@ -202,31 +197,23 @@ export class ClaudeSDKClient implements Agent {
 		return loadFullSessionData(sessionId, this.options.cwd);
 	}
 
-	async prompt(message: UIMessage, sessionId?: string): Promise<void> {
+	async *prompt(
+		message: UIMessage,
+		sessionId?: string,
+	): AsyncGenerator<UIMessageChunk, void, unknown> {
 		const sid = await this.ensureSession(sessionId);
-		const ctx = this.sessions.get(sid)!;
-
-		// Invalidate cache and clear dirty updates from previous turn
-		if (ctx.session instanceof DiskBackedSession) {
-			ctx.session.invalidateCache();
-			ctx.session.clearDirty();
-			await ctx.session.load();
+		const ctx = this.sessions.get(sid);
+		if (!ctx) {
+			throw new Error(`Session ${sid} not found`);
 		}
 
-		// Initialize stream state for this prompt
-		ctx.streamState = createStreamState();
-		ctx.blockIds = createBlockIds(message.id);
+		// Reload messages from disk at start of each turn
+		if (ctx.session instanceof DiskBackedSession && ctx.claudeSessionId) {
+			await ctx.session.load(ctx.claudeSessionId);
+		}
 
-		// Add user message to session
-		ctx.session.addMessage(message);
-
-		// Create assistant message placeholder
-		const assistantMessage = {
-			id: `assistant-${Date.now()}`,
-			role: "assistant" as const,
-			parts: [],
-		};
-		ctx.session.addMessage(assistantMessage);
+		// Initialize translation state for this prompt (will be set properly on message_start)
+		ctx.translationState = null;
 
 		// Extract text from message
 		const promptText = this.messageToPrompt(message);
@@ -243,7 +230,7 @@ export class ClaudeSDKClient implements Agent {
 			settingSources: ["user", "project"], // Load user settings from ~/.claude and CLAUDE.md files
 			maxThinkingTokens: 10000, // Enable extended thinking with reasonable token limit
 			// Use the discovered Claude CLI path from connect()
-			pathToClaudeCodeExecutable: this.claudeCliPath!,
+			pathToClaudeCodeExecutable: this.claudeCliPath ?? "",
 			// Use canUseTool to intercept tool calls and auto-approve them
 			// This allows us to capture tool I/O while maintaining automatic execution
 			canUseTool: async (toolName, input, options) => {
@@ -262,17 +249,22 @@ export class ClaudeSDKClient implements Agent {
 			// rather than PostToolUse hooks to maintain proper event ordering
 		};
 
-		try {
-			// Start query
-			const q = query({ prompt: promptText, options: sdkOptions });
+		// Start query and yield chunks
+		const q = query({ prompt: promptText, options: sdkOptions });
 
-			// Stream messages
+		try {
 			for await (const sdkMsg of q) {
-				await this.handleSDKMessage(ctx, sdkMsg, assistantMessage.id);
+				const chunks = this.translateSDKMessage(ctx, sdkMsg);
+				for (const chunk of chunks) {
+					yield chunk;
+				}
 			}
-		} catch (error) {
-			console.error("SDK query error:", error);
-			throw error;
+		} finally {
+			// Reload messages from disk after prompt completes
+			// This ensures getMessages() returns the updated conversation
+			if (ctx.session instanceof DiskBackedSession && ctx.claudeSessionId) {
+				await ctx.session.load(ctx.claudeSessionId);
+			}
 		}
 	}
 
@@ -281,23 +273,13 @@ export class ClaudeSDKClient implements Agent {
 		// For now, we don't have active queries to cancel
 	}
 
-	setUpdateCallback(
-		callback: AgentUpdateCallback | null,
-		sessionId?: string,
-	): void {
-		const sid = sessionId || this.currentSessionId || this.DEFAULT_SESSION_ID;
-		const ctx = this.sessions.get(sid);
-		if (ctx) {
-			ctx.callback = callback;
-		}
-	}
-
 	async clearSession(sessionId?: string): Promise<void> {
 		const sid = sessionId || this.currentSessionId || this.DEFAULT_SESSION_ID;
 		const ctx = this.sessions.get(sid);
 		if (ctx) {
 			ctx.session.clearMessages();
 			ctx.claudeSessionId = null;
+			ctx.translationState = null;
 		}
 		// Also clear persisted session data
 		await clearStoredSession();
@@ -320,9 +302,7 @@ export class ClaudeSDKClient implements Agent {
 			sessionId,
 			claudeSessionId: null,
 			session,
-			callback: null,
-			streamState: null,
-			blockIds: null,
+			translationState: null,
 		};
 		this.sessions.set(sessionId, ctx);
 		return ctx.session;
@@ -332,197 +312,81 @@ export class ClaudeSDKClient implements Agent {
 		Object.assign(this.env, update.env);
 	}
 
+	/**
+	 * Load persisted session state (claudeSessionId mapping and messages) from disk.
+	 * This restores the session state after agent-api restart.
+	 */
+	private async loadSessionFromDisk(ctx: SessionContext): Promise<void> {
+		try {
+			// Load persisted session data from disk which contains the claudeSessionId mapping
+			// Import loadSession dynamically to get the async disk loading function
+			const { loadSession } = await import("../store/session.js");
+			const storedSession = await loadSession();
+			if (
+				storedSession &&
+				storedSession.sessionId === ctx.sessionId &&
+				storedSession.claudeSessionId
+			) {
+				ctx.claudeSessionId = storedSession.claudeSessionId;
+				console.log(
+					`Restored claudeSessionId mapping: ${ctx.sessionId} -> ${ctx.claudeSessionId}`,
+				);
+
+				// Load messages from the Claude SDK session JSONL file using the correct claudeSessionId
+				if (ctx.session instanceof DiskBackedSession) {
+					await ctx.session.load(ctx.claudeSessionId);
+					console.log(
+						`Restored messages from Claude session ${ctx.claudeSessionId}`,
+					);
+				}
+			}
+		} catch (error) {
+			console.error(`Failed to load session from disk:`, error);
+		}
+	}
+
 	getEnvironment(): Record<string, string> {
 		return { ...this.env };
-	}
-
-	// Convenience methods for default session
-	getMessages(): UIMessage[] {
-		return this.getSession()?.getMessages() ?? [];
-	}
-
-	addMessage(message: UIMessage): void {
-		this.getSession()?.addMessage(message);
-	}
-
-	updateMessage(id: string, updates: Partial<UIMessage>): void {
-		this.getSession()?.updateMessage(id, updates);
-	}
-
-	getLastAssistantMessage(): UIMessage | undefined {
-		return this.getSession()?.getLastAssistantMessage();
-	}
-
-	clearMessages(): void {
-		this.getSession()?.clearMessages();
 	}
 
 	// Private helper methods
 	private messageToPrompt(message: UIMessage): string {
 		const textParts = message.parts
-			.filter((p) => p.type === "text")
-			.map((p) => (p as any).text);
+			.filter((p): p is TextUIPart => p.type === "text")
+			.map((p) => p.text);
 		return textParts.join("\n");
 	}
 
-	private async handleSDKMessage(
+	/**
+	 * Translate an SDK message to UIMessageChunks.
+	 * Also handles session ID capture and translation state management.
+	 */
+	private translateSDKMessage(
 		ctx: SessionContext,
 		msg: SDKMessage,
-		assistantMessageId: string,
-	): Promise<void> {
+	): UIMessageChunk[] {
 		// Capture session ID from init message and persist the mapping
 		if (msg.type === "system" && msg.subtype === "init") {
 			ctx.claudeSessionId = msg.session_id;
-			// Persist the mapping so it survives restarts
-			await this.persistClaudeSessionId(ctx.sessionId, msg.session_id);
-			return;
+			// Persist the mapping so it survives restarts (fire and forget)
+			this.persistClaudeSessionId(ctx.sessionId, msg.session_id);
+			return [];
 		}
 
-		// Translate SDK message to UIMessageChunks and emit
-		if (ctx.streamState && ctx.blockIds) {
-			const chunks = sdkMessageToChunks(msg, ctx.streamState, ctx.blockIds);
-			console.log(
-				`[CLIENT] Got ${chunks.length} chunks from translate, callback=${!!ctx.callback}`,
-			);
-			for (const chunk of chunks) {
-				if (ctx.callback) {
-					console.log(`[CLIENT] Emitting chunk: ${chunk.type}`);
-					ctx.callback(chunk);
-				}
-			}
-		} else {
-			console.log(
-				`[CLIENT] Skipping chunks - streamState=${!!ctx.streamState}, blockIds=${!!ctx.blockIds}`,
-			);
+		// Initialize translation state if needed (only once per prompt, not per message)
+		// The translate module manages the state across multiple messages in an agentic loop
+		if (!ctx.translationState) {
+			ctx.translationState = createTranslationState("");
 		}
 
-		// Update session message store
-		await this.updateMessageFromSDK(ctx, msg, assistantMessageId);
-	}
+		// Translate SDK message to UIMessageChunks
+		const chunks = translateSDKMessage(msg, ctx.translationState);
 
-	private async updateMessageFromSDK(
-		ctx: SessionContext,
-		msg: SDKMessage,
-		_assistantMessageId: string,
-	): Promise<void> {
-		// Debug: log message types
-		console.log(`[CLIENT updateMessageFromSDK] msg.type=${msg.type}`);
-
+		// Clean up translation state on result
 		if (msg.type === "result") {
-			console.log(
-				`[CLIENT] Result message:`,
-				JSON.stringify(msg, null, 2).substring(0, 1000),
-			);
+			ctx.translationState = null;
 		}
 
-		// Update the assistant message with content from SDK
-		if (msg.type === "assistant") {
-			const assistantMsg = ctx.session.getLastAssistantMessage();
-			if (!assistantMsg) return;
-
-			// Extract text, thinking, tool content, and tool results from the message
-			const content = msg.message.content;
-			console.log(`[CLIENT] Assistant message has ${content.length} blocks`);
-			for (const block of content) {
-				console.log(`[CLIENT] Block type: ${block.type}`);
-				if (block.type === "text") {
-					// Append text to the last part if it's text, otherwise create new part
-					const lastPart = assistantMsg.parts[assistantMsg.parts.length - 1];
-					if (lastPart && lastPart.type === "text") {
-						(lastPart as any).text += block.text;
-					} else {
-						assistantMsg.parts.push({
-							type: "text",
-							text: block.text,
-						});
-					}
-				} else if (block.type === "thinking") {
-					// Extended thinking/reasoning block
-					const thinkingBlock = block as any;
-					assistantMsg.parts.push({
-						type: "reasoning",
-						text: thinkingBlock.thinking,
-					});
-				} else if (block.type === "tool_use") {
-					// Add tool use block
-					assistantMsg.parts.push({
-						type: "dynamic-tool",
-						toolCallId: block.id,
-						toolName: block.name,
-						state: "input-available",
-						input: block.input,
-					});
-				} else if (block.type === "tool_result") {
-					// Tool result - find the corresponding tool_use part and update it
-					const toolResult = block as any;
-					const toolCallId = toolResult.tool_use_id;
-
-					console.log(
-						`[SDK] Received tool result for ${toolCallId}:`,
-						JSON.stringify(toolResult).substring(0, 200),
-					);
-
-					// Find the tool part and update it with output
-					const toolPart = assistantMsg.parts.find(
-						(p) =>
-							p.type === "dynamic-tool" && (p as any).toolCallId === toolCallId,
-					);
-
-					if (toolPart) {
-						const tool = toolPart as any;
-						tool.state = toolResult.is_error
-							? "output-error"
-							: "output-available";
-						tool.output = toolResult.content;
-					} else {
-						console.warn(
-							`[SDK] Tool result received but no matching tool_use part found for ${toolCallId}`,
-						);
-					}
-				}
-			}
-
-			ctx.session.updateMessage(assistantMsg.id, { parts: assistantMsg.parts });
-		}
-
-		// Handle stream events for incremental updates
-		if (msg.type === "stream_event") {
-			const event = msg.event;
-
-			if (event.type === "content_block_delta") {
-				const assistantMsg = ctx.session.getLastAssistantMessage();
-				if (!assistantMsg) return;
-
-				if (event.delta?.type === "text_delta") {
-					// Accumulate text
-					const lastPart = assistantMsg.parts[assistantMsg.parts.length - 1];
-					if (lastPart && lastPart.type === "text") {
-						(lastPart as any).text += event.delta.text;
-					} else {
-						assistantMsg.parts.push({
-							type: "text",
-							text: event.delta.text,
-						});
-					}
-					ctx.session.updateMessage(assistantMsg.id, {
-						parts: assistantMsg.parts,
-					});
-				} else if (event.delta?.type === "thinking_delta") {
-					// Accumulate extended thinking/reasoning
-					const lastPart = assistantMsg.parts[assistantMsg.parts.length - 1];
-					if (lastPart && lastPart.type === "reasoning") {
-						(lastPart as any).text += event.delta.thinking;
-					} else {
-						assistantMsg.parts.push({
-							type: "reasoning",
-							text: event.delta.thinking,
-						});
-					}
-					ctx.session.updateMessage(assistantMsg.id, {
-						parts: assistantMsg.parts,
-					});
-				}
-			}
-		}
+		return chunks;
 	}
 }

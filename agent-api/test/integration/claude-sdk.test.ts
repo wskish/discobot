@@ -412,7 +412,7 @@ describe("Claude SDK Integration Tests", { skip: shouldSkip }, () => {
 
 	describe("Streaming Updates", () => {
 		it(
-			"emits streaming chunks via callback",
+			"emits streaming chunks via async generator",
 			{ timeout: TIMEOUT_MS },
 			async () => {
 				const sessionId = "test-streaming";
@@ -420,11 +420,6 @@ describe("Claude SDK Integration Tests", { skip: shouldSkip }, () => {
 
 				// Create the session first
 				await client.ensureSession(sessionId);
-
-				// Set up callback to capture chunks BEFORE prompting
-				client.setUpdateCallback((chunk) => {
-					chunks.push(chunk);
-				}, sessionId);
 
 				const userMessage: UIMessage = {
 					id: "msg-8",
@@ -437,7 +432,10 @@ describe("Claude SDK Integration Tests", { skip: shouldSkip }, () => {
 					],
 				};
 
-				await client.prompt(userMessage, sessionId);
+				// Iterate over the async generator to capture chunks
+				for await (const chunk of client.prompt(userMessage, sessionId)) {
+					chunks.push(chunk);
+				}
 
 				console.log(`Received ${chunks.length} streaming chunks`);
 
@@ -520,23 +518,11 @@ describe("Claude SDK Integration Tests", { skip: shouldSkip }, () => {
 			{ timeout: TIMEOUT_MS },
 			async () => {
 				const sessionId = "test-thinking";
-				const reasoningChunks: unknown[] = [];
+				const reasoningChunks: { type: string }[] = [];
 				const allChunks: unknown[] = [];
 
 				// Ensure session exists first
 				await client.ensureSession(sessionId);
-
-				// Set up callback to capture ALL chunks including reasoning
-				client.setUpdateCallback((chunk) => {
-					allChunks.push(chunk);
-					if (
-						chunk.type === "reasoning-start" ||
-						chunk.type === "reasoning-delta" ||
-						chunk.type === "reasoning-end"
-					) {
-						reasoningChunks.push(chunk);
-					}
-				}, sessionId);
 
 				// Ask a question that requires thinking
 				// This should trigger extended thinking if the model supports it
@@ -551,7 +537,17 @@ describe("Claude SDK Integration Tests", { skip: shouldSkip }, () => {
 					],
 				};
 
-				await client.prompt(userMessage, sessionId);
+				// Iterate over the async generator to capture ALL chunks including reasoning
+				for await (const chunk of client.prompt(userMessage, sessionId)) {
+					allChunks.push(chunk);
+					if (
+						chunk.type === "reasoning-start" ||
+						chunk.type === "reasoning-delta" ||
+						chunk.type === "reasoning-end"
+					) {
+						reasoningChunks.push(chunk);
+					}
+				}
 
 				console.log(
 					`Received ${allChunks.length} total chunks, ${reasoningChunks.length} reasoning chunks`,
@@ -569,13 +565,13 @@ describe("Claude SDK Integration Tests", { skip: shouldSkip }, () => {
 
 					// Verify reasoning chunk types
 					const hasStart = reasoningChunks.some(
-						(c: any) => c.type === "reasoning-start",
+						(c) => c.type === "reasoning-start",
 					);
 					const hasDelta = reasoningChunks.some(
-						(c: any) => c.type === "reasoning-delta",
+						(c) => c.type === "reasoning-delta",
 					);
 					const hasEnd = reasoningChunks.some(
-						(c: any) => c.type === "reasoning-end",
+						(c) => c.type === "reasoning-end",
 					);
 
 					if (hasStart && hasDelta && hasEnd) {
@@ -600,7 +596,7 @@ describe("Claude SDK Integration Tests", { skip: shouldSkip }, () => {
 					);
 
 					// Verify reasoning part has content
-					const firstReasoning = reasoningParts[0] as any;
+					const firstReasoning = reasoningParts[0] as { text?: string };
 					assert.ok(
 						firstReasoning.text,
 						"Reasoning part should have text content",

@@ -2,7 +2,6 @@ import os from "node:os";
 import { type Context, Hono } from "hono";
 import { logger } from "hono/logger";
 import { streamSSE } from "hono/streaming";
-import { ACPClient } from "../acp/client.js";
 import type { Agent } from "../agent/interface.js";
 import type {
 	ChatRequest,
@@ -64,42 +63,20 @@ const GIT_USER_NAME_HEADER = "X-Discobot-Git-User-Name";
 const GIT_USER_EMAIL_HEADER = "X-Discobot-Git-User-Email";
 
 export interface AppOptions {
-	agentCommand: string;
-	agentArgs: string[];
 	agentCwd: string;
 	enableLogging?: boolean;
 	/** Salted hash of shared secret (from DISCOBOT_SECRET env var) for auth enforcement */
 	sharedSecretHash?: string;
-	/**
-	 * Enable message persistence to disk.
-	 * This is needed for ACP implementations that don't replay messages on session resume
-	 * (like Claude Code ACP which uses unstable_resumeSession without message replay).
-	 * @default true (for backwards compatibility)
-	 */
-	persistMessages?: boolean;
 }
 
 export function createApp(options: AppOptions) {
 	const app = new Hono();
 
-	const agentType = process.env.AGENT_TYPE || "claude-sdk";
-
-	let agent: Agent;
-	if (agentType === "acp") {
-		agent = new ACPClient({
-			command: options.agentCommand,
-			args: options.agentArgs,
-			cwd: options.agentCwd,
-			persistMessages: options.persistMessages ?? true,
-		});
-	} else {
-		// Default to Claude SDK
-		agent = new ClaudeSDKClient({
-			cwd: options.agentCwd,
-			model: process.env.AGENT_MODEL,
-			env: process.env as Record<string, string>,
-		});
-	}
+	const agent: Agent = new ClaudeSDKClient({
+		cwd: options.agentCwd,
+		model: process.env.AGENT_MODEL,
+		env: process.env as Record<string, string>,
+	});
 
 	if (options.enableLogging) {
 		app.use("*", logger());

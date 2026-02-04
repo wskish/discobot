@@ -22,8 +22,17 @@ const client = new ClaudeSDKClient({
 
 interface ToolExecution {
 	toolName: string;
-	input: any;
-	output: any;
+	input: unknown;
+	output: unknown;
+}
+
+// Type for tool chunks and parts
+interface ToolLike {
+	type: string;
+	toolName?: string;
+	toolCallId?: string;
+	input?: unknown;
+	output?: unknown;
 }
 
 const toolExecutions: ToolExecution[] = [];
@@ -54,16 +63,27 @@ try {
 		const sessionId = `test-${testCase.name.toLowerCase().replace(/\s+/g, "-")}`;
 		await client.ensureSession(sessionId);
 
-		// Set callback to capture tool executions
-		client.setUpdateCallback((chunk) => {
+		const userMessage: UIMessage = {
+			id: `msg-${sessionId}`,
+			role: "user",
+			parts: [
+				{
+					type: "text",
+					text: testCase.prompt,
+				},
+			],
+		};
+
+		// Iterate over the async generator to capture tool executions
+		for await (const chunk of client.prompt(userMessage, sessionId)) {
 			if (chunk.type === "tool-input-available") {
-				const toolChunk = chunk as any;
+				const toolChunk = chunk as ToolLike;
 				console.log(`\n[INPUT] Tool: ${toolChunk.toolName}`);
 				console.log(`  Input: ${JSON.stringify(toolChunk.input, null, 2)}`);
 			}
 
 			if (chunk.type === "tool-output-available") {
-				const toolChunk = chunk as any;
+				const toolChunk = chunk as ToolLike;
 				console.log(`\n[OUTPUT] Call ID: ${toolChunk.toolCallId}`);
 				const output = toolChunk.output;
 
@@ -85,9 +105,9 @@ try {
 				// Record for comparison
 				const inputChunk = (client.getSession(sessionId)?.getMessages() || [])
 					.find((m) => m.role === "assistant")
-					?.parts.find((p) => p.type === "dynamic-tool") as any;
+					?.parts.find((p) => p.type === "dynamic-tool") as ToolLike;
 
-				if (inputChunk) {
+				if (inputChunk?.toolName) {
 					toolExecutions.push({
 						toolName: inputChunk.toolName,
 						input: inputChunk.input,
@@ -95,20 +115,7 @@ try {
 					});
 				}
 			}
-		}, sessionId);
-
-		const userMessage: UIMessage = {
-			id: `msg-${sessionId}`,
-			role: "user",
-			parts: [
-				{
-					type: "text",
-					text: testCase.prompt,
-				},
-			],
-		};
-
-		await client.prompt(userMessage, sessionId);
+		}
 		console.log(`\n✓ ${testCase.name} completed`);
 	}
 

@@ -4,7 +4,7 @@ import { readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, beforeEach, describe, it } from "node:test";
-import type { UIMessage } from "ai";
+import type { DynamicToolUIPart } from "ai";
 import {
 	clearSession as clearStoredSession,
 	getSessionData,
@@ -134,21 +134,14 @@ describe("ClaudeSDKClient", () => {
 			assert.strictEqual(session, undefined);
 		});
 
-		it("clearSession removes messages but keeps session", async () => {
+		it("clearSession clears session state but keeps session object", async () => {
 			await client.ensureSession("test");
-			client.addMessage({
-				id: "msg-1",
-				role: "user",
-				parts: [{ type: "text", text: "Test" }],
-			});
-
-			assert.strictEqual(client.getMessages().length, 1);
 
 			await client.clearSession("test");
 
-			// Session still exists
+			// Session object still exists
 			assert.ok(client.getSession("test"));
-			// But messages are cleared
+			// Messages should be empty
 			assert.strictEqual(
 				client.getSession("test")?.getMessages().length || 0,
 				0,
@@ -185,142 +178,19 @@ describe("ClaudeSDKClient", () => {
 		});
 	});
 
-	describe("message management", () => {
-		beforeEach(async () => {
-			await client.ensureSession();
-		});
-
-		it("addMessage adds to current session", () => {
-			const message: UIMessage = {
-				id: "msg-1",
-				role: "user",
-				parts: [{ type: "text", text: "Hello" }],
-			};
-
-			client.addMessage(message);
-
-			const messages = client.getMessages();
-			assert.strictEqual(messages.length, 1);
-			assert.strictEqual(messages[0].id, "msg-1");
-		});
-
-		it("updateMessage modifies existing message", () => {
-			client.addMessage({
-				id: "msg-1",
-				role: "user",
-				parts: [{ type: "text", text: "Original" }],
-			});
-
-			client.updateMessage("msg-1", {
-				parts: [{ type: "text", text: "Updated" }],
-			});
-
-			const messages = client.getMessages();
-			assert.strictEqual((messages[0].parts[0] as any).text, "Updated");
-		});
-
-		it("getLastAssistantMessage returns most recent assistant message", () => {
-			client.addMessage({
-				id: "user-1",
-				role: "user",
-				parts: [{ type: "text", text: "Question" }],
-			});
-
-			client.addMessage({
-				id: "asst-1",
-				role: "assistant",
-				parts: [{ type: "text", text: "Answer 1" }],
-			});
-
-			client.addMessage({
-				id: "user-2",
-				role: "user",
-				parts: [{ type: "text", text: "Follow-up" }],
-			});
-
-			client.addMessage({
-				id: "asst-2",
-				role: "assistant",
-				parts: [{ type: "text", text: "Answer 2" }],
-			});
-
-			const lastAssistant = client.getLastAssistantMessage();
-			assert.strictEqual(lastAssistant?.id, "asst-2");
-		});
-
-		it("clearMessages removes all messages", () => {
-			client.addMessage({
-				id: "msg-1",
-				role: "user",
-				parts: [{ type: "text", text: "Test" }],
-			});
-			client.addMessage({
-				id: "msg-2",
-				role: "user",
-				parts: [{ type: "text", text: "Test 2" }],
-			});
-
-			assert.strictEqual(client.getMessages().length, 2);
-
-			client.clearMessages();
-
-			assert.strictEqual(client.getMessages().length, 0);
-		});
-
-		it("supports multiple independent sessions", async () => {
+	describe("session independence", () => {
+		it("sessions are independent", async () => {
 			await client.ensureSession("session-1");
-			client.addMessage({
-				id: "msg-1",
-				role: "user",
-				parts: [{ type: "text", text: "Session 1 message" }],
-			});
-
 			await client.ensureSession("session-2");
-			client.addMessage({
-				id: "msg-2",
-				role: "user",
-				parts: [{ type: "text", text: "Session 2 message" }],
-			});
 
-			// Session 1 should have 1 message
+			// Each session has its own (empty) message store
 			const session1Messages =
 				client.getSession("session-1")?.getMessages() || [];
-			assert.strictEqual(session1Messages.length, 1);
-			assert.strictEqual(session1Messages[0].id, "msg-1");
-
-			// Session 2 should have 1 message
 			const session2Messages =
 				client.getSession("session-2")?.getMessages() || [];
-			assert.strictEqual(session2Messages.length, 1);
-			assert.strictEqual(session2Messages[0].id, "msg-2");
-		});
-	});
 
-	describe("setUpdateCallback", () => {
-		it("can set and clear callbacks", async () => {
-			await client.ensureSession("test");
-
-			const callback = () => {};
-			client.setUpdateCallback(callback);
-
-			// Can clear by passing null
-			client.setUpdateCallback(null);
-
-			// Should not throw
-		});
-
-		it("sets callback for specific session", async () => {
-			await client.ensureSession("session-1");
-			await client.ensureSession("session-2");
-
-			const callback1 = () => {};
-			const callback2 = () => {};
-
-			client.setUpdateCallback(callback1, "session-1");
-			client.setUpdateCallback(callback2, "session-2");
-
-			// Callbacks are set independently per session
-			// Should not throw
+			assert.strictEqual(session1Messages.length, 0);
+			assert.strictEqual(session2Messages.length, 0);
 		});
 	});
 
@@ -512,7 +382,7 @@ describe("ClaudeSDKClient session restoration after restart", () => {
 
 	// Test workspace path - we encode this for the Claude projects dir
 	const TEST_CWD = "/home/testuser/myproject";
-	const ENCODED_CWD = "home-testuser-myproject";
+	const ENCODED_CWD = "-home-testuser-myproject";
 	const CLAUDE_SESSION_ID = "test-claude-session-uuid-123";
 	const DISCOBOT_SESSION_ID = "my-discobot-session";
 
@@ -790,7 +660,8 @@ describe("ClaudeSDKClient session restoration after restart", () => {
 
 		// Get messages
 		const session = client.getSession(DISCOBOT_SESSION_ID);
-		const messages = session!.getMessages();
+		assert.ok(session, "Session should exist");
+		const messages = session.getMessages();
 
 		// Should have restored messages
 		assert.ok(messages.length >= 2, "Should have restored messages");
@@ -800,9 +671,174 @@ describe("ClaudeSDKClient session restoration after restart", () => {
 		assert.ok(asstMsg, "Should have assistant message");
 
 		// Check for tool part
-		const toolPart = asstMsg.parts.find((p) => p.type === "dynamic-tool");
+		const toolPart = asstMsg.parts.find((p) => p.type === "dynamic-tool") as
+			| DynamicToolUIPart
+			| undefined;
 		assert.ok(toolPart, "Should have tool part in assistant message");
-		assert.strictEqual((toolPart as any).toolName, "Bash");
-		assert.strictEqual((toolPart as any).toolCallId, "tool-1");
+		assert.strictEqual(toolPart.toolName, "Bash");
+		assert.strictEqual(toolPart.toolCallId, "tool-1");
+	});
+
+	it("restores tool outputs merged into tool parts", async () => {
+		// Create a session with tool call AND tool result
+		// This tests the fix for tool outputs not being merged when loading from disk
+		await createClaudeSessionFile(CLAUDE_SESSION_ID, [
+			{
+				type: "user",
+				uuid: "user-msg-1",
+				message: { role: "user", content: "What files are here?" },
+			},
+			{
+				type: "assistant",
+				uuid: "asst-msg-1",
+				message: {
+					id: "msg-1",
+					role: "assistant",
+					content: [
+						{
+							type: "tool_use",
+							id: "tool-abc",
+							name: "Bash",
+							input: { command: "ls" },
+						},
+					],
+				},
+			},
+			{
+				// Tool result comes as a user message with no text content
+				type: "user",
+				uuid: "user-msg-2",
+				message: {
+					role: "user",
+					content: [
+						{
+							type: "tool_result",
+							tool_use_id: "tool-abc",
+							content: "file1.txt\nfile2.txt\nfile3.txt",
+						},
+					],
+				},
+			},
+			{
+				// Assistant continues after tool result
+				type: "assistant",
+				uuid: "asst-msg-2",
+				message: {
+					id: "msg-2",
+					role: "assistant",
+					content: [{ type: "text", text: "I found 3 files." }],
+				},
+			},
+		]);
+
+		// Create the mapping
+		await saveSession({
+			sessionId: DISCOBOT_SESSION_ID,
+			cwd: TEST_CWD,
+			createdAt: new Date().toISOString(),
+			claudeSessionId: CLAUDE_SESSION_ID,
+		});
+
+		// Create a new client and load session
+		const client = new ClaudeSDKClient({ cwd: TEST_CWD });
+		await client.ensureSession(DISCOBOT_SESSION_ID);
+
+		const session = client.getSession(DISCOBOT_SESSION_ID);
+		assert.ok(session, "Session should exist");
+		const messages = session.getMessages();
+
+		// Find the assistant message (should be merged into one)
+		const asstMsg = messages.find((m) => m.role === "assistant");
+		assert.ok(asstMsg, "Should have assistant message");
+
+		// Find the tool part
+		const toolPart = asstMsg.parts.find((p) => p.type === "dynamic-tool") as
+			| DynamicToolUIPart
+			| undefined;
+		assert.ok(toolPart, "Should have tool part");
+
+		// THE KEY ASSERTION: Tool output should be merged into the part
+		assert.strictEqual(
+			toolPart.state,
+			"output-available",
+			"Tool part should have output-available state",
+		);
+		assert.strictEqual(
+			toolPart.output,
+			"file1.txt\nfile2.txt\nfile3.txt",
+			"Tool output should be merged into the part",
+		);
+	});
+
+	it("restores tool error state when tool result has is_error", async () => {
+		await createClaudeSessionFile(CLAUDE_SESSION_ID, [
+			{
+				type: "user",
+				uuid: "user-msg-1",
+				message: { role: "user", content: "Delete all files" },
+			},
+			{
+				type: "assistant",
+				uuid: "asst-msg-1",
+				message: {
+					id: "msg-1",
+					role: "assistant",
+					content: [
+						{
+							type: "tool_use",
+							id: "tool-err",
+							name: "Bash",
+							input: { command: "rm -rf /" },
+						},
+					],
+				},
+			},
+			{
+				type: "user",
+				uuid: "user-msg-2",
+				message: {
+					role: "user",
+					content: [
+						{
+							type: "tool_result",
+							tool_use_id: "tool-err",
+							content: "Permission denied",
+							is_error: true,
+						},
+					],
+				},
+			},
+		]);
+
+		await saveSession({
+			sessionId: DISCOBOT_SESSION_ID,
+			cwd: TEST_CWD,
+			createdAt: new Date().toISOString(),
+			claudeSessionId: CLAUDE_SESSION_ID,
+		});
+
+		const client = new ClaudeSDKClient({ cwd: TEST_CWD });
+		await client.ensureSession(DISCOBOT_SESSION_ID);
+
+		const session = client.getSession(DISCOBOT_SESSION_ID);
+		assert.ok(session, "Session should exist");
+		const messages = session.getMessages();
+		const asstMsg = messages.find((m) => m.role === "assistant");
+		assert.ok(asstMsg, "Should have assistant message");
+		const toolPart = asstMsg.parts.find((p) => p.type === "dynamic-tool") as
+			| DynamicToolUIPart
+			| undefined;
+		assert.ok(toolPart, "Should have tool part");
+
+		assert.strictEqual(
+			toolPart.state,
+			"output-error",
+			"Tool part should have output-error state",
+		);
+		assert.strictEqual(
+			toolPart.errorText,
+			"Permission denied",
+			"Tool error text should be set",
+		);
 	});
 });
