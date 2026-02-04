@@ -1,8 +1,8 @@
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import { AlertCircle } from "lucide-react";
-
 import * as React from "react";
+import { useDeferredValue } from "react";
 import type { PromptInputMessage } from "@/components/ai-elements/prompt-input";
 import { ChatConversation } from "@/components/ide/chat-conversation";
 import { ChatNewContent } from "@/components/ide/chat-new-content";
@@ -211,6 +211,10 @@ export function ChatPanel({
 		onFinish: onChatComplete,
 	});
 
+	// Defer message updates to reduce render frequency during rapid streaming
+	// This allows React to batch updates and prioritize user interactions
+	const deferredMessages = useDeferredValue(messages);
+
 	// Register resumeStream for external use (e.g., after commit starts)
 	React.useEffect(() => {
 		onRegisterResumeStream?.(resumeStream);
@@ -268,8 +272,8 @@ export function ChatPanel({
 
 	// Extract the current plan from deferred messages for consistent UI state
 	const currentPlan = React.useMemo(
-		() => extractLatestPlan(messages),
-		[messages],
+		() => extractLatestPlan(deferredMessages),
+		[deferredMessages],
 	);
 
 	// Handle form submission - memoized to prevent PromptInput re-renders
@@ -364,12 +368,12 @@ export function ChatPanel({
 			<div
 				className={cn(
 					"flex flex-col flex-1 overflow-hidden",
-					messages.length === 0 && "justify-center",
+					deferredMessages.length === 0 && "justify-center",
 				)}
 			>
 				{/* Welcome UI - header and selectors for new sessions */}
 				<ChatNewContent
-					show={!resume && messages.length === 0}
+					show={!resume && deferredMessages.length === 0}
 					initialWorkspaceId={initialWorkspaceId}
 					onWorkspaceChange={setLocalSelectedWorkspaceId}
 					onAgentChange={setLocalSelectedAgentId}
@@ -377,7 +381,7 @@ export function ChatPanel({
 
 				{/* Conversation area */}
 				<ChatConversation
-					messages={messages}
+					messages={deferredMessages}
 					messagesLoading={false}
 					isChatActive={isLoading}
 					onCopy={handleCopy}

@@ -1,4 +1,5 @@
-import type { DynamicToolUIPart, FileUIPart, UIMessage } from "ai";
+import type { UIMessage } from "ai";
+import { memo } from "react";
 import { ImageAttachment } from "@/components/ai-elements/image-attachment";
 import { MessageResponse } from "@/components/ai-elements/message";
 import {
@@ -14,24 +15,6 @@ import {
 	ToolInput,
 	ToolOutput,
 } from "@/components/ai-elements/tool";
-
-interface ReasoningPart {
-	type: "reasoning";
-	text: string;
-}
-
-interface SourceUrlPart {
-	type: "source-url";
-	url: string;
-	title?: string;
-}
-
-interface DocumentSourcePart {
-	type: "source-document";
-	sourceId: string;
-	title?: string;
-	mediaType?: string;
-}
 
 interface MessagePartsProps {
 	/** The message containing parts to render */
@@ -57,115 +40,145 @@ interface MessagePartsProps {
  * - step-start: Step boundary marker (no visual render, used for logical grouping)
  *
  * Keeps chat-conversation.tsx simple by centralizing part rendering logic.
+ *
+ * Memoized to prevent unnecessary re-renders during streaming.
  */
-export function MessagePart({
-	message,
-	partIdx,
-	part,
-	isStreaming = false,
-}: MessagePartsProps) {
-	// Text part
-	if (part.type === "text") {
-		return (
-			<MessageResponse key={`text-${partIdx}`}>{part.text}</MessageResponse>
-		);
-	}
-
-	// Reasoning part (thinking blocks)
-	if (part.type === "reasoning") {
-		const reasoningPart = part as ReasoningPart;
-		// Check if this is the last part and streaming to show spinner
-		const isThisPartStreaming =
-			isStreaming && partIdx === message.parts.length - 1;
-
-		return (
-			<Reasoning key={`reasoning-${partIdx}`} isStreaming={isThisPartStreaming}>
-				<ReasoningTrigger />
-				<ReasoningContent>{reasoningPart.text}</ReasoningContent>
-			</Reasoning>
-		);
-	}
-
-	// File part (images and file attachments)
-	if (part.type === "file") {
-		const filePart = part as FileUIPart;
-		if (filePart.mediaType?.startsWith("image/")) {
+export const MessagePart = memo(
+	function MessagePart({
+		message: _message,
+		partIdx,
+		part,
+		isStreaming: _isStreaming = false,
+	}: MessagePartsProps) {
+		// Text part
+		if (part.type === "text") {
 			return (
-				<ImageAttachment
+				<MessageResponse key={`text-${partIdx}`}>{part.text}</MessageResponse>
+			);
+		}
+
+		// Reasoning part (thinking blocks)
+		if (part.type === "reasoning") {
+			// Use the part's own state to determine if it's streaming
+			const isThisPartStreaming = part.state === "streaming";
+
+			return (
+				<Reasoning
+					key={`reasoning-${partIdx}`}
+					isStreaming={isThisPartStreaming}
+				>
+					<ReasoningTrigger />
+					<ReasoningContent>{part.text}</ReasoningContent>
+				</Reasoning>
+			);
+		}
+
+		// File part (images and file attachments)
+		if (part.type === "file") {
+			if (part.mediaType?.startsWith("image/")) {
+				return (
+					<ImageAttachment
+						key={`file-${partIdx}`}
+						src={part.url}
+						filename={part.filename}
+					/>
+				);
+			}
+			// Non-image file attachment
+			return (
+				<div
 					key={`file-${partIdx}`}
-					src={filePart.url}
-					filename={filePart.filename}
+					className="flex items-center gap-2 rounded-md border border-border bg-muted/50 px-3 py-2 text-sm"
+				>
+					<span className="text-muted-foreground">📎 {part.filename}</span>
+				</div>
+			);
+		}
+
+		// Dynamic tool part (tool calls)
+		if (part.type === "dynamic-tool") {
+			return (
+				<Tool key={part.toolCallId}>
+					<ToolHeader
+						type={part.type}
+						state={part.state}
+						toolName={part.toolName}
+						title={part.title}
+					/>
+					<ToolContent>
+						<ToolInput input={part.input} />
+						<ToolOutput output={part.output} errorText={part.errorText} />
+					</ToolContent>
+				</Tool>
+			);
+		}
+
+		// Source URL part (RAG citations)
+		if (part.type === "source-url") {
+			return (
+				<Source
+					key={`source-url-${partIdx}`}
+					href={part.url}
+					title={part.title || new URL(part.url).hostname}
 				/>
 			);
 		}
-		// Non-image file attachment
-		return (
-			<div
-				key={`file-${partIdx}`}
-				className="flex items-center gap-2 rounded-md border border-border bg-muted/50 px-3 py-2 text-sm"
-			>
-				<span className="text-muted-foreground">📎 {filePart.filename}</span>
-			</div>
-		);
-	}
 
-	// Dynamic tool part (tool calls)
-	if (part.type === "dynamic-tool") {
-		const toolPart = part as DynamicToolUIPart;
-		return (
-			<Tool key={toolPart.toolCallId}>
-				<ToolHeader
-					type={toolPart.type}
-					state={toolPart.state}
-					toolName={toolPart.toolName}
-					title={toolPart.title}
-				/>
-				<ToolContent>
-					<ToolInput input={toolPart.input} />
-					<ToolOutput output={toolPart.output} errorText={toolPart.errorText} />
-				</ToolContent>
-			</Tool>
-		);
-	}
-
-	// Source URL part (RAG citations)
-	if (part.type === "source-url") {
-		const sourcePart = part as SourceUrlPart;
-		return (
-			<Source
-				key={`source-url-${partIdx}`}
-				href={sourcePart.url}
-				title={sourcePart.title || new URL(sourcePart.url).hostname}
-			/>
-		);
-	}
-
-	// Document source part (RAG citations)
-	if (part.type === "source-document") {
-		const docPart = part as DocumentSourcePart;
-		return (
-			<div
-				key={`document-${partIdx}`}
-				className="flex flex-col gap-1 rounded-md border border-border bg-muted/50 px-3 py-2 text-sm"
-			>
-				<span className="font-medium text-foreground">
-					{docPart.title || docPart.sourceId}
-				</span>
-				{docPart.mediaType && (
-					<span className="text-xs text-muted-foreground">
-						{docPart.mediaType}
+		// Document source part (RAG citations)
+		if (part.type === "source-document") {
+			return (
+				<div
+					key={`document-${partIdx}`}
+					className="flex flex-col gap-1 rounded-md border border-border bg-muted/50 px-3 py-2 text-sm"
+				>
+					<span className="font-medium text-foreground">
+						{part.title || part.sourceId}
 					</span>
-				)}
-			</div>
-		);
-	}
+					{part.mediaType && (
+						<span className="text-xs text-muted-foreground">
+							{part.mediaType}
+						</span>
+					)}
+				</div>
+			);
+		}
 
-	// Step boundary parts - no visual rendering, just markers for logical grouping
-	if (part.type === "step-start") {
+		// Step boundary parts - no visual rendering, just markers for logical grouping
+		if (part.type === "step-start") {
+			return null;
+		}
+
+		// Unknown part type - log warning and skip
+		console.warn(`Unknown message part type: ${part.type}`, part);
 		return null;
-	}
+	},
+	(prevProps, nextProps) => {
+		// Custom comparison to avoid unnecessary re-renders
+		// Only re-render if message ID, part index, streaming status, or part content changed
 
-	// Unknown part type - log warning and skip
-	console.warn(`Unknown message part type: ${part.type}`, part);
-	return null;
-}
+		if (prevProps.message.id !== nextProps.message.id) return false;
+		if (prevProps.partIdx !== nextProps.partIdx) return false;
+		if (prevProps.isStreaming !== nextProps.isStreaming) return false;
+
+		const prevPart = prevProps.part;
+		const nextPart = nextProps.part;
+
+		// Quick checks for common cases
+		if (prevPart === nextPart) return true; // Same reference
+		if (prevPart.type !== nextPart.type) return false; // Type changed
+
+		// If the current part is streaming, always re-render (skip expensive comparisons)
+		if ("state" in nextPart && nextPart.state === "streaming") {
+			return false;
+		}
+
+		// If parts have a state field, check if state changed (streaming vs done)
+		// This handles text, reasoning, and other parts that track streaming state
+		if ("state" in prevPart && "state" in nextPart) {
+			if (prevPart.state !== nextPart.state) return false;
+		}
+
+		// For everything else, do a full comparison
+		return JSON.stringify(prevPart) === JSON.stringify(nextPart);
+	},
+);
