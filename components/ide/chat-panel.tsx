@@ -29,11 +29,12 @@ import { cn } from "@/lib/utils";
 interface PlanEntry {
 	content: string;
 	status: "pending" | "in_progress" | "completed";
+	activeForm: string;
 	priority?: "low" | "medium" | "high";
 }
 
 // Helper to extract the latest plan from messages
-// Looks for TodoWrite tool calls with plan entries as output
+// Looks for TodoWrite tool calls with plan entries in the input
 function extractLatestPlan(messages: UIMessage[]): PlanEntry[] | null {
 	// Iterate backwards through messages to find the most recent plan
 	for (let i = messages.length - 1; i >= 0; i--) {
@@ -46,17 +47,20 @@ function extractLatestPlan(messages: UIMessage[]): PlanEntry[] | null {
 			if (
 				part.type === "dynamic-tool" &&
 				part.toolName === "TodoWrite" &&
-				part.state === "output-available" &&
-				Array.isArray(part.output)
+				typeof part.input === "object" &&
+				part.input !== null &&
+				"todos" in part.input &&
+				Array.isArray(part.input.todos)
 			) {
-				// Validate that output looks like plan entries
-				const entries = part.output as unknown[];
+				// Validate that todos array looks like plan entries
+				const entries = part.input.todos as unknown[];
 				if (
 					entries.length > 0 &&
 					typeof entries[0] === "object" &&
 					entries[0] !== null &&
 					"content" in entries[0] &&
-					"status" in entries[0]
+					"status" in entries[0] &&
+					"activeForm" in entries[0]
 				) {
 					return entries as PlanEntry[];
 				}

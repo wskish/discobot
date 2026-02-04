@@ -18,6 +18,7 @@ import { cn } from "@/lib/utils";
 export interface PlanEntry {
 	content: string;
 	status: "pending" | "in_progress" | "completed";
+	activeForm: string;
 	priority?: "low" | "medium" | "high";
 }
 
