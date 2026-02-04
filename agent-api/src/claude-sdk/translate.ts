@@ -154,7 +154,7 @@ export function translateSDKMessage(
 
 		case "user":
 			// User messages may contain tool_result blocks
-			return translateUserMessage(msg);
+			return translateUserMessage(msg, state);
 
 		case "system":
 			// No chunks emitted for system messages
@@ -291,8 +291,12 @@ export function translateContentBlock(
 /**
  * Translate an SDKUserMessage to UIMessageChunks.
  * Extracts tool_result blocks and emits tool-output-available/error chunks.
+ * Only emits output events for tools we've seen start events for (tracked in state).
  */
-function translateUserMessage(msg: SDKUserMessage): UIMessageChunk[] {
+function translateUserMessage(
+	msg: SDKUserMessage,
+	state: TranslationState,
+): UIMessageChunk[] {
 	const chunks: UIMessageChunk[] = [];
 	const content = msg.message.content;
 
@@ -307,6 +311,17 @@ function translateUserMessage(msg: SDKUserMessage): UIMessageChunk[] {
 		if (block.type === "tool_result") {
 			// Extract tool result content
 			const toolUseId = block.tool_use_id;
+
+			// Only emit output event if we've seen the corresponding tool-input-start
+			// This prevents sending tool-output-available for tools from subsessions
+			// where we never sent the start event
+			if (!state.toolStates.has(toolUseId)) {
+				console.warn(
+					`[translate] Skipping tool-output-available for unknown tool ID: ${toolUseId}`,
+				);
+				continue;
+			}
+
 			const isError = block.is_error === true;
 
 			// Content can be string or array of content blocks

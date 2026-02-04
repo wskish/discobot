@@ -86,6 +86,87 @@ describe("translate", () => {
 			assert.strictEqual(chunks.length, 0);
 		});
 
+		it("skips tool_result blocks from unknown tool IDs (subsession tools)", () => {
+			// Simulate a user message with tool_result from a subsession
+			// where we never saw the corresponding tool-input-start
+			const message = {
+				type: "user" as const,
+				uuid: "uuid-1" as unknown,
+				session_id: "session-1",
+				message: {
+					role: "user" as const,
+					content: [
+						{
+							type: "tool_result" as const,
+							tool_use_id: "unknown-tool-id",
+							content: "result from subsession",
+							is_error: false,
+						},
+					],
+				},
+				parent_tool_use_id: null,
+			};
+
+			const chunks = translateSDKMessage(
+				asSDKMessage(message),
+				translationState,
+			);
+
+			// Should skip the tool-output-available since we never saw this tool ID
+			assert.strictEqual(
+				chunks.length,
+				0,
+				"Should not emit tool-output-available for unknown tool IDs",
+			);
+		});
+
+		it("emits tool_result blocks for known tool IDs", () => {
+			// First, register a tool in the translation state
+			translationState.toolStates.set("known-tool-id", {
+				inputAvailableSent: true,
+				toolName: "Read",
+				input: { file_path: "/test.txt" },
+				inputJsonBuffer: "",
+				index: 0,
+			});
+
+			// Now send a user message with tool_result for that tool
+			const message = {
+				type: "user" as const,
+				uuid: "uuid-1" as unknown,
+				session_id: "session-1",
+				message: {
+					role: "user" as const,
+					content: [
+						{
+							type: "tool_result" as const,
+							tool_use_id: "known-tool-id",
+							content: "file contents",
+							is_error: false,
+						},
+					],
+				},
+				parent_tool_use_id: null,
+			};
+
+			const chunks = translateSDKMessage(
+				asSDKMessage(message),
+				translationState,
+			);
+
+			// Should emit tool-output-available since we've seen this tool ID
+			assert.strictEqual(
+				chunks.length,
+				1,
+				"Should emit tool-output-available for known tool IDs",
+			);
+			assert.strictEqual(chunks[0].type, "tool-output-available");
+			assert.strictEqual(
+				(chunks[0] as { toolCallId: string }).toolCallId,
+				"known-tool-id",
+			);
+		});
+
 		it("result message closes orphaned blocks and emits finish", () => {
 			// Set up orphaned open blocks (simulating a case where content_block_stop didn't fire)
 			translationState.openTextIndices.add(0);
