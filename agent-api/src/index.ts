@@ -1,3 +1,4 @@
+import type { ServerWebSocket } from "bun";
 import { hasMetadata, loadConfig, METADATA_PATH } from "./config/metadata.js";
 import { isSocatAvailable, startVsockForwarder } from "./config/vsock.js";
 import { createApp } from "./server/app.js";
@@ -27,13 +28,13 @@ declare const Bun:
 				/** Disable idle timeout (0 = no timeout) */
 				idleTimeout?: number;
 				websocket: {
-					open: (ws: WebSocket & { data: WebSocketData }) => void;
+					open: (ws: ServerWebSocket<WebSocketData>) => void;
 					message: (
-						ws: WebSocket & { data: WebSocketData },
+						ws: ServerWebSocket<WebSocketData>,
 						message: string | ArrayBuffer,
 					) => void;
 					close: (
-						ws: WebSocket & { data: WebSocketData },
+						ws: ServerWebSocket<WebSocketData>,
 						code: number,
 						reason: string,
 					) => void;
