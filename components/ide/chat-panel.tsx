@@ -158,7 +158,7 @@ export function ChatPanel({
 			new DefaultChatTransport({
 				api: `${getApiBase()}/chat`,
 				// Use custom fetch to inject latest workspace/agent IDs for new sessions
-				fetch: async (url, options) => {
+				fetch: (async (url, options) => {
 					const { resume, workspaceId, agentId } = selectionRef.current;
 
 					// Only modify body for new sessions
@@ -184,7 +184,7 @@ export function ChatPanel({
 					}
 
 					return fetch(url, options);
-				},
+				}) as typeof fetch,
 			}),
 		[onSessionCreated, sessionId],
 	);
