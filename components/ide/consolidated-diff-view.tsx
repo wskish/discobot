@@ -247,9 +247,10 @@ export function ConsolidatedDiffView() {
 		false,
 	);
 
-	// Track expanded/collapsed state per file (in sessionStorage)
+	// Track collapsed files per session (in sessionStorage)
+	// Default (empty array) = all files expanded
 	// Note: Using arrays instead of Sets because Sets don't survive JSON serialization
-	const [expandedFiles, setExpandedFiles] = usePersistedState<string[]>(
+	const [collapsedFiles, setCollapsedFiles] = usePersistedState<string[]>(
 		STORAGE_KEYS.CONSOLIDATED_DIFF_EXPANDED,
 		[],
 		"session",
@@ -267,14 +268,14 @@ export function ConsolidatedDiffView() {
 		[reviewedFiles, selectedSessionId],
 	);
 
-	const expandedFilesSet = React.useMemo(
-		() => new Set(expandedFiles),
-		[expandedFiles],
+	const collapsedFilesSet = React.useMemo(
+		() => new Set(collapsedFiles),
+		[collapsedFiles],
 	);
 
 	const toggleExpanded = React.useCallback(
 		(filePath: string) => {
-			setExpandedFiles((prev) => {
+			setCollapsedFiles((prev) => {
 				const set = new Set(prev);
 				if (set.has(filePath)) {
 					set.delete(filePath);
@@ -284,7 +285,7 @@ export function ConsolidatedDiffView() {
 				return Array.from(set);
 			});
 		},
-		[setExpandedFiles],
+		[setCollapsedFiles],
 	);
 
 	const toggleReviewed = React.useCallback(
@@ -312,13 +313,13 @@ export function ConsolidatedDiffView() {
 	);
 
 	const expandAll = React.useCallback(() => {
-		const allPaths = diffEntries.map((f) => f.path);
-		setExpandedFiles(allPaths);
-	}, [diffEntries, setExpandedFiles]);
+		setCollapsedFiles([]);
+	}, [setCollapsedFiles]);
 
 	const collapseAll = React.useCallback(() => {
-		setExpandedFiles([]);
-	}, [setExpandedFiles]);
+		const allPaths = diffEntries.map((f) => f.path);
+		setCollapsedFiles(allPaths);
+	}, [diffEntries, setCollapsedFiles]);
 
 	const markAllReviewed = React.useCallback(async () => {
 		if (!selectedSessionId) return;
@@ -346,8 +347,8 @@ export function ConsolidatedDiffView() {
 			[selectedSessionId]: sessionFiles,
 		}));
 		// Also collapse all when marking all as reviewed
-		setExpandedFiles([]);
-	}, [selectedSessionId, diffEntries, setReviewedFiles, setExpandedFiles]);
+		collapseAll();
+	}, [selectedSessionId, diffEntries, setReviewedFiles, collapseAll]);
 
 	const handleEditFile = React.useCallback(
 		(filePath: string) => {
@@ -382,7 +383,7 @@ export function ConsolidatedDiffView() {
 		);
 	}
 
-	const allExpanded = diffEntries.every((f) => expandedFilesSet.has(f.path));
+	const allExpanded = diffEntries.every((f) => !collapsedFilesSet.has(f.path));
 	// Note: We can't easily check if all are reviewed with current hashes without loading all diffs
 	// So we just check if all file paths have a stored hash (may be outdated)
 	const allReviewed = diffEntries.every((f) =>
@@ -460,7 +461,7 @@ export function ConsolidatedDiffView() {
 						key={file.path}
 						filePath={file.path}
 						sessionId={selectedSessionId}
-						isExpanded={expandedFilesSet.has(file.path)}
+						isExpanded={!collapsedFilesSet.has(file.path)}
 						currentPatchHash={sessionReviewedFiles.get(file.path) || null}
 						diffStyle={diffStyle}
 						onToggleExpand={() => toggleExpanded(file.path)}
