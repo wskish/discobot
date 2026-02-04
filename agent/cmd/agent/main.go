@@ -1893,6 +1893,7 @@ func wellKnownCachePaths() []string {
 		// IDE caches
 		"/home/discobot/.vscode-server",
 		"/home/discobot/.cursor-server",
+		"/home/discobot/.zed_server",
 	}
 }
 

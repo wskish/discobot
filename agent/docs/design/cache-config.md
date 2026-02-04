@@ -71,6 +71,7 @@ The agent automatically mounts these cache directories without configuration:
 - `.ccache` - ccache
 - `.vscode-server` - VS Code Server
 - `.cursor-server` - Cursor Server
+- `.zed_server` - Zed Server
 
 ## Implementation Details
 

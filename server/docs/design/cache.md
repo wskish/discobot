@@ -117,6 +117,7 @@ The agent automatically mounts the following well-known cache directories:
 - `/home/discobot/.ccache` - ccache
 - `/home/discobot/.vscode-server` - VS Code Server
 - `/home/discobot/.cursor-server` - Cursor Server
+- `/home/discobot/.zed_server` - Zed Server
 
 ## API Endpoints
 
