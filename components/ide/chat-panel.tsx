@@ -406,6 +406,7 @@ export function ChatPanel({
 					<PromptInputWithHistory
 						ref={textareaRef}
 						sessionId={sessionId}
+						isNewSession={!resume}
 						onSubmit={handleSubmit}
 						status={chatStatus}
 						isLocked={

@@ -44,10 +44,13 @@ function saveHistoryToStorage(history: string[]): void {
 	}
 }
 
-function getDraft(sessionId: string | null | undefined): string {
+function getDraft(
+	sessionId: string | null | undefined,
+	isNewSession?: boolean,
+): string {
 	if (typeof window === "undefined") return "";
-	// Use "new" as the key for drafts without a session
-	const key = sessionId || "new";
+	// Use "new" as the key for new (unsaved) sessions, otherwise use session ID
+	const key = isNewSession || !sessionId ? "new" : sessionId;
 	try {
 		return localStorage.getItem(`${DRAFT_PREFIX}${key}`) || "";
 	} catch {
@@ -55,10 +58,14 @@ function getDraft(sessionId: string | null | undefined): string {
 	}
 }
 
-function saveDraft(sessionId: string | null | undefined, value: string): void {
+function saveDraft(
+	sessionId: string | null | undefined,
+	value: string,
+	isNewSession?: boolean,
+): void {
 	if (typeof window === "undefined") return;
-	// Use "new" as the key for drafts without a session
-	const key = sessionId || "new";
+	// Use "new" as the key for new (unsaved) sessions, otherwise use session ID
+	const key = isNewSession || !sessionId ? "new" : sessionId;
 	try {
 		if (value) {
 			localStorage.setItem(`${DRAFT_PREFIX}${key}`, value);
@@ -70,9 +77,13 @@ function saveDraft(sessionId: string | null | undefined, value: string): void {
 	}
 }
 
-function clearDraft(sessionId: string | null | undefined): void {
+function clearDraft(
+	sessionId: string | null | undefined,
+	isNewSession?: boolean,
+): void {
 	if (typeof window === "undefined") return;
-	const key = sessionId || "new";
+	// Use "new" as the key for new (unsaved) sessions, otherwise use session ID
+	const key = isNewSession || !sessionId ? "new" : sessionId;
 	try {
 		localStorage.removeItem(`${DRAFT_PREFIX}${key}`);
 	} catch {
@@ -89,6 +100,8 @@ export interface UsePromptHistoryOptions {
 	textareaRef: RefObject<HTMLTextAreaElement | null>;
 	/** Session ID for draft persistence */
 	sessionId?: string | null;
+	/** Whether this is a new (unsaved) session - if true, uses "new" as draft key */
+	isNewSession?: boolean;
 }
 
 export interface UsePromptHistoryReturn {
@@ -125,6 +138,7 @@ export interface UsePromptHistoryReturn {
 export function usePromptHistory({
 	textareaRef,
 	sessionId,
+	isNewSession = false,
 }: UsePromptHistoryOptions): UsePromptHistoryReturn {
 	// Load preferences to get pinned prompts
 	const {
@@ -169,21 +183,26 @@ export function usePromptHistory({
 	// Draft persistence refs (avoid re-renders on typing)
 	const draftTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 	const prevSessionRef = useRef(sessionId);
+	const prevIsNewRef = useRef(isNewSession);
 
-	// Load draft when sessionId changes
+	// Load draft when sessionId or isNewSession changes
 	useEffect(() => {
-		if (prevSessionRef.current !== sessionId) {
-			// When transitioning from null to a real session, clear the "new" draft
-			if (prevSessionRef.current === null && sessionId !== null) {
-				clearDraft(null);
+		if (
+			prevSessionRef.current !== sessionId ||
+			prevIsNewRef.current !== isNewSession
+		) {
+			// When transitioning from new session to a real session, clear the "new" draft
+			if (prevIsNewRef.current && !isNewSession) {
+				clearDraft(null, true);
 			}
 			prevSessionRef.current = sessionId;
-			const draft = getDraft(sessionId);
+			prevIsNewRef.current = isNewSession;
+			const draft = getDraft(sessionId, isNewSession);
 			if (textareaRef.current) {
 				textareaRef.current.value = draft;
 			}
 		}
-	}, [sessionId, textareaRef]);
+	}, [sessionId, isNewSession, textareaRef]);
 
 	// Save draft on input (debounced) - attach to textarea
 	useEffect(() => {
@@ -195,7 +214,7 @@ export function usePromptHistory({
 				clearTimeout(draftTimerRef.current);
 			}
 			draftTimerRef.current = setTimeout(() => {
-				saveDraft(sessionId, textarea.value);
+				saveDraft(sessionId, textarea.value, isNewSession);
 			}, 300);
 		};
 
@@ -206,17 +225,17 @@ export function usePromptHistory({
 				clearTimeout(draftTimerRef.current);
 			}
 		};
-	}, [sessionId, textareaRef]);
+	}, [sessionId, isNewSession, textareaRef]);
 
 	// Load initial draft on mount
 	useEffect(() => {
 		if (textareaRef.current) {
-			const draft = getDraft(sessionId);
+			const draft = getDraft(sessionId, isNewSession);
 			if (draft) {
 				textareaRef.current.value = draft;
 			}
 		}
-	}, [sessionId, textareaRef]);
+	}, [sessionId, isNewSession, textareaRef]);
 
 	// Get current value
 	const getValue = useCallback(() => {
@@ -263,9 +282,9 @@ export function usePromptHistory({
 				return updated;
 			});
 			// Also clear draft after successful submit
-			saveDraft(sessionId, "");
+			saveDraft(sessionId, "", isNewSession);
 		},
-		[sessionId],
+		[sessionId, isNewSession],
 	);
 
 	// Pin a prompt

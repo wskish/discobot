@@ -26,6 +26,8 @@ import { cn } from "@/lib/utils";
 interface PromptInputWithHistoryProps {
 	/** Session ID for persisting history */
 	sessionId: string | null;
+	/** Whether this is a new (unsaved) session */
+	isNewSession?: boolean;
 	/** Submit handler */
 	onSubmit: (message: PromptInputMessage, e: React.FormEvent) => void;
 	/** Input status */
@@ -80,6 +82,7 @@ export const PromptInputWithHistory = React.memo(
 		function PromptInputWithHistory(
 			{
 				sessionId,
+				isNewSession = false,
 				onSubmit,
 				status,
 				isLocked = false,
@@ -112,6 +115,7 @@ export const PromptInputWithHistory = React.memo(
 			} = usePromptHistory({
 				textareaRef,
 				sessionId,
+				isNewSession,
 			});
 
 			// Wrap handleSubmit to also add to history
