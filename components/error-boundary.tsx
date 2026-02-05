@@ -29,23 +29,6 @@ export class ErrorBoundary extends Component<
 		return { hasError: true, error };
 	}
 
-	componentDidMount() {
-		// Set up global error handlers to catch errors outside of React
-		window.addEventListener("error", this.handleGlobalError);
-		window.addEventListener(
-			"unhandledrejection",
-			this.handleUnhandledRejection,
-		);
-	}
-
-	componentWillUnmount() {
-		// Clean up global error handlers
-		window.removeEventListener("error", this.handleGlobalError);
-		window.removeEventListener(
-			"unhandledrejection",
-			this.handleUnhandledRejection,
-		);
-	}
 
 	componentDidCatch(error: Error, errorInfo: ErrorInfo) {
 		console.error("Error caught by ErrorBoundary:", error, errorInfo);
@@ -54,54 +37,6 @@ export class ErrorBoundary extends Component<
 			errorInfo,
 		});
 	}
-
-	// Handle global JavaScript errors (e.g., from event handlers, setTimeout)
-	handleGlobalError = (event: ErrorEvent) => {
-		console.error("Global error caught:", event.error);
-		event.preventDefault(); // Prevent default browser error handling
-
-		this.setState({
-			hasError: true,
-			error: event.error || new Error(event.message),
-			errorInfo: {
-				componentStack: `\nError occurred at:\n  ${event.filename}:${event.lineno}:${event.colno}`,
-			} as ErrorInfo,
-		});
-	};
-
-	// Handle unhandled promise rejections
-	handleUnhandledRejection = (event: PromiseRejectionEvent) => {
-		console.error("Unhandled promise rejection:", event.reason);
-		event.preventDefault(); // Prevent default browser error handling
-
-		// Convert rejection reason to Error if it's not already
-		const error =
-			event.reason instanceof Error
-				? event.reason
-				: new Error(String(event.reason));
-
-		// Build a more detailed component stack with available information
-		let stackInfo = "\nUnhandled Promise Rejection\n";
-
-		// Include the promise's stack trace if available
-		if (error.stack) {
-			stackInfo += `\nStack trace:\n${error.stack}`;
-		}
-
-		// Add promise info if not an Error object
-		if (!(event.reason instanceof Error) && event.reason !== undefined) {
-			stackInfo += `\nRejection reason type: ${typeof event.reason}`;
-			stackInfo += `\nRejection reason: ${JSON.stringify(event.reason, null, 2)}`;
-		}
-
-		this.setState({
-			hasError: true,
-			error,
-			errorInfo: {
-				componentStack: stackInfo,
-			} as ErrorInfo,
-		});
-	};
 
 	handleReload = () => {
 		window.location.reload();
