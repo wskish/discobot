@@ -177,7 +177,8 @@ RUN (useradd -m -s /bin/bash -u 1000 discobot 2>/dev/null \
 
 # Install rustup for discobot user (Rust toolchain manager)
 # Must be done after user creation so rust tools are owned by discobot
-RUN su - discobot -c 'curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable --profile default'
+# Install rustup without any toolchains (users can install toolchains on demand with rustup install)
+RUN su - discobot -c 'curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain none'
 
 # Configure npm global directory in /home/discobot/.npm-global
 # This allows npm install -g to work without root for the discobot user
