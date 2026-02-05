@@ -449,26 +449,62 @@ func (s *SessionService) Initialize(
 	ctx context.Context,
 	sessionID string,
 ) error {
-	// Get session
-	session, err := s.GetSession(ctx, sessionID)
+	// Get session from store (model)
+	sessionModel, err := s.store.GetSessionByID(ctx, sessionID)
 	if err != nil {
 		return fmt.Errorf("session not found: %w", err)
 	}
 
 	// Get workspace info
-	workspace, err := s.store.GetWorkspaceByID(ctx, session.WorkspaceID)
+	workspace, err := s.store.GetWorkspaceByID(ctx, sessionModel.WorkspaceID)
 	if err != nil {
-		s.updateStatusWithEvent(ctx, session.ProjectID, sessionID, model.SessionStatusError, ptrString("workspace not found: "+err.Error()))
+		s.updateStatusWithEvent(ctx, sessionModel.ProjectID, sessionID, model.SessionStatusError, ptrString("workspace not found: "+err.Error()))
 		return fmt.Errorf("workspace not found: %w", err)
 	}
 
-	// Get agent info (optional)
+	// Get agent info (optional, with fallback to default)
 	var agent *model.Agent
-	agent, err = s.store.GetAgentByID(ctx, session.AgentID)
-	if err != nil {
-		s.updateStatusWithEvent(ctx, session.ProjectID, sessionID, model.SessionStatusError, ptrString("The agent used by this session has been deleted. Please create a new session with an available agent."))
-		return fmt.Errorf("session's agent has been deleted")
+	var needsAgentFallback bool
+	var fallbackReason string
+
+	if sessionModel.AgentID == nil {
+		// No agent assigned - try to use default agent
+		needsAgentFallback = true
+		fallbackReason = "no agent assigned"
+	} else {
+		// Try to fetch the assigned agent
+		agent, err = s.store.GetAgentByID(ctx, *sessionModel.AgentID)
+		if err != nil {
+			// Agent not found (deleted) - try to use default agent
+			needsAgentFallback = true
+			fallbackReason = fmt.Sprintf("assigned agent %s not found (deleted)", *sessionModel.AgentID)
+		}
 	}
+
+	// If we need to fallback, try to get and assign the default agent
+	if needsAgentFallback {
+		log.Printf("Session %s: %s, attempting to use default agent", sessionID, fallbackReason)
+
+		defaultAgent, err := s.store.GetDefaultAgent(ctx, sessionModel.ProjectID)
+		if err != nil {
+			// No default agent available - fail with helpful message
+			s.updateStatusWithEvent(ctx, sessionModel.ProjectID, sessionID, model.SessionStatusError,
+				ptrString("This session has no agent assigned and no default agent is configured. Please create a new session with an available agent."))
+			return fmt.Errorf("session has no valid agent and no default agent is configured")
+		}
+
+		// Update session to use default agent
+		log.Printf("Session %s: assigning default agent %s (%s)", sessionID, defaultAgent.ID, defaultAgent.Name)
+		sessionModel.AgentID = &defaultAgent.ID
+		if err := s.store.UpdateSession(ctx, sessionModel); err != nil {
+			return fmt.Errorf("failed to update session with default agent: %w", err)
+		}
+
+		agent = defaultAgent
+	}
+
+	// Convert to service Session for initializeSync
+	session := s.mapSession(sessionModel)
 
 	// Run initialization synchronously
 	return s.initializeSync(ctx, session.ProjectID, session, workspace, agent)
