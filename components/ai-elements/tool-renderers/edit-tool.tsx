@@ -1,5 +1,8 @@
+import { parsePatchFiles } from "@pierre/diffs";
+import { FileDiff } from "@pierre/diffs/react";
+import * as Diff from "diff";
 import { CheckCircle, FileEdit, XCircle } from "lucide-react";
-import { lazy, Suspense } from "react";
+import { useMemo } from "react";
 import {
 	ToolInput as DefaultToolInput,
 	ToolOutput as DefaultToolOutput,
@@ -12,17 +15,63 @@ import {
 	validateEditOutput,
 } from "../tool-schemas/edit-schema";
 
-// Lazy load CodeBlock
-const CodeBlock = lazy(() =>
-	import("../code-block").then((mod) => ({ default: mod.CodeBlock })),
-);
+/**
+ * Renders a diff view using @pierre/diffs
+ */
+function DiffView({
+	oldString,
+	newString,
+	fileName,
+}: {
+	oldString: string;
+	newString: string;
+	fileName: string;
+}) {
+	const fileDiff = useMemo(() => {
+		// Create a unified diff patch using the diff library
+		const patch = Diff.createPatch(
+			fileName,
+			oldString,
+			newString,
+			"original",
+			"modified",
+		);
+
+		// Parse the patch using @pierre/diffs
+		const parsedPatches = parsePatchFiles(patch);
+
+		// Return the first file diff (there should only be one)
+		return parsedPatches[0]?.files[0];
+	}, [oldString, newString, fileName]);
+
+	if (!fileDiff) {
+		return (
+			<div className="rounded-md border border-border bg-muted/20 p-3 text-muted-foreground text-sm">
+				No changes to display
+			</div>
+		);
+	}
+
+	return (
+		<div className="rounded-md border border-border overflow-hidden [&_pre]:!m-0 [&_pre]:!border-0">
+			<FileDiff
+				fileDiff={fileDiff}
+				options={{
+					diffStyle: "unified",
+					overflow: "wrap",
+					disableFileHeader: true,
+				}}
+			/>
+		</div>
+	);
+}
 
 /**
  * EditToolRenderer - Optimized renderer for Edit tool
  *
  * Displays file edit operations with:
  * - File path
- * - Before/after snippets
+ * - Unified diff view showing changes
  * - Replacement count
  * - Success indicator
  */
@@ -82,43 +131,16 @@ export default function EditToolRenderer({
 				</div>
 			</div>
 
-			{/* Changes Section */}
-			<div className="space-y-3">
-				{/* Old String */}
-				<div className="space-y-1">
-					<h5 className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
-						Replace
-					</h5>
-					<Suspense
-						fallback={
-							<div className="h-20 animate-pulse rounded-md bg-muted/50" />
-						}
-					>
-						<CodeBlock
-							code={validInput.old_string}
-							// biome-ignore lint/suspicious/noExplicitAny: CodeBlock requires BundledLanguage type
-							language={"text" as any}
-						/>
-					</Suspense>
-				</div>
-
-				{/* New String */}
-				<div className="space-y-1">
-					<h5 className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
-						With
-					</h5>
-					<Suspense
-						fallback={
-							<div className="h-20 animate-pulse rounded-md bg-muted/50" />
-						}
-					>
-						<CodeBlock
-							code={validInput.new_string}
-							// biome-ignore lint/suspicious/noExplicitAny: CodeBlock requires BundledLanguage type
-							language={"text" as any}
-						/>
-					</Suspense>
-				</div>
+			{/* Diff Section */}
+			<div className="space-y-2">
+				<h5 className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
+					Changes
+				</h5>
+				<DiffView
+					oldString={validInput.old_string}
+					newString={validInput.new_string}
+					fileName={fileName}
+				/>
 			</div>
 
 			{/* Result Section */}
