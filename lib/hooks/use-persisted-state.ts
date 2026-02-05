@@ -70,4 +70,16 @@ export const STORAGE_KEYS = {
 	CONSOLIDATED_DIFF_EXPANDED: "discobot:consolidatedDiffExpanded",
 	CONSOLIDATED_DIFF_REVIEWED: "discobot:consolidatedDiffReviewed",
 	CONSOLIDATED_DIFF_STYLE: "discobot:consolidatedDiffStyle",
+	// Per-session chat width (use getSessionStorageKey to create full key)
+	CHAT_WIDTH: "discobot:chatWidth",
 } as const;
+
+/**
+ * Helper to create a per-session storage key
+ */
+export function getSessionStorageKey(
+	baseKey: string,
+	sessionId: string | null,
+): string {
+	return sessionId ? `${baseKey}:${sessionId}` : baseKey;
+}

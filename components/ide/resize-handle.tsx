@@ -4,18 +4,23 @@ import { cn } from "@/lib/utils";
 interface ResizeHandleProps {
 	onResize: (delta: number) => void;
 	orientation?: "horizontal" | "vertical";
+	side?: "left" | "right" | "top" | "bottom";
 	className?: string;
 }
 
 export function ResizeHandle({
 	onResize,
 	orientation = "horizontal",
+	side,
 	className,
 }: ResizeHandleProps) {
 	const [isDragging, setIsDragging] = React.useState(false);
 	const startPosRef = React.useRef(0);
 
 	const isVertical = orientation === "vertical";
+
+	// Determine which side to position the handle
+	const effectiveSide = side || (isVertical ? "right" : "bottom");
 
 	const handleMouseDown = (e: React.MouseEvent) => {
 		e.preventDefault();
@@ -49,6 +54,14 @@ export function ResizeHandle({
 	const decreaseKey = isVertical ? "ArrowLeft" : "ArrowUp";
 	const increaseKey = isVertical ? "ArrowRight" : "ArrowDown";
 
+	// Position classes based on side
+	const positionClasses = {
+		left: "top-0 bottom-0 -left-0.5 w-1 hover:w-2 cursor-col-resize",
+		right: "top-0 bottom-0 -right-0.5 w-1 hover:w-2 cursor-col-resize",
+		top: "left-0 right-0 -top-0.5 h-1 hover:h-2 cursor-row-resize",
+		bottom: "left-0 right-0 -bottom-0.5 h-1 hover:h-2 cursor-row-resize",
+	};
+
 	return (
 		// biome-ignore lint/a11y/useSemanticElements: Custom resize handle requires div for drag styling
 		<div
@@ -60,9 +73,7 @@ export function ResizeHandle({
 			tabIndex={0}
 			className={cn(
 				"absolute z-10 transition-colors",
-				isVertical
-					? "top-0 bottom-0 -right-0.5 w-1 hover:w-2 cursor-col-resize"
-					: "left-0 right-0 -bottom-0.5 h-1 hover:h-2 cursor-row-resize",
+				positionClasses[effectiveSide],
 				"hover:bg-primary/20",
 				isDragging && "bg-primary/30",
 				isDragging && (isVertical ? "w-2" : "h-2"),
