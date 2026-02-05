@@ -233,29 +233,52 @@ export const Persona: FC<PersonaProps> = memo(
 			onStop: stableCallbacks.onStop,
 		});
 
-		const listeningInput = useStateMachineInput(
+		const listeningInputRef =
+			useRef<ReturnType<typeof useStateMachineInput>>(null);
+		const thinkingInputRef =
+			useRef<ReturnType<typeof useStateMachineInput>>(null);
+		const speakingInputRef =
+			useRef<ReturnType<typeof useStateMachineInput>>(null);
+		const asleepInputRef =
+			useRef<ReturnType<typeof useStateMachineInput>>(null);
+
+		listeningInputRef.current = useStateMachineInput(
 			rive,
 			stateMachine,
 			"listening",
 		);
-		const thinkingInput = useStateMachineInput(rive, stateMachine, "thinking");
-		const speakingInput = useStateMachineInput(rive, stateMachine, "speaking");
-		const asleepInput = useStateMachineInput(rive, stateMachine, "asleep");
+		thinkingInputRef.current = useStateMachineInput(
+			rive,
+			stateMachine,
+			"thinking",
+		);
+		speakingInputRef.current = useStateMachineInput(
+			rive,
+			stateMachine,
+			"speaking",
+		);
+		asleepInputRef.current = useStateMachineInput(rive, stateMachine, "asleep");
 
 		useEffect(() => {
-			if (listeningInput) {
-				listeningInput.value = state === "listening";
+			// Rive library API requires mutating the input value property
+			const listening = listeningInputRef.current;
+			const thinking = thinkingInputRef.current;
+			const speaking = speakingInputRef.current;
+			const asleep = asleepInputRef.current;
+
+			if (listening) {
+				listening.value = state === "listening";
 			}
-			if (thinkingInput) {
-				thinkingInput.value = state === "thinking";
+			if (thinking) {
+				thinking.value = state === "thinking";
 			}
-			if (speakingInput) {
-				speakingInput.value = state === "speaking";
+			if (speaking) {
+				speaking.value = state === "speaking";
 			}
-			if (asleepInput) {
-				asleepInput.value = state === "asleep";
+			if (asleep) {
+				asleep.value = state === "asleep";
 			}
-		}, [state, listeningInput, thinkingInput, speakingInput, asleepInput]);
+		}, [state]);
 
 		const Component = source.hasModel ? PersonaWithModel : PersonaWithoutModel;
 

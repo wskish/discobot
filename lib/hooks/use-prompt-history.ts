@@ -184,6 +184,13 @@ export function usePromptHistory({
 	const draftTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 	const prevSessionRef = useRef(sessionId);
 	const prevIsNewRef = useRef(isNewSession);
+	// Create a local ref to track the textarea without treating it as a prop mutation
+	const localTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+	// Sync the passed-in ref with our local ref
+	useEffect(() => {
+		localTextareaRef.current = textareaRef.current;
+	}, [textareaRef]);
 
 	// Load draft when sessionId or isNewSession changes
 	useEffect(() => {
@@ -198,11 +205,12 @@ export function usePromptHistory({
 			prevSessionRef.current = sessionId;
 			prevIsNewRef.current = isNewSession;
 			const draft = getDraft(sessionId, isNewSession);
-			if (textareaRef.current) {
-				textareaRef.current.value = draft;
+			const textarea = localTextareaRef.current;
+			if (textarea) {
+				textarea.value = draft;
 			}
 		}
-	}, [sessionId, isNewSession, textareaRef]);
+	}, [sessionId, isNewSession]);
 
 	// Save draft on input (debounced) - attach to textarea
 	useEffect(() => {
@@ -229,13 +237,14 @@ export function usePromptHistory({
 
 	// Load initial draft on mount
 	useEffect(() => {
-		if (textareaRef.current) {
+		const textarea = localTextareaRef.current;
+		if (textarea) {
 			const draft = getDraft(sessionId, isNewSession);
 			if (draft) {
-				textareaRef.current.value = draft;
+				textarea.value = draft;
 			}
 		}
-	}, [sessionId, isNewSession, textareaRef]);
+	}, [sessionId, isNewSession]);
 
 	// Get current value
 	const getValue = useCallback(() => {
@@ -261,13 +270,14 @@ export function usePromptHistory({
 	// Select history item
 	const onSelectHistory = useCallback(
 		(prompt: string) => {
-			if (textareaRef.current) {
-				textareaRef.current.value = prompt;
-				textareaRef.current.focus();
+			const textarea = localTextareaRef.current;
+			if (textarea) {
+				textarea.value = prompt;
+				textarea.focus();
 			}
 			closeHistory();
 		},
-		[textareaRef, closeHistory],
+		[closeHistory],
 	);
 
 	// Add to history and clear draft

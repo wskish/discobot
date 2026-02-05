@@ -619,19 +619,25 @@ export const PromptInput = ({
 		};
 	}, [add, globalDrop]);
 
-	useEffect(
-		() => () => {
-			if (!usingProvider) {
-				for (const f of filesRef.current) {
+	// Cleanup URLs on unmount only
+	useEffect(() => {
+		// Capture the ref at mount to check at cleanup time
+		const filesRefCaptured = filesRef;
+		const providerRef = { current: usingProvider };
+
+		// Update ref when usingProvider changes
+		providerRef.current = usingProvider;
+
+		return () => {
+			if (!providerRef.current) {
+				for (const f of filesRefCaptured.current) {
 					if (f.url) {
 						URL.revokeObjectURL(f.url);
 					}
 				}
 			}
-		},
-		// eslint-disable-next-line react-hooks/exhaustive-deps -- cleanup only on unmount; filesRef always current
-		[usingProvider],
-	);
+		};
+	}, [usingProvider]);
 
 	const handleChange: ChangeEventHandler<HTMLInputElement> = (event) => {
 		if (event.currentTarget.files) {

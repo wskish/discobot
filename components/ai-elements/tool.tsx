@@ -11,7 +11,6 @@ import {
 import type { ComponentProps, ReactNode } from "react";
 import { isValidElement, lazy, Suspense } from "react";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import {
 	Collapsible,
 	CollapsibleContent,
@@ -144,18 +143,28 @@ export const ToolHeader = ({
 			</div>
 			<div className="flex items-center gap-2">
 				{onToggleRaw && (
-					<Button
-						variant="ghost"
-						size="icon"
-						className="size-7 opacity-0 transition-opacity group-data-[state=open]:opacity-100"
-						onClick={(e) => {
-							e.stopPropagation();
-							onToggleRaw();
-						}}
-						title={isRaw ? "Show optimized view" : "Show raw view"}
-					>
-						<CodeIcon className="size-4" />
-					</Button>
+					<>
+						{/* biome-ignore lint/a11y/useSemanticElements: Cannot use button element as it would be nested inside CollapsibleTrigger button */}
+						<span
+							role="button"
+							tabIndex={0}
+							className="inline-flex size-7 items-center justify-center rounded-md opacity-0 transition-opacity hover:bg-accent hover:text-accent-foreground group-data-[state=open]:opacity-100"
+							onClick={(e) => {
+								e.stopPropagation();
+								onToggleRaw();
+							}}
+							onKeyDown={(e) => {
+								if (e.key === "Enter" || e.key === " ") {
+									e.preventDefault();
+									e.stopPropagation();
+									onToggleRaw();
+								}
+							}}
+							title={isRaw ? "Show optimized view" : "Show raw view"}
+						>
+							<CodeIcon className="size-4" />
+						</span>
+					</>
 				)}
 				<ChevronDownIcon className="size-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
 			</div>

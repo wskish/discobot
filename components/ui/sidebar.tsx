@@ -78,13 +78,16 @@ function SidebarProvider({
 			} else {
 				_setOpen(openState);
 			}
-
-			// This sets the cookie to keep the sidebar state.
-			// biome-ignore lint/suspicious/noDocumentCookie: Intentional cookie for sidebar state persistence
-			document.cookie = `${SIDEBAR_COOKIE_NAME}=${openState}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE}`;
 		},
 		[setOpenProp, open],
 	);
+
+	// Sync sidebar state to cookie
+	React.useEffect(() => {
+		// This sets the cookie to keep the sidebar state.
+		// biome-ignore lint/suspicious/noDocumentCookie: Intentional cookie for sidebar state persistence
+		document.cookie = `${SIDEBAR_COOKIE_NAME}=${open}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE}`;
+	}, [open]);
 
 	// Helper to toggle the sidebar.
 	// biome-ignore lint/correctness/useExhaustiveDependencies: setOpenMobile is stable but included for clarity
