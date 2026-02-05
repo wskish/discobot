@@ -33,6 +33,7 @@
 				}
 			]
 		},
-		"shell:allow-kill"
+		"shell:allow-kill",
+		"window-state:default"
 	]
 }

@@ -151,13 +151,40 @@ export function Header({ leftSidebarOpen, onToggleSidebar }: HeaderProps) {
 		setConfirmDeleteSessionId(null);
 	}, []);
 
-	// Detect macOS for window control placement
+	// Detect macOS for window control placement and fullscreen state
 	const [isMac, setIsMac] = React.useState(false);
+	const [isFullscreen, setIsFullscreen] = React.useState(false);
 	React.useEffect(() => {
 		if (!isTauri()) return;
-		import("@tauri-apps/plugin-os").then(({ platform }) => {
-			setIsMac(platform() === "macos");
-		});
+
+		let cleanup: (() => void) | undefined;
+
+		const init = async () => {
+			const { platform } = await import("@tauri-apps/plugin-os");
+			const { getCurrentWindow } = await import("@tauri-apps/api/window");
+
+			const isMacOS = platform() === "macos";
+			setIsMac(isMacOS);
+
+			if (isMacOS) {
+				// Check initial fullscreen state
+				const fullscreen = await getCurrentWindow().isFullscreen();
+				setIsFullscreen(fullscreen);
+
+				// Listen for fullscreen changes (fires on resize when entering/exiting fullscreen)
+				const unlisten = await getCurrentWindow().onResized(async () => {
+					const fs = await getCurrentWindow().isFullscreen();
+					setIsFullscreen(fs);
+				});
+				cleanup = unlisten;
+			}
+		};
+
+		init();
+
+		return () => {
+			cleanup?.();
+		};
 	}, []);
 
 	return (
@@ -168,8 +195,8 @@ export function Header({ leftSidebarOpen, onToggleSidebar }: HeaderProps) {
 				data-tauri-drag-region
 			/>
 			<div className="flex items-center gap-2 min-w-0 relative">
-				{/* macOS window controls on the left */}
-				{isTauri() && isMac && <WindowControls />}
+				{/* Spacer for macOS native traffic lights (hidden in fullscreen) */}
+				{isTauri() && isMac && !isFullscreen && <div className="w-14" />}
 				<Button
 					variant="ghost"
 					size="icon"
@@ -344,7 +371,7 @@ export function Header({ leftSidebarOpen, onToggleSidebar }: HeaderProps) {
 					</>
 				)}
 			</div>
-			<div className="flex items-center gap-1 shrink-0 relative">
+			<div className="flex items-center gap-1 shrink-0 relative h-full">
 				<Button
 					variant="ghost"
 					size="icon"
@@ -355,9 +382,10 @@ export function Header({ leftSidebarOpen, onToggleSidebar }: HeaderProps) {
 					<Key className="h-4 w-4" />
 					<span className="sr-only">API Credentials</span>
 				</Button>
-				<ThemeToggle className="tauri-no-drag" />
-				{/* Windows/Linux window controls on the right */}
-				{isTauri() && !isMac && <WindowControls />}
+				{/* Hide theme toggle on macOS Tauri (follows system theme) */}
+				{!(isTauri() && isMac) && <ThemeToggle className="tauri-no-drag" />}
+				{/* Windows/Linux window controls on the right (macOS uses native) */}
+				{isTauri() && <WindowControls />}
 			</div>
 		</header>
 	);

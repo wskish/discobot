@@ -20,6 +20,12 @@
 	animation: spin 1s linear infinite;
 }
 
+/* Disable macOS/Safari rubber band bounce effect */
+html,
+body {
+	overscroll-behavior: none;
+}
+
 /* Hide scrollbars while allowing scrolling */
 .scrollbar-none {
 	scrollbar-width: none;

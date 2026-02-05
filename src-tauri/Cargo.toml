@@ -10,14 +10,15 @@ name = "discobot_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
-tauri-build = { version = "2", features = [] }
+tauri-build = { version = "2.5.5", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = ["tray-icon", "devtools"] }
+tauri = { version = "2.10.2", features = ["tray-icon", "devtools"] }
 tauri-plugin-opener = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-tauri-plugin-os = "2.3.2"
-tauri-plugin-single-instance = "2.3.7"
-tauri-plugin-shell = "2.3.4"
+tauri-plugin-os = "2"
+tauri-plugin-single-instance = "2"
+tauri-plugin-shell = "2.3.5"
+tauri-plugin-window-state = "2"
 rand = "0.9.2"

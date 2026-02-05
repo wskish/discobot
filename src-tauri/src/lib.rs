@@ -1,5 +1,9 @@
+#[cfg(not(debug_assertions))]
 use std::net::TcpListener;
 use std::sync::Mutex;
+
+#[cfg(not(debug_assertions))]
+use tauri_plugin_shell::ShellExt;
 
 use rand::Rng;
 use tauri::{
@@ -7,18 +11,19 @@ use tauri::{
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     Manager, WindowEvent,
 };
-use tauri_plugin_shell::{process::CommandChild, ShellExt};
+use tauri_plugin_shell::process::CommandChild;
+use tauri_plugin_window_state::StateFlags;
+
+fn window_state_flags() -> StateFlags {
+    // Save all state except decorations (we manage those ourselves)
+    StateFlags::all() - StateFlags::DECORATIONS
+}
 
 // State to hold the server port, secret, and process
 struct ServerState {
     port: u16,
     secret: String,
     process: Option<CommandChild>,
-}
-
-#[tauri::command]
-fn greet(name: &str) -> String {
-    format!("Hello, {}! You've been greeted from Rust!", name)
 }
 
 #[tauri::command]
@@ -39,6 +44,25 @@ fn show_window(app: &tauri::AppHandle) {
     }
 }
 
+fn toggle_window(app: &tauri::AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        // Check if window is visible and focused
+        let is_visible = window.is_visible().unwrap_or(false);
+        let is_focused = window.is_focused().unwrap_or(false);
+
+        if is_visible && is_focused {
+            // Window is visible and focused, hide it
+            let _ = window.hide();
+        } else {
+            // Window is hidden or not focused, show and focus it
+            let _ = window.show();
+            let _ = window.unminimize();
+            let _ = window.set_focus();
+        }
+    }
+}
+
+#[cfg(not(debug_assertions))]
 fn find_available_port() -> u16 {
     TcpListener::bind("127.0.0.1:0")
         .expect("Failed to bind to find available port")
@@ -95,6 +119,11 @@ pub fn run() {
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             show_window(app);
         }))
+        .plugin(
+            tauri_plugin_window_state::Builder::new()
+                .with_state_flags(window_state_flags())
+                .build(),
+        )
         .manage(Mutex::new(ServerState {
             port,
             secret: secret.clone(),
@@ -155,7 +184,7 @@ pub fn run() {
                         ..
                     } = event
                     {
-                        show_window(tray.app_handle());
+                        toggle_window(tray.app_handle());
                     }
                 })
                 .build(app)?;
@@ -168,7 +197,7 @@ pub fn run() {
                 api.prevent_close();
             }
         })
-        .invoke_handler(tauri::generate_handler![greet, get_server_port, get_server_secret])
+        .invoke_handler(tauri::generate_handler![get_server_port, get_server_secret])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
