@@ -6,7 +6,7 @@ import { createValidator, type ToolSchema } from "./index";
  */
 export const GlobToolInputSchema = z.object({
 	/** Glob pattern to match files (e.g., "\*\*\/\*.ts", "src/\*\*\/\*.tsx") */
-	pattern: z.string(),
+	pattern: z.string().optional(),
 	/** Directory to search in (optional) */
 	path: z.string().optional(),
 });

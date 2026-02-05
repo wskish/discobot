@@ -6,16 +6,18 @@ import { createValidator, type ToolSchema } from "./index";
  */
 export const TodoWriteToolInputSchema = z.object({
 	/** Array of todos with status and content */
-	todos: z.array(
-		z.object({
-			/** Todo description (imperative form) */
-			content: z.string(),
-			/** Todo status: pending, in_progress, or completed */
-			status: z.enum(["pending", "in_progress", "completed"]),
-			/** Active form of the content (present continuous) */
-			activeForm: z.string(),
-		}),
-	),
+	todos: z
+		.array(
+			z.object({
+				/** Todo description (imperative form) */
+				content: z.string().optional(),
+				/** Todo status: pending, in_progress, or completed */
+				status: z.enum(["pending", "in_progress", "completed"]).optional(),
+				/** Active form of the content (present continuous) */
+				activeForm: z.string().optional(),
+			}),
+		)
+		.optional(),
 });
 
 /**

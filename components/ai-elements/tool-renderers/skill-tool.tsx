@@ -29,14 +29,41 @@ export default function SkillToolRenderer({
 	input,
 	output,
 	errorText,
+	state,
 }: ToolRendererProps<SkillToolInput, SkillToolOutput>) {
+	// Check if streaming
+	const isStreaming =
+		state === "input-streaming" || state === "input-available";
+
+	// During streaming, input may be undefined or incomplete - handle gracefully
+	if (!input || typeof input !== "object") {
+		return (
+			<div className="p-4 text-muted-foreground text-sm">
+				{isStreaming ? "Loading..." : "No input data"}
+			</div>
+		);
+	}
+
 	// Validate input
 	const inputValidation = validateSkillInput(input);
 
 	if (!inputValidation.success) {
-		console.warn(
-			`Skill tool input validation failed: ${inputValidation.error}`,
-		);
+		// During streaming, validation may fail due to incomplete input - don't log spam
+		if (!isStreaming) {
+			console.warn(
+				`Skill tool input validation failed: ${inputValidation.error}`,
+			);
+		}
+
+		// Show loading state during streaming, fallback to generic display otherwise
+		if (isStreaming) {
+			return (
+				<div className="p-4 text-muted-foreground text-sm">
+					Loading skill details...
+				</div>
+			);
+		}
+
 		return (
 			<>
 				<DefaultToolInput input={input} />

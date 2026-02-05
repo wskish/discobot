@@ -6,7 +6,7 @@ import { createValidator, type ToolSchema } from "./index";
  */
 export const ReadToolInputSchema = z.object({
 	/** Path to the file to read */
-	file_path: z.string(),
+	file_path: z.string().optional(),
 	/** Number of lines to read (optional, for partial reads) */
 	limit: z.number().optional(),
 	/** Line offset to start reading from (optional) */

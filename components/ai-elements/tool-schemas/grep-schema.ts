@@ -6,7 +6,7 @@ import { createValidator, type ToolSchema } from "./index";
  */
 export const GrepToolInputSchema = z.object({
 	/** Regular expression pattern to search for */
-	pattern: z.string(),
+	pattern: z.string().optional(),
 	/** File or directory to search in */
 	path: z.string().optional(),
 	/** Glob pattern to filter files (e.g. "*.js") */

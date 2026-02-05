@@ -25,14 +25,41 @@ export default function TodoWriteToolRenderer({
 	input,
 	output,
 	errorText,
+	state,
 }: ToolRendererProps<TodoWriteToolInput, TodoWriteToolOutput>) {
+	// Check if streaming
+	const isStreaming =
+		state === "input-streaming" || state === "input-available";
+
+	// During streaming, input may be undefined or incomplete - handle gracefully
+	if (!input || typeof input !== "object") {
+		return (
+			<div className="p-4 text-muted-foreground text-sm">
+				{isStreaming ? "Loading..." : "No input data"}
+			</div>
+		);
+	}
+
 	// Validate input
 	const inputValidation = validateTodoWriteInput(input);
 
 	if (!inputValidation.success) {
-		console.warn(
-			`TodoWrite tool input validation failed: ${inputValidation.error}`,
-		);
+		// During streaming, validation may fail due to incomplete input - don't log spam
+		if (!isStreaming) {
+			console.warn(
+				`TodoWrite tool input validation failed: ${inputValidation.error}`,
+			);
+		}
+
+		// Show loading state during streaming, fallback to generic display otherwise
+		if (isStreaming) {
+			return (
+				<div className="p-4 text-muted-foreground text-sm">
+					Loading todo list...
+				</div>
+			);
+		}
+
 		return (
 			<>
 				<DefaultToolInput input={input} />
@@ -43,6 +70,15 @@ export default function TodoWriteToolRenderer({
 
 	// biome-ignore lint/style/noNonNullAssertion: Validated above
 	const validInput = inputValidation.data!;
+
+	// Check if todos array exists
+	if (!validInput.todos || validInput.todos.length === 0) {
+		return (
+			<div className="p-4 text-muted-foreground text-sm">
+				{isStreaming ? "Loading todo list..." : "No todos provided"}
+			</div>
+		);
+	}
 
 	// Validate output if present
 	const outputValidation = output ? validateTodoWriteOutput(output) : null;
@@ -100,65 +136,76 @@ export default function TodoWriteToolRenderer({
 			<div className="space-y-2">
 				{validInput.todos.map(
 					(
-						todo: { content: string; status: string; activeForm: string },
+						todo: {
+							content?: string;
+							status?: string;
+							activeForm?: string;
+						},
 						_idx: number,
-					) => (
-						<div
-							key={`${todo.content}-${todo.status}`}
-							className={cn(
-								"flex items-start gap-3 rounded-md border p-3 transition-colors",
-								todo.status === "completed"
-									? "border-green-200 bg-green-50 dark:border-green-900 dark:bg-green-950/20"
-									: todo.status === "in_progress"
-										? "border-blue-200 bg-blue-50 dark:border-blue-900 dark:bg-blue-950/20"
-										: "border-border bg-muted/30",
-							)}
-						>
-							{/* Status Icon */}
-							<div className="shrink-0 pt-0.5">
-								{todo.status === "completed" ? (
-									<CheckCircle className="size-4 text-green-600 dark:text-green-400" />
-								) : todo.status === "in_progress" ? (
-									<Clock className="size-4 text-blue-600 dark:text-blue-400" />
-								) : (
-									<Circle className="size-4 text-muted-foreground" />
-								)}
-							</div>
+					) => {
+						// Provide defaults for optional fields
+						const content = todo.content || "";
+						const status = todo.status || "pending";
+						const activeForm = todo.activeForm || "";
 
-							{/* Todo Content */}
-							<div className="flex-1">
-								<p
-									className={cn(
-										"text-foreground text-sm",
-										todo.status === "completed" && "line-through",
-									)}
-								>
-									{todo.content}
-								</p>
-								{todo.activeForm &&
-									todo.activeForm !== todo.content &&
-									todo.status === "in_progress" && (
-										<p className="mt-1 italic text-muted-foreground text-xs">
-											{todo.activeForm}
-										</p>
-									)}
-							</div>
-
-							{/* Status Badge */}
-							<span
+						return (
+							<div
+								key={`${content}-${status}`}
 								className={cn(
-									"shrink-0 rounded-full px-2 py-0.5 text-xs",
-									todo.status === "completed"
-										? "bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-400"
-										: todo.status === "in_progress"
-											? "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-400"
-											: "bg-muted text-muted-foreground",
+									"flex items-start gap-3 rounded-md border p-3 transition-colors",
+									status === "completed"
+										? "border-green-200 bg-green-50 dark:border-green-900 dark:bg-green-950/20"
+										: status === "in_progress"
+											? "border-blue-200 bg-blue-50 dark:border-blue-900 dark:bg-blue-950/20"
+											: "border-border bg-muted/30",
 								)}
 							>
-								{todo.status.replace("_", " ")}
-							</span>
-						</div>
-					),
+								{/* Status Icon */}
+								<div className="shrink-0 pt-0.5">
+									{status === "completed" ? (
+										<CheckCircle className="size-4 text-green-600 dark:text-green-400" />
+									) : status === "in_progress" ? (
+										<Clock className="size-4 text-blue-600 dark:text-blue-400" />
+									) : (
+										<Circle className="size-4 text-muted-foreground" />
+									)}
+								</div>
+
+								{/* Todo Content */}
+								<div className="flex-1">
+									<p
+										className={cn(
+											"text-foreground text-sm",
+											status === "completed" && "line-through",
+										)}
+									>
+										{content}
+									</p>
+									{activeForm &&
+										activeForm !== content &&
+										status === "in_progress" && (
+											<p className="mt-1 italic text-muted-foreground text-xs">
+												{activeForm}
+											</p>
+										)}
+								</div>
+
+								{/* Status Badge */}
+								<span
+									className={cn(
+										"shrink-0 rounded-full px-2 py-0.5 text-xs",
+										status === "completed"
+											? "bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-400"
+											: status === "in_progress"
+												? "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-400"
+												: "bg-muted text-muted-foreground",
+									)}
+								>
+									{status.replace("_", " ")}
+								</span>
+							</div>
+						);
+					},
 				)}
 			</div>
 

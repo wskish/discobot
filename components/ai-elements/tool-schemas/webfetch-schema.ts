@@ -8,9 +8,9 @@ import { createValidator, type ToolSchema } from "./index";
  */
 export const WebFetchToolInputSchema = z.object({
 	/** The URL to fetch content from */
-	url: z.string(),
+	url: z.string().optional(),
 	/** The prompt describing what information to extract */
-	prompt: z.string(),
+	prompt: z.string().optional(),
 });
 
 /**

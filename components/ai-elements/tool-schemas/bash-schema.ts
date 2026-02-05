@@ -6,7 +6,7 @@ import { createValidator, type ToolSchema } from "./index";
  */
 export const BashToolInputSchema = z.object({
 	/** The shell command to execute */
-	command: z.string(),
+	command: z.string().optional(),
 	/** Optional description of what this command does */
 	description: z.string().optional(),
 	/** Optional timeout in milliseconds */

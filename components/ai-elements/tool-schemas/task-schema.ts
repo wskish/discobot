@@ -8,11 +8,11 @@ import { createValidator, type ToolSchema } from "./index";
  */
 export const TaskToolInputSchema = z.object({
 	/** Type of specialized agent */
-	subagent_type: z.string(),
+	subagent_type: z.string().optional(),
 	/** The task for the agent to perform */
-	prompt: z.string(),
+	prompt: z.string().optional(),
 	/** Short description (3-5 words) */
-	description: z.string(),
+	description: z.string().optional(),
 	/** Optional model to use */
 	model: z.enum(["sonnet", "opus", "haiku"]).optional(),
 	/** Maximum number of turns */

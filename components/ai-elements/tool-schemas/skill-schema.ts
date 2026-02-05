@@ -8,7 +8,7 @@ import { createValidator, type ToolSchema } from "./index";
  */
 export const SkillToolInputSchema = z.object({
 	/** The skill name to execute */
-	skill: z.string(),
+	skill: z.string().optional(),
 	/** Optional arguments for the skill */
 	args: z.string().optional(),
 });

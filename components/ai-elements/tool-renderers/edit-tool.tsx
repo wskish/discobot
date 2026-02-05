@@ -109,11 +109,39 @@ export default function EditToolRenderer({
 	// Must be called before any early returns (hooks rule)
 	const [isExpanded, setIsExpanded] = useState(!hasError);
 
+	// Check if this tool is currently streaming (must be declared before use)
+	const isStreaming =
+		state === "input-streaming" || state === "input-available";
+
+	// During streaming, input may be undefined or incomplete - handle gracefully
+	if (!input || typeof input !== "object") {
+		return (
+			<div className="p-4 text-muted-foreground text-sm">
+				{isStreaming ? "Loading..." : "No input data"}
+			</div>
+		);
+	}
+
 	// Validate input
 	const inputValidation = validateEditInput(input);
 
 	if (!inputValidation.success) {
-		console.warn(`Edit tool input validation failed: ${inputValidation.error}`);
+		// During streaming, validation may fail due to incomplete input - don't log spam
+		if (!isStreaming) {
+			console.warn(
+				`Edit tool input validation failed: ${inputValidation.error}`,
+			);
+		}
+
+		// Show loading state during streaming, fallback to generic display otherwise
+		if (isStreaming) {
+			return (
+				<div className="p-4 text-muted-foreground text-sm">
+					Loading edit details...
+				</div>
+			);
+		}
+
 		return (
 			<>
 				<DefaultToolInput input={input} />
@@ -127,11 +155,7 @@ export default function EditToolRenderer({
 
 	// Extract file name from path
 	const fileName =
-		validInput.file_path.split("/").pop() || validInput.file_path;
-
-	// Check if this tool is currently streaming
-	const isStreaming =
-		state === "input-streaming" || state === "input-available";
+		validInput.file_path?.split("/").pop() || validInput.file_path || "";
 
 	return (
 		<div className="space-y-4 p-4">
@@ -154,7 +178,7 @@ export default function EditToolRenderer({
 				</div>
 
 				<div className="font-mono text-muted-foreground text-xs">
-					{shortenPath(validInput.file_path)}
+					{validInput.file_path ? shortenPath(validInput.file_path) : ""}
 				</div>
 			</div>
 
@@ -174,7 +198,7 @@ export default function EditToolRenderer({
 						Changes
 					</h5>
 				</button>
-				{isExpanded && (
+				{isExpanded && validInput.old_string && validInput.new_string && (
 					<DiffView
 						oldString={validInput.old_string}
 						newString={validInput.new_string}

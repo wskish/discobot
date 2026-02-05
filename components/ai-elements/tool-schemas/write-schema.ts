@@ -6,9 +6,9 @@ import { createValidator, type ToolSchema } from "./index";
  */
 export const WriteToolInputSchema = z.object({
 	/** Path to the file to write */
-	file_path: z.string(),
+	file_path: z.string().optional(),
 	/** Content to write to the file */
-	content: z.string(),
+	content: z.string().optional(),
 });
 
 /**

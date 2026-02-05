@@ -6,7 +6,7 @@ import { createValidator, type ToolSchema } from "./index";
  */
 export const WebSearchToolInputSchema = z.object({
 	/** Search query string */
-	query: z.string(),
+	query: z.string().optional(),
 	/** Only include results from these domains */
 	allowed_domains: z.array(z.string()).optional(),
 	/** Exclude results from these domains */

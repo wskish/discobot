@@ -8,11 +8,11 @@ import { createValidator, type ToolSchema } from "./index";
  */
 export const EditToolInputSchema = z.object({
 	/** Path to the file to modify */
-	file_path: z.string(),
+	file_path: z.string().optional(),
 	/** The text to replace */
-	old_string: z.string(),
+	old_string: z.string().optional(),
 	/** The text to replace it with */
-	new_string: z.string(),
+	new_string: z.string().optional(),
 	/** Replace all occurrences (default false) */
 	replace_all: z.boolean().optional().default(false),
 });
