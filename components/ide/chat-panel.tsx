@@ -2,7 +2,6 @@ import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import { AlertCircle } from "lucide-react";
 import * as React from "react";
-import { useDeferredValue } from "react";
 import type { PromptInputMessage } from "@/components/ai-elements/prompt-input";
 import { ChatConversation } from "@/components/ide/chat-conversation";
 import { ChatNewContent } from "@/components/ide/chat-new-content";
@@ -19,6 +18,7 @@ import {
 } from "@/lib/api-constants";
 import { useMessages } from "@/lib/hooks/use-messages";
 import { useSession } from "@/lib/hooks/use-sessions";
+import { useThrottle } from "@/lib/hooks/use-throttle";
 import {
 	getSessionHoverText,
 	getSessionStatusIndicator,
@@ -215,9 +215,9 @@ export function ChatPanel({
 		onFinish: onChatComplete,
 	});
 
-	// Defer message updates to reduce render frequency during rapid streaming
-	// This allows React to batch updates and prioritize user interactions
-	const deferredMessages = useDeferredValue(messages);
+	// Throttle message updates to reduce render frequency during rapid streaming
+	// Updates at most once every 50ms to improve performance during streaming
+	const throttledMessages = useThrottle(messages, 50);
 
 	// Register resumeStream for external use (e.g., after commit starts)
 	React.useEffect(() => {
@@ -274,10 +274,10 @@ export function ChatPanel({
 	const isLoading = chatStatus === "streaming" || chatStatus === "submitted";
 	const hasError = chatStatus === "error";
 
-	// Extract the current plan from deferred messages for consistent UI state
+	// Extract the current plan from throttled messages for consistent UI state
 	const currentPlan = React.useMemo(
-		() => extractLatestPlan(deferredMessages),
-		[deferredMessages],
+		() => extractLatestPlan(throttledMessages),
+		[throttledMessages],
 	);
 
 	// Handle form submission - memoized to prevent PromptInput re-renders
@@ -372,12 +372,12 @@ export function ChatPanel({
 			<div
 				className={cn(
 					"flex flex-col flex-1 overflow-hidden",
-					deferredMessages.length === 0 && "justify-center",
+					throttledMessages.length === 0 && "justify-center",
 				)}
 			>
 				{/* Welcome UI - header and selectors for new sessions */}
 				<ChatNewContent
-					show={!resume && deferredMessages.length === 0}
+					show={!resume && throttledMessages.length === 0}
 					initialWorkspaceId={initialWorkspaceId}
 					onWorkspaceChange={setLocalSelectedWorkspaceId}
 					onAgentChange={setLocalSelectedAgentId}
@@ -385,7 +385,7 @@ export function ChatPanel({
 
 				{/* Conversation area */}
 				<ChatConversation
-					messages={deferredMessages}
+					messages={throttledMessages}
 					messagesLoading={false}
 					isChatActive={isLoading}
 					onCopy={handleCopy}
