@@ -11,6 +11,7 @@ import {
 	validateGlobInput,
 	validateGlobOutput,
 } from "../tool-schemas/glob-schema";
+import { shortenPath } from "./index";
 
 // Lazy load CodeBlock
 const CodeBlock = lazy(() =>
@@ -76,7 +77,8 @@ export default function GlobToolRenderer({
 
 				{validInput.path && (
 					<div className="text-muted-foreground text-xs">
-						in: <span className="font-mono">{validInput.path}</span>
+						in:{" "}
+						<span className="font-mono">{shortenPath(validInput.path)}</span>
 					</div>
 				)}
 			</div>

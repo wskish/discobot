@@ -11,6 +11,7 @@ import {
 	validateGrepInput,
 	validateGrepOutput,
 } from "../tool-schemas/grep-schema";
+import { shortenPath } from "./index";
 
 // Lazy load CodeBlock
 const CodeBlock = lazy(() =>
@@ -87,7 +88,7 @@ export default function GrepToolRenderer({
 					<div className="flex flex-wrap gap-2">
 						{validInput.path && (
 							<span className="rounded-full bg-muted px-2 py-0.5 text-muted-foreground text-xs">
-								path: {validInput.path}
+								path: {shortenPath(validInput.path)}
 							</span>
 						)}
 						{validInput.glob && (

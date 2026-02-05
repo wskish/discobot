@@ -11,6 +11,7 @@ import {
 	validateReadInput,
 	validateReadOutput,
 } from "../tool-schemas/read-schema";
+import { shortenPath } from "./index";
 
 // Lazy load CodeBlock
 const CodeBlock = lazy(() =>
@@ -138,7 +139,7 @@ export default function ReadToolRenderer({
 				</div>
 
 				<div className="font-mono text-muted-foreground text-xs">
-					{validInput.file_path}
+					{shortenPath(validInput.file_path)}
 				</div>
 			</div>
 

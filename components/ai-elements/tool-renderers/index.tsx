@@ -21,6 +21,13 @@ const TaskTool = lazy(() => import("./task-tool"));
 const SkillTool = lazy(() => import("./skill-tool"));
 
 /**
+ * Replace /home/discobot with ~ in file paths for cleaner display
+ */
+export function shortenPath(path: string): string {
+	return path.replace(/^\/home\/discobot/, "~");
+}
+
+/**
  * Tool renderer registry
  *
  * Maps tool names (as they appear in the API) to their specialized

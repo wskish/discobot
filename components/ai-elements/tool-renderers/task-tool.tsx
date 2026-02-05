@@ -11,6 +11,7 @@ import {
 	validateTaskInput,
 	validateTaskOutput,
 } from "../tool-schemas/task-schema";
+import { shortenPath } from "./index";
 
 // Lazy load CodeBlock
 const CodeBlock = lazy(() =>
@@ -123,7 +124,7 @@ export default function TaskToolRenderer({
 						<div className="flex items-center gap-2 rounded-md bg-muted/50 p-2">
 							<FileOutput className="size-4 text-muted-foreground" />
 							<code className="font-mono text-foreground text-xs">
-								{validOutput?.output_file}
+								{shortenPath(validOutput?.output_file)}
 							</code>
 						</div>
 					)}

@@ -12,6 +12,7 @@ import {
 	type WriteToolInput,
 	type WriteToolOutput,
 } from "../tool-schemas/write-schema";
+import { shortenPath } from "./index";
 
 // Lazy load CodeBlock
 const CodeBlock = lazy(() =>
@@ -121,7 +122,7 @@ export default function WriteToolRenderer({
 				</div>
 
 				<div className="font-mono text-muted-foreground text-xs">
-					{validInput.file_path}
+					{shortenPath(validInput.file_path)}
 				</div>
 			</div>
 
