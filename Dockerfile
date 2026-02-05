@@ -141,6 +141,7 @@ FROM ubuntu:24.04 AS runtime
 COPY --from=version-extractor /cli-version /tmp/cli-version
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
     ca-certificates \
     curl \
     docker-buildx \
@@ -173,6 +174,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN (useradd -m -s /bin/bash -u 1000 discobot 2>/dev/null \
         || (userdel -r $(getent passwd 1000 | cut -d: -f1) 2>/dev/null; useradd -m -s /bin/bash -u 1000 discobot) \
         || useradd -m -s /bin/bash discobot)
+
+# Install rustup for discobot user (Rust toolchain manager)
+# Must be done after user creation so rust tools are owned by discobot
+RUN su - discobot -c 'curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable --profile default'
 
 # Configure npm global directory in /home/discobot/.npm-global
 # This allows npm install -g to work without root for the discobot user
@@ -208,10 +213,11 @@ RUN chmod +x /opt/discobot/bin/*
 # Add discobot binaries and npm global bin to PATH
 # Also set NPM_CONFIG_PREFIX for non-login shell contexts
 # Set PNPM_HOME to use persistent storage for pnpm cache/store
+# Add Rust cargo bin for rustc and cargo
 # Claude CLI is installed to /usr/local/bin (already in default PATH)
 ENV NPM_CONFIG_PREFIX="/home/discobot/.npm-global"
 ENV PNPM_HOME="/.data/pnpm"
-ENV PATH="/usr/local/go/bin:/home/discobot/.npm-global/bin:/opt/discobot/bin:${PATH}"
+ENV PATH="/home/discobot/.cargo/bin:/usr/local/go/bin:/home/discobot/.npm-global/bin:/opt/discobot/bin:${PATH}"
 
 WORKDIR /workspace
 
