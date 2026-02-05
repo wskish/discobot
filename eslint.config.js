@@ -14,6 +14,7 @@ export default [
 			".claude/**",
 			".cursor/**",
 			".opencode/**",
+			".next/**",
 			"scripts/**",
 		],
 	},
