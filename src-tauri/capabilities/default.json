@@ -3,6 +3,12 @@
 	"identifier": "default",
 	"description": "Capability for the main window",
 	"windows": ["main"],
+	"remote_urls": [
+		"http://localhost:3000",
+		"http://localhost:3001",
+		"http://*.localhost:3000",
+		"http://*.localhost:3001"
+	],
 	"permissions": [
 		"core:default",
 		"core:window:allow-minimize",
