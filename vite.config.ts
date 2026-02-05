@@ -23,7 +23,11 @@ function reactDevTools(): Plugin {
 
 export default defineConfig({
 	plugins: [
-		react(),
+		react({
+			babel: {
+				plugins: [["babel-plugin-react-compiler", {}]],
+			},
+		}),
 		tailwindcss(),
 		tsconfigPaths({
 			// Only parse root tsconfig, ignore workspace directories
