@@ -3,6 +3,13 @@ use std::net::TcpListener;
 use std::sync::Mutex;
 
 #[cfg(not(debug_assertions))]
+use std::fs::{self, OpenOptions};
+#[cfg(not(debug_assertions))]
+use std::io::Write;
+#[cfg(not(debug_assertions))]
+use std::path::PathBuf;
+
+#[cfg(not(debug_assertions))]
 use tauri_plugin_shell::ShellExt;
 
 use rand::Rng;
@@ -83,7 +90,27 @@ fn generate_secret() -> String {
 }
 
 #[cfg(not(debug_assertions))]
+fn get_log_file_path() -> Result<PathBuf, String> {
+    // Try XDG_STATE_HOME first, fallback to XDG_DATA_HOME, then ~/.local/state
+    let state_dir = dirs::state_dir()
+        .or_else(|| dirs::data_dir())
+        .ok_or_else(|| "Could not determine state directory".to_string())?;
+
+    let log_dir = state_dir.join("discobot").join("logs");
+
+    // Create the directory if it doesn't exist
+    fs::create_dir_all(&log_dir)
+        .map_err(|e| format!("Failed to create log directory: {}", e))?;
+
+    Ok(log_dir.join("server.log"))
+}
+
+#[cfg(not(debug_assertions))]
 fn start_server(app: &tauri::AppHandle, port: u16, secret: &str) -> Result<CommandChild, String> {
+    use tauri_plugin_shell::process::CommandEvent;
+
+    let log_path = get_log_file_path()?;
+
     let sidecar = app
         .shell()
         .sidecar("discobot-server")
@@ -94,9 +121,52 @@ fn start_server(app: &tauri::AppHandle, port: u16, secret: &str) -> Result<Comma
         .env("TAURI", "true")
         .env("SUGGESTIONS_ENABLED", "true");
 
-    let (_, child) = sidecar
+    let (mut rx, child) = sidecar
         .spawn()
         .map_err(|e| format!("Failed to spawn sidecar: {}", e))?;
+
+    // Spawn a task to handle the server output and write to log file
+    tauri::async_runtime::spawn(async move {
+        // Open log file for appending
+        let mut log_file = match OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&log_path)
+        {
+            Ok(file) => file,
+            Err(e) => {
+                eprintln!("Failed to open log file {:?}: {}", log_path, e);
+                return;
+            }
+        };
+
+        // Write a separator to indicate new server start
+        let timestamp = chrono::Local::now().format("%Y-%m-%d %H:%M:%S");
+        let separator = format!("\n\n=== Server started at {} ===\n", timestamp);
+        if let Err(e) = log_file.write_all(separator.as_bytes()) {
+            eprintln!("Failed to write to log file: {}", e);
+        }
+
+        // Process events from the server
+        while let Some(event) = rx.recv().await {
+            let output = match event {
+                CommandEvent::Stdout(line) => format!("[stdout] {}\n", String::from_utf8_lossy(&line)),
+                CommandEvent::Stderr(line) => format!("[stderr] {}\n", String::from_utf8_lossy(&line)),
+                CommandEvent::Error(e) => format!("[error] {}\n", e),
+                CommandEvent::Terminated(payload) => {
+                    format!("[terminated] code: {:?}, signal: {:?}\n", payload.code, payload.signal)
+                }
+                _ => continue,
+            };
+
+            if let Err(e) = log_file.write_all(output.as_bytes()) {
+                eprintln!("Failed to write to log file: {}", e);
+            }
+
+            // Flush to ensure logs are written immediately
+            let _ = log_file.flush();
+        }
+    });
 
     Ok(child)
 }
@@ -134,6 +204,11 @@ pub fn run() {
             // In dev mode, run it separately via `pnpm dev:api`
             #[cfg(not(debug_assertions))]
             {
+                // Show log file location
+                if let Ok(log_path) = get_log_file_path() {
+                    println!("Server logs will be written to: {}", log_path.display());
+                }
+
                 match start_server(app.handle(), port, &secret) {
                     Ok(child) => {
                         let state = app.state::<Mutex<ServerState>>();
