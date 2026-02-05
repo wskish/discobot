@@ -365,12 +365,12 @@ export const TerminalView = React.forwardRef<
 					? "bg-red-500"
 					: "bg-gray-500";
 
-	// Copy SSH location to clipboard
+	// Copy SSH command to clipboard
 	const handleCopySSH = React.useCallback(async () => {
 		if (!sessionId) return;
 
 		const host = getSSHHost();
-		const sshLocation = `${sessionId}@${host}:3333`;
+		const sshLocation = `ssh -p 3333 ${sessionId}@${host}`;
 
 		try {
 			await navigator.clipboard.writeText(sshLocation);
@@ -408,7 +408,7 @@ export const TerminalView = React.forwardRef<
 								size="sm"
 								onClick={handleCopySSH}
 								className="gap-2 h-6 px-2 text-xs"
-								title={`Copy SSH location: ${sessionId}@${getSSHHost()}:3333`}
+								title={`Copy SSH command: ssh -p 3333 ${sessionId}@${getSSHHost()}`}
 							>
 								{copied ? (
 									<Check className="h-3 w-3" />

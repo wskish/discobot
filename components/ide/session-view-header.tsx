@@ -78,7 +78,7 @@ export function SessionViewHeader() {
 		if (!selectedSessionId) return;
 
 		const host = getSSHHost();
-		const sshLocation = `${selectedSessionId}@${host}:3333`;
+		const sshLocation = `ssh -p 3333 ${selectedSessionId}@${host}`;
 
 		try {
 			await navigator.clipboard.writeText(sshLocation);
@@ -372,7 +372,7 @@ export function SessionViewHeader() {
 								size="sm"
 								onClick={handleCopySSH}
 								className="h-6 text-xs gap-1"
-								title={`Copy SSH location: ${selectedSessionId}@${getSSHHost()}:3333`}
+								title={`Copy SSH command: ssh -p 3333 ${selectedSessionId}@${getSSHHost()}`}
 							>
 								{copied ? (
 									<Check className="h-3 w-3" />

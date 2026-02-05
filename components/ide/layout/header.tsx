@@ -286,27 +286,27 @@ export function Header({ leftSidebarOpen, onToggleSidebar }: HeaderProps) {
 							</DropdownMenuTrigger>
 							<DropdownMenuContent align="start" className="w-72">
 								{[...workspaceSessions]
-								.sort(
-									(a, b) =>
-										new Date(b.timestamp).getTime() -
-										new Date(a.timestamp).getTime(),
-								)
-								.map((session) => (
-									<SessionDropdownItem
-										key={session.id}
-										session={session}
-										isSelected={selectedSession?.id === session.id}
-										isConfirming={confirmDeleteSessionId === session.id}
-										onSelect={() => showSession(session.id)}
-										onDeleteClick={(e) =>
-											handleSessionDeleteClick(e, session.id)
-										}
-										onConfirmDelete={(e) =>
-											handleConfirmSessionDelete(e, session.id)
-										}
-										onCancelDelete={handleCancelSessionDelete}
-									/>
-								))}
+									.sort(
+										(a, b) =>
+											new Date(b.timestamp).getTime() -
+											new Date(a.timestamp).getTime(),
+									)
+									.map((session) => (
+										<SessionDropdownItem
+											key={session.id}
+											session={session}
+											isSelected={selectedSession?.id === session.id}
+											isConfirming={confirmDeleteSessionId === session.id}
+											onSelect={() => showSession(session.id)}
+											onDeleteClick={(e) =>
+												handleSessionDeleteClick(e, session.id)
+											}
+											onConfirmDelete={(e) =>
+												handleConfirmSessionDelete(e, session.id)
+											}
+											onCancelDelete={handleCancelSessionDelete}
+										/>
+									))}
 								<DropdownMenuSeparator />
 								<DropdownMenuItem
 									onClick={() =>
