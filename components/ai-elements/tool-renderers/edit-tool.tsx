@@ -175,8 +175,8 @@ export default function EditToolRenderer({
 					Changes
 				</h5>
 				<DiffView
-					oldString={validInput.old_string}
-					newString={validInput.new_string}
+					oldString={validInput.old_string ?? ""}
+					newString={validInput.new_string ?? ""}
 					fileName={fileName}
 					isStreaming={isStreaming}
 				/>
