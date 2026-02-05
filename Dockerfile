@@ -229,198 +229,136 @@ EXPOSE 3002
 # Container starts as root; discobot-agent switches to discobot user for the API
 CMD ["/opt/discobot/bin/discobot-agent"]
 
-# Stage 5: VZ disk image builder (non-default target)
-# Build with: docker build --target vz-disk-image --output type=local,dest=. .
-# This creates a compressed ext4 root filesystem image for macOS Virtualization.framework
-FROM ubuntu:24.04 AS vz-disk-image-builder
+# Stage 5: VZ root filesystem builder with systemd and Docker
+# Build with: docker build --target vz-image --output type=local,dest=. .
+# This creates a minimal systemd-based system with Docker daemon for macOS Virtualization.framework
+# This stage is completely independent from the runtime image
+FROM ubuntu:24.04 AS vz-rootfs-builder
 
-# Install tools for creating ext4 images
+# Prevent interactive prompts during package installation
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install kernel, systemd, Docker, and minimal tools
+# Use a specific stable kernel version with virtio drivers built-in
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    # Kernel with virtio support built-in (no modules needed)
+    # Using specific version to avoid metapackage dependency issues
+    linux-image-6.8.0-31-generic \
+    linux-modules-6.8.0-31-generic \
+    # systemd as init system with network support
+    systemd \
+    systemd-sysv \
+    systemd-resolved \
+    systemd-timesyncd \
+    # Docker daemon and dependencies
+    docker.io \
+    docker-buildx \
+    iptables \
+    # Minimal essential tools
+    ca-certificates \
+    socat \
+    # e2fsprogs for mkfs.ext4 to format data disk
     e2fsprogs \
-    zstd \
+    # udev for device enumeration
+    udev \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy the entire runtime filesystem
-# This captures everything from the runtime stage
-COPY --from=runtime / /rootfs
+# Create /var skeleton for first-boot initialization
+# This is copied to /var after the data disk is mounted
+RUN cp -a /var /var.skel
+
+# Copy VM assets (systemd units, scripts, network config, fstab)
+COPY vm-assets/fstab /etc/fstab
+COPY vm-assets/systemd/docker-vsock-proxy.service /etc/systemd/system/
+COPY vm-assets/systemd/init-var.service /etc/systemd/system/
+COPY vm-assets/systemd/docker.service.d/ /etc/systemd/system/docker.service.d/
+COPY vm-assets/systemd/containerd.service.d/ /etc/systemd/system/containerd.service.d/
+COPY vm-assets/network/20-dhcp.network /etc/systemd/network/
+COPY vm-assets/scripts/init-var.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/init-var.sh
+
+# Configure systemd for VM environment
+RUN set -ex \
+    # Disable unnecessary systemd services (but keep network services)
+    && systemctl mask \
+        getty@.service \
+        serial-getty@.service \
+    # Enable network services for connectivity
+    && systemctl enable \
+        systemd-networkd \
+        systemd-resolved \
+        systemd-timesyncd \
+    # Enable /var initialization service
+    && systemctl enable init-var.service \
+    # Enable Docker service and vsock proxy
+    && systemctl enable docker \
+    && systemctl enable docker-vsock-proxy
+
+# Create discobot user (UID 1000)
+RUN useradd -m -s /bin/bash -u 1000 discobot || \
+    (userdel -r $(getent passwd 1000 | cut -d: -f1) 2>/dev/null; useradd -m -s /bin/bash -u 1000 discobot)
+
+# Create minimal directory structure for VM
+RUN mkdir -p /.data /.workspace /workspace \
+    && chown discobot:discobot /.data /workspace
+
+# Stage 6: Extract kernel and initrd, create root filesystem image
+FROM ubuntu:24.04 AS vz-image-builder
+
+# Install tools for image creation and kernel extraction
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    squashfs-tools \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy the rootfs from builder
+COPY --from=vz-rootfs-builder / /rootfs
+
+# Extract kernel from /rootfs/boot (no initrd needed)
+RUN set -ex \
+    && cd /rootfs/boot \
+    # Find the kernel (vmlinuz-*)
+    && KERNEL=$(ls -1 vmlinuz-* | head -1) \
+    && KERNEL_VERSION=$(echo $KERNEL | sed 's/vmlinuz-//') \
+    && echo "Found kernel: $KERNEL (version: $KERNEL_VERSION)" \
+    # Copy kernel to root for extraction
+    && cp "$KERNEL" /vmlinuz \
+    # Save kernel version
+    && echo "$KERNEL_VERSION" > /kernel-version
 
 # Prepare rootfs for VM use
 RUN set -ex \
-    # Create essential mount points (empty dirs)
+    # Create essential mount points
     && mkdir -p /rootfs/proc /rootfs/sys /rootfs/dev /rootfs/run /rootfs/tmp \
-    # Create VirtioFS mount point for metadata
+    # Create VirtioFS mount points for runtime data
     && mkdir -p /rootfs/run/discobot/metadata \
-    # Create simple init script for VZ VMs
-    && printf '#!/bin/sh\n\
-set -e\n\
-\n\
-# Mount essential filesystems\n\
-mount -t proc proc /proc\n\
-mount -t sysfs sysfs /sys\n\
-mount -t devtmpfs devtmpfs /dev\n\
-mount -t tmpfs tmpfs /tmp\n\
-mount -t tmpfs tmpfs /run\n\
-\n\
-# Mount writable directories as tmpfs (root is read-only)\n\
-mount -t tmpfs tmpfs /data\n\
-mount -t tmpfs tmpfs /workspace\n\
-mount -t tmpfs tmpfs /home/discobot\n\
-\n\
-# Mount VirtioFS metadata (shared from host)\n\
-mkdir -p /run/discobot/metadata\n\
-mount -t virtiofs discobot-meta /run/discobot/metadata 2>/dev/null || true\n\
-\n\
-# Mount persistent data disk at /.data\n\
-mount -t virtiofs discobot-data /.data 2>/dev/null || true\n\
-\n\
-# Mount workspace from host at /.workspace (read-only)\n\
-mount -t virtiofs discobot-workspace /.workspace 2>/dev/null || true\n\
-\n\
-# Start the agent (discobot-agent handles user switching and process reaping)\n\
-cd /workspace\n\
-exec /opt/discobot/bin/discobot-agent\n\
-' > /rootfs/init \
-    && chmod +x /rootfs/init
+    # Configure systemd-resolved: symlink resolv.conf to stub resolver
+    # This routes DNS queries through resolved's stub listener at 127.0.0.53
+    && rm -f /rootfs/etc/resolv.conf \
+    && ln -s /run/systemd/resolve/stub-resolv.conf /rootfs/etc/resolv.conf \
+    # Clean up /boot to save space (kernel/initrd already extracted)
+    && rm -rf /rootfs/boot/*
 
-# Create the ext4 disk image using mkfs.ext4 -d (no mount required)
-# Size: 2GB (enough for Ubuntu base + agent + dependencies)
+# Create SquashFS image with zstd compression
+# SquashFS is built into the kernel - no initrd needed!
+# Boot with: root=/dev/vda rootfstype=squashfs ro
 RUN set -ex \
-    # Create ext4 image directly from directory
-    # -d populates from directory without needing loop mount
-    && mkfs.ext4 -F -L rootfs -O ^has_journal -d /rootfs -r 0 /disk.img 2G \
-    # Compress with zstd (good compression ratio and fast decompression)
-    && zstd -19 --rm /disk.img -o /disk.img.zst
+    && ROOTFS_SIZE_MB=$(du -sm /rootfs | cut -f1) \
+    && echo "Rootfs size: ${ROOTFS_SIZE_MB}MB" \
+    && echo "Creating SquashFS image with zstd compression..." \
+    && mksquashfs /rootfs /rootfs.squashfs \
+        -comp zstd \
+        -Xcompression-level 19 \
+        -noappend \
+        -info \
+    && SQUASHFS_SIZE_MB=$(du -m /rootfs.squashfs | cut -f1) \
+    && RATIO=$((100 - (SQUASHFS_SIZE_MB * 100 / ROOTFS_SIZE_MB))) \
+    && echo "SquashFS image: ${SQUASHFS_SIZE_MB}MB (${RATIO}% reduction)"
 
-# Final stage for VZ: just the compressed disk image
-FROM scratch AS vz-disk-image
-COPY --from=vz-disk-image-builder /disk.img.zst /discobot-rootfs.img.zst
-
-# Stage 6: Linux kernel builder for VZ
-# Build with: docker build --target vz-kernel --output type=local,dest=. .
-# This builds a minimal Linux kernel with virtio support for macOS Virtualization.framework
-FROM ubuntu:24.04 AS vz-kernel-builder
-
-# Install kernel build dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    bc \
-    bison \
-    flex \
-    libelf-dev \
-    libssl-dev \
-    libncurses-dev \
-    ca-certificates \
-    curl \
-    jq \
-    xz-utils \
-    zstd \
-    && rm -rf /var/lib/apt/lists/*
-
-WORKDIR /build
-
-# Download latest stable kernel from kernel.org
-# Uses the releases.json API to find the latest stable version
-RUN set -ex \
-    && KERNEL_VERSION=$(curl -s https://www.kernel.org/releases.json | jq -r '[.releases[] | select(.moniker == "stable")][0].version') \
-    && echo "Found kernel version: ${KERNEL_VERSION}" \
-    && KERNEL_MAJOR=$(echo $KERNEL_VERSION | cut -d. -f1) \
-    && echo "Downloading Linux kernel ${KERNEL_VERSION}..." \
-    && curl -fSL "https://cdn.kernel.org/pub/linux/kernel/v${KERNEL_MAJOR}.x/linux-${KERNEL_VERSION}.tar.xz" -o linux.tar.xz \
-    && tar -xf linux.tar.xz --strip-components=1 \
-    && rm linux.tar.xz \
-    && echo "$KERNEL_VERSION" > /kernel-version
-
-# Create minimal kernel config for VZ VMs
-# Start with tinyconfig and add required features
-RUN set -ex \
-    && make tinyconfig \
-    # Enable 64-bit support
-    && ./scripts/config --enable CONFIG_64BIT \
-    # Basic kernel features
-    && ./scripts/config --enable CONFIG_PRINTK \
-    && ./scripts/config --enable CONFIG_BUG \
-    && ./scripts/config --enable CONFIG_MULTIUSER \
-    && ./scripts/config --enable CONFIG_SHMEM \
-    && ./scripts/config --enable CONFIG_TMPFS \
-    && ./scripts/config --enable CONFIG_PROC_FS \
-    && ./scripts/config --enable CONFIG_SYSFS \
-    && ./scripts/config --enable CONFIG_DEVTMPFS \
-    && ./scripts/config --enable CONFIG_DEVTMPFS_MOUNT \
-    # TTY/Console support
-    && ./scripts/config --enable CONFIG_TTY \
-    && ./scripts/config --enable CONFIG_VT \
-    && ./scripts/config --enable CONFIG_UNIX98_PTYS \
-    && ./scripts/config --enable CONFIG_SERIAL_8250 \
-    && ./scripts/config --enable CONFIG_SERIAL_8250_CONSOLE \
-    # Block device support
-    && ./scripts/config --enable CONFIG_BLOCK \
-    && ./scripts/config --enable CONFIG_BLK_DEV \
-    # EXT4 filesystem (built-in, not module)
-    && ./scripts/config --enable CONFIG_EXT4_FS \
-    && ./scripts/config --enable CONFIG_EXT4_USE_FOR_EXT2 \
-    # PCI support (needed for virtio-pci)
-    && ./scripts/config --enable CONFIG_PCI \
-    && ./scripts/config --enable CONFIG_PCI_HOST_GENERIC \
-    # Virtio support (all built-in for simple boot)
-    && ./scripts/config --enable CONFIG_VIRTIO \
-    && ./scripts/config --enable CONFIG_VIRTIO_MENU \
-    && ./scripts/config --enable CONFIG_VIRTIO_PCI \
-    && ./scripts/config --enable CONFIG_VIRTIO_PCI_LEGACY \
-    && ./scripts/config --enable CONFIG_VIRTIO_MMIO \
-    && ./scripts/config --enable CONFIG_VIRTIO_BLK \
-    && ./scripts/config --enable CONFIG_VIRTIO_NET \
-    && ./scripts/config --enable CONFIG_VIRTIO_CONSOLE \
-    && ./scripts/config --enable CONFIG_HW_RANDOM_VIRTIO \
-    # VirtioFS support
-    && ./scripts/config --enable CONFIG_FUSE_FS \
-    && ./scripts/config --enable CONFIG_VIRTIO_FS \
-    # Vsock support
-    && ./scripts/config --enable CONFIG_VSOCKETS \
-    && ./scripts/config --enable CONFIG_VIRTIO_VSOCKETS \
-    # Networking basics
-    && ./scripts/config --enable CONFIG_NET \
-    && ./scripts/config --enable CONFIG_INET \
-    && ./scripts/config --enable CONFIG_NETDEVICES \
-    # Init and executable support
-    && ./scripts/config --enable CONFIG_BINFMT_ELF \
-    && ./scripts/config --enable CONFIG_BINFMT_SCRIPT \
-    # Disable unnecessary features
-    && ./scripts/config --disable CONFIG_MODULES \
-    && ./scripts/config --disable CONFIG_SWAP \
-    && ./scripts/config --disable CONFIG_SUSPEND \
-    && ./scripts/config --disable CONFIG_HIBERNATION \
-    # Set init path
-    && ./scripts/config --set-str CONFIG_DEFAULT_INIT "/init" \
-    # Update config to resolve dependencies
-    && make olddefconfig
-
-# Build the kernel
-# Use all available cores for faster build
-# Target varies by architecture: bzImage for x86, Image for arm64
-RUN ARCH=$(uname -m) \
-    && if [ "$ARCH" = "x86_64" ]; then \
-         make -j$(nproc) bzImage; \
-       elif [ "$ARCH" = "aarch64" ]; then \
-         make -j$(nproc) Image; \
-       else \
-         make -j$(nproc); \
-       fi
-
-# Copy the kernel image and version info
-RUN ARCH=$(uname -m) \
-    && if [ "$ARCH" = "x86_64" ]; then \
-         cp arch/x86/boot/bzImage /vmlinuz; \
-       elif [ "$ARCH" = "aarch64" ]; then \
-         cp arch/arm64/boot/Image /vmlinuz; \
-       else \
-         echo "Unsupported architecture: $ARCH" && exit 1; \
-       fi \
-    && zstd -19 /vmlinuz -o /vmlinuz.zst
-
-# Final stage for kernel: just the compressed kernel
-FROM scratch AS vz-kernel
-COPY --from=vz-kernel-builder /vmlinuz.zst /vmlinuz.zst
-COPY --from=vz-kernel-builder /kernel-version /kernel-version
+# Stage 7: Output stage with kernel and SquashFS root filesystem (no initrd needed)
+FROM scratch AS vz-image
+COPY --from=vz-image-builder /vmlinuz /vmlinuz
+COPY --from=vz-image-builder /kernel-version /kernel-version
+COPY --from=vz-image-builder /rootfs.squashfs /discobot-rootfs.squashfs
 
 # Default target: runtime image
 FROM runtime

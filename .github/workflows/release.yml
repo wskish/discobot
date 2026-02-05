@@ -10,90 +10,49 @@ permissions:
   contents: write
 
 jobs:
-  # Build VZ disk image on Linux using Docker
+  # Build and push VZ image to registry
   build-vz-image:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - arch: amd64
-            runner: depot-ubuntu-24.04
-          - arch: arm64
-            runner: depot-ubuntu-24.04-arm
-
-    runs-on: ${{ matrix.runner }}
+    runs-on: depot-ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
 
     steps:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
+      - name: Set up Depot
+        uses: depot/setup-action@v1
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
         with:
-          node-version: 22
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
         with:
-          version: 10
+          images: ghcr.io/${{ github.repository }}-vz
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Build VZ disk image
-        run: pnpm build:vz-image --force
-
-      - name: Upload VZ image
-        uses: actions/upload-artifact@v4
+      - name: Build and push VZ image
+        uses: depot/build-push-action@v1
         with:
-          name: vz-image-${{ matrix.arch }}
-          path: ./src-tauri/resources/discobot-rootfs.img.zst
-          retention-days: 1
-
-  # Build VZ kernel on Linux using Docker
-  build-vz-kernel:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - arch: amd64
-            runner: depot-ubuntu-24.04
-          - arch: arm64
-            runner: depot-ubuntu-24.04-arm
-
-    runs-on: ${{ matrix.runner }}
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: 22
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 10
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Build VZ kernel
-        run: pnpm build:vz-kernel --force
-
-      - name: Upload VZ kernel
-        uses: actions/upload-artifact@v4
-        with:
-          name: vz-kernel-${{ matrix.arch }}
-          path: |
-            ./src-tauri/resources/vmlinuz.zst
-            ./src-tauri/resources/kernel-version
-          retention-days: 1
+          project: bbqjs4tj1g
+          context: .
+          target: vz-image
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
 
   build:
-    needs: [build-vz-image, build-vz-kernel]
     strategy:
       fail-fast: false
       matrix:
@@ -125,21 +84,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
-
-      # Download pre-built VZ assets for macOS
-      - name: Download VZ image
-        if: contains(matrix.platform, 'macos')
-        uses: actions/download-artifact@v4
-        with:
-          name: vz-image-${{ matrix.vz-arch }}
-          path: ./src-tauri/resources/
-
-      - name: Download VZ kernel
-        if: contains(matrix.platform, 'macos')
-        uses: actions/download-artifact@v4
-        with:
-          name: vz-kernel-${{ matrix.vz-arch }}
-          path: ./src-tauri/resources/
 
       - name: Setup Node.js
         uses: actions/setup-node@v6

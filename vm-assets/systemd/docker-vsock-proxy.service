@@ -1,0 +1,15 @@
+[Unit]
+Description=Docker VSOCK Proxy
+Documentation=https://github.com/obot-platform/discobot
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+# -b1 sets 1-byte buffer for immediate forwarding (no buffering delay)
+ExecStart=/usr/bin/socat -b1 VSOCK-LISTEN:2375,reuseaddr,fork UNIX-CONNECT:/var/run/docker.sock
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

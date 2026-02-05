@@ -1,0 +1,15 @@
+[Unit]
+Description=Initialize /var contents on first boot
+# Run after /var is mounted (by fstab)
+After=var.mount
+Requires=var.mount
+# Run before Docker services (don't include journald to avoid cycles)
+Before=docker.service containerd.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/bin/init-var.sh
+
+[Install]
+WantedBy=multi-user.target

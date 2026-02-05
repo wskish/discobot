@@ -12,8 +12,6 @@
 		"dev:tauri": "vite --port 5173",
 		"build:vite": "vite build",
 		"build:server": "node scripts/build-server.mjs",
-		"build:vz-image": "node scripts/build-vz-image.mjs",
-		"build:vz-kernel": "node scripts/build-vz-kernel.mjs",
 		"preview": "vite preview",
 		"tauri": "tauri",
 		"test": "pnpm test:unit && pnpm test:integration",
@@ -41,8 +39,7 @@
 		"check:fix": "biome check . --write && pnpm lint:go && pnpm lint:react-compiler && pnpm typecheck",
 		"check:skills": ".claude/scripts/validate-skills.sh",
 		"typecheck": "tsc --noEmit",
-		"refresh-models": "./scripts/refresh-models-data.sh",
-		"release": "node scripts/release.mjs"
+		"refresh-models": "./scripts/refresh-models-data.sh"
 	},
 	"dependencies": {
 		"@ai-sdk/react": "^3.0.59",
