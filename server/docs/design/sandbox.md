@@ -1,6 +1,6 @@
 # Sandbox Module
 
-This module provides the sandbox runtime abstraction for managing Docker containers.
+This module provides the sandbox runtime abstraction for managing execution environments (Docker containers, VMs, or hybrid).
 
 ## Files
 
@@ -8,32 +8,84 @@ This module provides the sandbox runtime abstraction for managing Docker contain
 |------|-------------|
 | `internal/sandbox/runtime.go` | Provider interface definition |
 | `internal/sandbox/errors.go` | Error types |
+| `internal/sandbox/manager.go` | Provider manager and proxy |
 | `internal/sandbox/docker/provider.go` | Docker implementation |
 | `internal/sandbox/docker/cache.go` | Cache volume management |
+| `internal/sandbox/vm/manager.go` | VM abstraction layer (interfaces for VZ, KVM, WSL2) |
+| `internal/sandbox/vz/vz_vm_manager.go` | Apple Virtualization.framework VM manager (macOS) |
+| `internal/sandbox/vz/vz_docker.go` | Hybrid provider: VZ VMs with Docker containers (macOS) |
+| `internal/sandbox/vz/vsock.go` | VSOCK communication types |
+| `internal/sandbox/vz/provider_stub.go` | Stub for non-darwin platforms |
+| `internal/sandbox/local/provider.go` | Local process provider (development) |
 | `internal/sandbox/mock/provider.go` | Mock implementation for testing |
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                    Sandbox Abstraction                          │
-│                                                                  │
-│  ┌──────────────────────────────────────────────────────────┐  │
-│  │                   Provider Interface                      │  │
-│  │  Create, Start, Stop, Remove, Get, List, Exec, Attach    │  │
-│  └──────────────────────────────────────────────────────────┘  │
-│                           │                                      │
-│          ┌────────────────┴────────────────┐                    │
-│          ▼                                 ▼                    │
-│  ┌─────────────────┐               ┌─────────────────┐         │
-│  │     Docker      │               │      Mock       │         │
-│  │    Provider     │               │    Provider     │         │
-│  └─────────────────┘               └─────────────────┘         │
-│          │                                 │                    │
-│          ▼                                 ▼                    │
-│     Docker API                      In-Memory State            │
-└─────────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────────┐
+│                       Sandbox Abstraction                              │
+│                                                                         │
+│  ┌─────────────────────────────────────────────────────────────────┐  │
+│  │                     Provider Interface                           │  │
+│  │   Create, Start, Stop, Remove, Get, List, Exec, Attach, Watch   │  │
+│  └─────────────────────────────────────────────────────────────────┘  │
+│                                │                                        │
+│      ┌─────────────────────────┼────────────────────────┐             │
+│      ▼                         ▼                         ▼             │
+│  ┌──────────┐          ┌──────────────┐          ┌──────────┐         │
+│  │  Docker  │          │   VZ+Docker  │          │   Mock   │         │
+│  │ Provider │          │   Provider   │          │ Provider │         │
+│  └──────────┘          │   (darwin)   │          └──────────┘         │
+│      │                 └──────┬───────┘                 │              │
+│      │                        │                         │              │
+│      │                        ▼                         │              │
+│      │              ┌─────────────────────┐            │              │
+│      │              │  VM Abstraction     │            │              │
+│      │              │  (vm.Manager)       │            │              │
+│      │              └──────────┬──────────┘            │              │
+│      │                         │                        │              │
+│      │           ┌─────────────┼─────────────┐         │              │
+│      │           ▼             ▼             ▼         │              │
+│      │      ┌────────┐    ┌────────┐    ┌────────┐    │              │
+│      │      │   VZ   │    │  KVM   │    │  WSL2  │    │              │
+│      │      │ (macOS)│    │(Linux) │    │(Win11) │    │              │
+│      │      └────┬───┘    └────────┘    └────────┘    │              │
+│      │           │                                      │              │
+│      ▼           ▼                                      ▼              │
+│  Docker API   VSOCK → Docker                    In-Memory State       │
+│  (local)      (VM-hosted Docker)                                      │
+└────────────────────────────────────────────────────────────────────────┘
 ```
+
+### Provider Types
+
+1. **Docker Provider**: Standard Docker containers (cross-platform)
+   - Direct connection to Docker daemon
+   - One container per session
+   - Fast startup, good for Linux/Windows
+
+2. **VZ+Docker Provider**: VM isolation with container efficiency (macOS only)
+   - One VM per project (shared across sessions)
+   - One Docker container per session inside the VM
+   - VSOCK communication for Docker API access
+   - Automatic VM lifecycle management with idle timeout
+   - Best resource efficiency on macOS
+
+3. **VM Abstraction Layer**: Platform-agnostic VM management
+   - Interface-based design supporting multiple hypervisors
+   - VZ implementation (macOS) - Apple Virtualization.framework
+   - Future: KVM implementation (Linux), WSL2 implementation (Windows)
+   - Project-level VMs with session reference counting
+   - Configurable console logging and resource allocation
+
+4. **Local Provider**: Direct process execution (development only)
+   - No container/VM overhead
+   - Runs agent-api as local process
+   - Not recommended for production
+
+5. **Mock Provider**: In-memory testing
+   - No real sandboxes created
+   - Used for unit tests
 
 ## Provider Interface
 
@@ -360,6 +412,193 @@ func (p *Provider) Exec(
     }, nil
 }
 ```
+
+## VZ+Docker Hybrid Provider (macOS)
+
+The VZ+Docker provider combines Apple Virtualization framework VMs with Docker containers for optimal resource efficiency on macOS. It uses the VM abstraction layer (`vm.ProjectVMManager` interface) to provide platform-agnostic VM management.
+
+### Architecture
+
+```
+Project 1                                Project 2
+┌─────────────────────────────┐         ┌─────────────────────────────┐
+│   Linux VM (Project-level)  │         │   Linux VM (Project-level)  │
+│                              │         │                              │
+│  ┌───────────────────────┐  │         │  ┌───────────────────────┐  │
+│  │   Docker Daemon       │  │         │  │   Docker Daemon       │  │
+│  └──────┬────────────────┘  │         │  └──────┬────────────────┘  │
+│         │                    │         │         │                    │
+│    ┌────┴────┐  ┌─────────┐ │         │    ┌────┴────┐              │
+│    │Container│  │Container│ │         │    │Container│              │
+│    │Session 1│  │Session 2│ │         │    │Session 3│              │
+│    └─────────┘  └─────────┘ │         │    └─────────┘              │
+│         ▲            ▲       │         │         ▲                    │
+└─────────┼────────────┼───────┘         └─────────┼────────────────────┘
+          │            │                           │
+          │            │                           │
+          └────────────┴───────────────────────────┘
+                       │
+                    VSOCK:2375
+                       │
+              ┌────────▼────────┐
+              │  VzDockerProvider│
+              │   (Host Process) │
+              └──────────────────┘
+```
+
+### Key Features
+
+1. **Project-Level VMs**: One VM per project, shared by all sessions
+2. **Session-Level Containers**: Each session gets its own Docker container inside the VM
+3. **VSOCK Communication**: Docker API accessed via VSOCK (port 2375)
+4. **Automatic Lifecycle**:
+   - VMs created on-demand when first session starts
+   - VMs stay alive while sessions exist
+   - VMs automatically shut down after 30 minutes of inactivity
+5. **Resource Efficiency**: Better than one VM per session
+
+### Implementation
+
+```go
+type VzDockerProvider struct {
+    vmManager        vm.ProjectVMManager          // VM abstraction interface
+    dockerProviders  map[string]*docker.Provider  // projectID -> Docker provider
+    sessionToProject map[string]string            // sessionID -> projectID
+}
+
+func NewProvider(cfg *config.Config, vmConfig *vm.Config) (*VzDockerProvider, error) {
+    // Create VZ VM manager (implements vm.ProjectVMManager)
+    vmManager, err := vz.NewVzVMManager(*vmConfig)
+    if err != nil {
+        return nil, err
+    }
+
+    return &VzDockerProvider{
+        vmManager:        vmManager,
+        dockerProviders:  make(map[string]*docker.Provider),
+        sessionToProject: make(map[string]string),
+    }, nil
+}
+```
+
+The provider uses the `vm.ProjectVMManager` interface, making it easy to swap VZ for KVM or WSL2 in the future.
+
+### Create Flow
+
+1. **Get/Create Project VM**:
+   ```go
+   pvm, err := p.vmManager.GetOrCreateVM(ctx, opts.ProjectID, sessionID)
+   ```
+   - Creates new VM if first session in project
+   - Reuses existing VM if project already has one
+   - Waits for Docker daemon to be ready (max 60s)
+   - VM manager handles console logging, resource allocation, and lifecycle
+
+2. **Get/Create Docker Provider**:
+   ```go
+   dockerProv, err := p.getOrCreateDockerProvider(opts.ProjectID, pvm)
+   ```
+   - Creates Docker client with VSOCK transport
+   - VSOCK dialer connects to port 2375 in the VM
+   - Docker client communicates as if local
+
+3. **Create Container**:
+   ```go
+   sb, err := dockerProv.Create(ctx, sessionID, opts)
+   ```
+   - Standard Docker container creation
+   - Container runs inside the project VM
+   - Isolated from other sessions via Docker
+
+### VSOCK Communication
+
+The Docker daemon inside the VM exposes its socket via VSOCK:
+
+```bash
+# Inside VM init script
+socat VSOCK-LISTEN:2375,reuseaddr,fork UNIX-CONNECT:/var/run/docker.sock &
+```
+
+The host connects via VSOCK dialer:
+
+```go
+func (pvm *projectVM) DockerDialer() func(ctx context.Context, network, addr string) (net.Conn, error) {
+    return func(ctx context.Context, network, addr string) (net.Conn, error) {
+        conn, err := pvm.socketDevice.Connect(dockerSockPort)
+        if err != nil {
+            return nil, err
+        }
+        return &vsockConn{
+            VirtioSocketConnection: conn,
+            localAddr:  &vsockAddr{cid: 2, port: 0},
+            remoteAddr: &vsockAddr{cid: 3, port: dockerSockPort},
+        }, nil
+    }
+}
+```
+
+### VM Base Image Requirements
+
+The base disk image must include:
+- Linux kernel with virtio drivers (vsock, net, blk)
+- Docker daemon
+- socat for VSOCK-to-socket bridging
+- Init script that:
+  1. Starts Docker daemon
+  2. Starts socat bridge: `socat VSOCK-LISTEN:2375 → /var/run/docker.sock`
+
+See [VZ README](../../internal/sandbox/vz/README.md) for complete image requirements.
+
+### Configuration
+
+```go
+// Configure VM settings
+vmConfig := &vm.Config{
+    DataDir:       "/var/lib/discobot/vz",
+    ConsoleLogDir: "/var/log/discobot/vz",
+    KernelPath:    "/path/to/vmlinuz",
+    InitrdPath:    "/path/to/initrd.img",
+    BaseDiskPath:  "/path/to/base.img",
+    IdleTimeout:   "30m",
+    CPUCount:      2,
+    MemoryMB:      2048,
+}
+
+// Create VZ+Docker provider
+provider, err := vz.NewProvider(cfg, vmConfig)
+
+// Create sandbox (requires ProjectID)
+sandbox, err := provider.Create(ctx, sessionID, sandbox.CreateOptions{
+    ProjectID:       "project-abc123",  // Required
+    SharedSecret:    "secret",
+    WorkspacePath:   "/path/to/workspace",
+    WorkspaceSource: "https://github.com/user/repo.git",
+})
+```
+
+**Important**: `ProjectID` is required for VZ+Docker provider. Sessions with the same `ProjectID` will share a VM.
+
+### Platform-Specific Build
+
+The VZ provider uses build tags to ensure it only compiles on macOS:
+
+```go
+//go:build darwin
+
+// vz_vm_manager.go, vz_docker.go, vsock.go
+```
+
+A stub implementation (`provider_stub.go`) returns errors on non-darwin platforms:
+
+```go
+//go:build !darwin
+
+func NewProvider(_ *config.Config, _ *vm.Config) (*VzDockerProvider, error) {
+    return nil, fmt.Errorf("vz sandbox provider is only available on macOS (darwin), current platform: %s", runtime.GOOS)
+}
+```
+
+This allows the main server code to reference the VZ provider on all platforms without compilation errors.
 
 ## Mock Provider
 

@@ -51,10 +51,11 @@ type Config struct {
 	CacheEnabled bool // Enable project-scoped cache volumes (default: true)
 
 	// VZ-specific settings (macOS Virtualization.framework)
-	VZDataDir      string // Directory for VM data (default: ./vz)
-	VZKernelPath   string // Path to Linux kernel (vmlinuz)
-	VZInitrdPath   string // Path to initial ramdisk (optional)
-	VZBaseDiskPath string // Path to base disk image to clone (optional)
+	VZDataDir       string // Directory for VM data (default: ./vz)
+	VZConsoleLogDir string // Directory for VM console logs (default: same as VZDataDir)
+	VZKernelPath    string // Path to Linux kernel (vmlinuz)
+	VZInitrdPath    string // Path to initial ramdisk (optional)
+	VZBaseDiskPath  string // Path to base disk image to clone (optional)
 
 	// Local provider settings
 	LocalProviderEnabled bool   // Enable local sandbox provider (default: false)
@@ -154,6 +155,7 @@ func Load() (*Config, error) {
 	// VZ-specific settings (macOS Virtualization.framework)
 	// VZ state defaults to XDG_STATE_HOME/discobot/vz
 	cfg.VZDataDir = getEnv("VZ_DATA_DIR", filepath.Join(xdg.StateHome, appName, "vz"))
+	cfg.VZConsoleLogDir = getEnv("VZ_CONSOLE_LOG_DIR", cfg.VZDataDir) // Default to same as VZDataDir
 	cfg.VZKernelPath = getEnv("VZ_KERNEL_PATH", "")
 	cfg.VZInitrdPath = getEnv("VZ_INITRD_PATH", "")
 	cfg.VZBaseDiskPath = getEnv("VZ_BASE_DISK_PATH", "")

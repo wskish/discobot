@@ -1,0 +1,636 @@
+//go:build darwin
+
+package vz
+
+import (
+	"context"
+	"fmt"
+	"io"
+	"log"
+	"net"
+	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/Code-Hex/vz/v3"
+
+	"github.com/obot-platform/discobot/server/internal/sandbox/vm"
+)
+
+const (
+	// dockerSockPort is the VSOCK port for accessing Docker socket inside the VM.
+	dockerSockPort = 2375
+
+	// defaultCPUCount is the default number of CPUs for VMs.
+	defaultCPUCount = 2
+
+	// defaultMemoryBytes is the default memory for VMs (2GB).
+	defaultMemoryBytes = 2 * 1024 * 1024 * 1024
+)
+
+// vzProjectVM implements vm.ProjectVM for Apple Virtualization framework.
+type vzProjectVM struct {
+	projectID    string
+	vm           *vz.VirtualMachine
+	socketDevice *vz.VirtioSocketDevice
+	diskPath     string     // Root disk (read-only)
+	dataDiskPath string     // Data disk (writable)
+	consoleLog   *os.File   // Console log file
+
+	// Session reference counting
+	sessions   map[string]bool
+	sessionsMu sync.RWMutex
+
+	// Lifecycle
+	createdAt  time.Time
+	lastUsedAt time.Time
+	mu         sync.RWMutex
+}
+
+// ProjectID returns the project ID this VM serves.
+func (pvm *vzProjectVM) ProjectID() string {
+	return pvm.projectID
+}
+
+// AddSession registers a session with this VM.
+func (pvm *vzProjectVM) AddSession(sessionID string) {
+	pvm.sessionsMu.Lock()
+	defer pvm.sessionsMu.Unlock()
+
+	pvm.sessions[sessionID] = true
+	pvm.lastUsedAt = time.Now()
+}
+
+// RemoveSession unregisters a session from this VM.
+func (pvm *vzProjectVM) RemoveSession(sessionID string) {
+	pvm.sessionsMu.Lock()
+	defer pvm.sessionsMu.Unlock()
+
+	delete(pvm.sessions, sessionID)
+	pvm.lastUsedAt = time.Now()
+}
+
+// SessionCount returns the number of active sessions using this VM.
+func (pvm *vzProjectVM) SessionCount() int {
+	pvm.sessionsMu.RLock()
+	defer pvm.sessionsMu.RUnlock()
+
+	return len(pvm.sessions)
+}
+
+// DockerDialer returns a VSOCK dialer function for Docker client.
+func (pvm *vzProjectVM) DockerDialer() func(ctx context.Context, network, addr string) (net.Conn, error) {
+	return func(ctx context.Context, network, addr string) (net.Conn, error) {
+		pvm.mu.RLock()
+		socketDevice := pvm.socketDevice
+		pvm.mu.RUnlock()
+
+		if socketDevice == nil {
+			return nil, fmt.Errorf("vsock not available for project VM %s", pvm.projectID)
+		}
+
+		conn, err := socketDevice.Connect(dockerSockPort)
+		if err != nil {
+			return nil, fmt.Errorf("failed to connect to vsock port %d: %w", dockerSockPort, err)
+		}
+
+		return &vsockConn{
+			VirtioSocketConnection: conn,
+			localAddr:              &vsockAddr{cid: 2, port: 0},
+			remoteAddr:             &vsockAddr{cid: 3, port: dockerSockPort},
+		}, nil
+	}
+}
+
+// Shutdown gracefully stops the VM.
+func (pvm *vzProjectVM) Shutdown() error {
+	pvm.mu.Lock()
+	defer pvm.mu.Unlock()
+
+	if pvm.vm != nil {
+		if err := pvm.vm.Stop(); err != nil {
+			return err
+		}
+	}
+
+	// Close console log file
+	if pvm.consoleLog != nil {
+		pvm.consoleLog.Close()
+	}
+
+	return nil
+}
+
+// VzVMManager implements vm.ProjectVMManager for Apple Virtualization framework.
+type VzVMManager struct {
+	config vm.Config
+
+	// projectVMs maps projectID -> vzProjectVM
+	projectVMs  map[string]*vzProjectVM
+	projectVMMu sync.RWMutex
+
+	// Idle timeout before VM shutdown (0 = never shutdown)
+	idleTimeout time.Duration
+
+	// Shutdown signal
+	stopCh chan struct{}
+	wg     sync.WaitGroup
+}
+
+// NewVzVMManager creates a new VZ VM manager.
+func NewVzVMManager(config vm.Config) (*VzVMManager, error) {
+	// Parse idle timeout
+	idleTimeout := 30 * time.Minute // default
+	if config.IdleTimeout != "" {
+		parsed, err := time.ParseDuration(config.IdleTimeout)
+		if err != nil {
+			return nil, fmt.Errorf("invalid idle timeout: %w", err)
+		}
+		idleTimeout = parsed
+	}
+
+	mgr := &VzVMManager{
+		config:      config,
+		projectVMs:  make(map[string]*vzProjectVM),
+		idleTimeout: idleTimeout,
+		stopCh:      make(chan struct{}),
+	}
+
+	// Start background cleanup goroutine if idle timeout is set
+	if idleTimeout > 0 {
+		mgr.wg.Add(1)
+		go mgr.cleanupIdleVMs()
+	}
+
+	return mgr, nil
+}
+
+// GetOrCreateVM returns an existing VM for the project or creates a new one.
+func (m *VzVMManager) GetOrCreateVM(ctx context.Context, projectID, sessionID string) (vm.ProjectVM, error) {
+	m.projectVMMu.Lock()
+	defer m.projectVMMu.Unlock()
+
+	pvm, exists := m.projectVMs[projectID]
+	if exists {
+		// Add session to existing VM
+		pvm.AddSession(sessionID)
+		sessionCount := pvm.SessionCount()
+
+		log.Printf("Project VM %s: added session %s (total sessions: %d)", projectID, sessionID, sessionCount)
+		return pvm, nil
+	}
+
+	// Create new VM for project
+	log.Printf("Creating new project VM for project: %s", projectID)
+	pvm, err := m.createProjectVM(ctx, projectID, sessionID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create project VM: %w", err)
+	}
+
+	m.projectVMs[projectID] = pvm
+	log.Printf("Project VM %s created successfully", projectID)
+	return pvm, nil
+}
+
+// GetVM returns the VM for the given project, if it exists.
+func (m *VzVMManager) GetVM(projectID string) (vm.ProjectVM, bool) {
+	m.projectVMMu.RLock()
+	defer m.projectVMMu.RUnlock()
+
+	pvm, exists := m.projectVMs[projectID]
+	if !exists {
+		return nil, false
+	}
+	return pvm, true
+}
+
+// RemoveSession removes a session from the project VM.
+func (m *VzVMManager) RemoveSession(projectID, sessionID string) error {
+	m.projectVMMu.RLock()
+	pvm, exists := m.projectVMs[projectID]
+	m.projectVMMu.RUnlock()
+
+	if !exists {
+		return fmt.Errorf("project VM not found: %s", projectID)
+	}
+
+	pvm.RemoveSession(sessionID)
+	sessionCount := pvm.SessionCount()
+
+	if sessionCount == 0 {
+		log.Printf("Project VM %s has no active sessions, will idle", projectID)
+	} else {
+		log.Printf("Project VM %s: removed session %s (%d sessions remaining)", projectID, sessionID, sessionCount)
+	}
+
+	return nil
+}
+
+// Shutdown stops all project VMs and shuts down the manager.
+func (m *VzVMManager) Shutdown() {
+	close(m.stopCh)
+
+	// Stop all VMs
+	m.projectVMMu.Lock()
+	for projectID, pvm := range m.projectVMs {
+		log.Printf("Shutting down project VM: %s", projectID)
+		if err := pvm.Shutdown(); err != nil {
+			log.Printf("Error stopping project VM %s: %v", projectID, err)
+		}
+	}
+	m.projectVMs = make(map[string]*vzProjectVM)
+	m.projectVMMu.Unlock()
+
+	// Wait for cleanup goroutine
+	m.wg.Wait()
+}
+
+// createProjectVM creates and starts a new VM for a project.
+func (m *VzVMManager) createProjectVM(ctx context.Context, projectID, sessionID string) (*vzProjectVM, error) {
+	// Root disk (read-only)
+	diskPath := filepath.Join(m.config.DataDir, fmt.Sprintf("project-%s.img", projectID))
+
+	// Data disk (writable)
+	dataDiskPath := filepath.Join(m.config.DataDir, fmt.Sprintf("project-%s-data.img", projectID))
+
+	// Clone base disk (will be mounted read-only)
+	if err := m.cloneDisk(m.config.BaseDiskPath, diskPath); err != nil {
+		return nil, fmt.Errorf("failed to clone disk: %w", err)
+	}
+
+	log.Printf("Cloned base disk to: %s", diskPath)
+
+	// Create data disk if it doesn't exist
+	if _, err := os.Stat(dataDiskPath); os.IsNotExist(err) {
+		dataDiskSize := int64(20 * 1024 * 1024 * 1024) // 20GB data disk
+		if err := vz.CreateDiskImage(dataDiskPath, dataDiskSize); err != nil {
+			os.Remove(diskPath)
+			return nil, fmt.Errorf("failed to create data disk: %w", err)
+		}
+		log.Printf("Created data disk: %s", dataDiskPath)
+	}
+
+	// Create console log file
+	consoleLogPath := filepath.Join(m.config.ConsoleLogDir, fmt.Sprintf("project-%s", projectID), "console.log")
+	if err := os.MkdirAll(filepath.Dir(consoleLogPath), 0755); err != nil {
+		return nil, fmt.Errorf("failed to create console log directory: %w", err)
+	}
+
+	consoleLog, err := os.OpenFile(consoleLogPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create console log file: %w", err)
+	}
+
+	log.Printf("Console log: %s", consoleLogPath)
+
+	// Build and start VM
+	vzVM, socketDevice, consoleRead, consoleWrite, err := m.buildAndStartVM(diskPath, dataDiskPath, projectID)
+	if err != nil {
+		consoleLog.Close()
+		return nil, fmt.Errorf("failed to build and start VM: %w", err)
+	}
+
+	log.Printf("Started project VM for: %s", projectID)
+
+	// Log console output to file and also to main log
+	go func() {
+		buf := make([]byte, 4096)
+		for {
+			n, err := consoleRead.Read(buf)
+			if err != nil {
+				return
+			}
+			if n > 0 {
+				// Write to file
+				consoleLog.Write(buf[:n])
+				// Also log to main logger (with prefix)
+				log.Printf("[VM %s] %s", projectID, string(buf[:n]))
+			}
+		}
+	}()
+
+	log.Printf("Waiting for Docker daemon to be ready in VM: %s", projectID)
+
+	// Wait for Docker daemon to be ready
+	if err := m.waitForDocker(ctx, socketDevice, projectID); err != nil {
+		vzVM.Stop()
+		consoleRead.Close()
+		consoleWrite.Close()
+		consoleLog.Close()
+		return nil, fmt.Errorf("docker daemon not ready: %w", err)
+	}
+
+	log.Printf("Docker daemon ready in VM: %s", projectID)
+
+	pvm := &vzProjectVM{
+		projectID:    projectID,
+		vm:           vzVM,
+		socketDevice: socketDevice,
+		diskPath:     diskPath,
+		dataDiskPath: dataDiskPath,
+		consoleLog:   consoleLog,
+		sessions:     map[string]bool{sessionID: true},
+		createdAt:    time.Now(),
+		lastUsedAt:   time.Now(),
+	}
+
+	return pvm, nil
+}
+
+// cloneDisk copies the base disk to a new location.
+func (m *VzVMManager) cloneDisk(baseDiskPath, diskPath string) error {
+	if baseDiskPath == "" {
+		// Create empty disk if no base disk
+		diskSize := int64(10 * 1024 * 1024 * 1024) // 10GB
+		return vz.CreateDiskImage(diskPath, diskSize)
+	}
+
+	src, err := os.Open(baseDiskPath)
+	if err != nil {
+		return fmt.Errorf("failed to open base disk: %w", err)
+	}
+	defer src.Close()
+
+	dst, err := os.Create(diskPath)
+	if err != nil {
+		return fmt.Errorf("failed to create disk image: %w", err)
+	}
+	defer dst.Close()
+
+	if _, err := io.Copy(dst, src); err != nil {
+		os.Remove(diskPath)
+		return fmt.Errorf("failed to copy base disk: %w", err)
+	}
+
+	return nil
+}
+
+// buildAndStartVM creates and starts a VM with the given disk images.
+// rootDiskPath is mounted read-only as /dev/vda, dataDiskPath is mounted read-write as /dev/vdb.
+func (m *VzVMManager) buildAndStartVM(rootDiskPath, dataDiskPath, projectID string) (*vz.VirtualMachine, *vz.VirtioSocketDevice, *os.File, *os.File, error) {
+	// Build kernel command line
+	// Root disk is read-only, data disk (/dev/vdb) is where writable data goes
+	cmdLine := []string{
+		"console=hvc0",
+		"root=/dev/vda",
+		"rootfstype=squashfs", // SquashFS root filesystem
+		"ro",                  // Read-only root filesystem
+	}
+
+	// Create boot loader
+	bootLoaderOpts := []vz.LinuxBootLoaderOption{
+		vz.WithCommandLine(strings.Join(cmdLine, " ")),
+	}
+	if m.config.InitrdPath != "" {
+		bootLoaderOpts = append(bootLoaderOpts, vz.WithInitrd(m.config.InitrdPath))
+	}
+
+	bootLoader, err := vz.NewLinuxBootLoader(m.config.KernelPath, bootLoaderOpts...)
+	if err != nil {
+		return nil, nil, nil, nil, fmt.Errorf("failed to create boot loader: %w", err)
+	}
+
+	// Determine CPU and memory
+	cpuCount := uint(defaultCPUCount)
+	if m.config.CPUCount > 0 {
+		cpuCount = uint(m.config.CPUCount)
+	}
+
+	memorySize := uint64(defaultMemoryBytes)
+	if m.config.MemoryMB > 0 {
+		memorySize = uint64(m.config.MemoryMB) * 1024 * 1024
+	}
+
+	// Create VM configuration
+	vmConfig, err := vz.NewVirtualMachineConfiguration(bootLoader, cpuCount, memorySize)
+	if err != nil {
+		return nil, nil, nil, nil, fmt.Errorf("failed to create VM config: %w", err)
+	}
+
+	// Configure storage devices
+	var storageDevices []vz.StorageDeviceConfiguration
+
+	// Root disk (read-only) - /dev/vda
+	rootDiskAttachment, err := vz.NewDiskImageStorageDeviceAttachment(rootDiskPath, true) // true = read-only
+	if err != nil {
+		return nil, nil, nil, nil, fmt.Errorf("failed to create root disk attachment: %w", err)
+	}
+
+	rootStorageConfig, err := vz.NewVirtioBlockDeviceConfiguration(rootDiskAttachment)
+	if err != nil {
+		return nil, nil, nil, nil, fmt.Errorf("failed to create root storage config: %w", err)
+	}
+	storageDevices = append(storageDevices, rootStorageConfig)
+
+	// Data disk (read-write) - /dev/vdb
+	dataDiskAttachment, err := vz.NewDiskImageStorageDeviceAttachment(dataDiskPath, false) // false = read-write
+	if err != nil {
+		return nil, nil, nil, nil, fmt.Errorf("failed to create data disk attachment: %w", err)
+	}
+
+	dataStorageConfig, err := vz.NewVirtioBlockDeviceConfiguration(dataDiskAttachment)
+	if err != nil {
+		return nil, nil, nil, nil, fmt.Errorf("failed to create data storage config: %w", err)
+	}
+	storageDevices = append(storageDevices, dataStorageConfig)
+
+	vmConfig.SetStorageDevicesVirtualMachineConfiguration(storageDevices)
+
+	// Configure network with NAT
+	natAttachment, err := vz.NewNATNetworkDeviceAttachment()
+	if err != nil {
+		return nil, nil, nil, nil, fmt.Errorf("failed to create NAT attachment: %w", err)
+	}
+
+	networkConfig, err := vz.NewVirtioNetworkDeviceConfiguration(natAttachment)
+	if err != nil {
+		return nil, nil, nil, nil, fmt.Errorf("failed to create network config: %w", err)
+	}
+
+	macAddr, err := vz.NewRandomLocallyAdministeredMACAddress()
+	if err != nil {
+		return nil, nil, nil, nil, fmt.Errorf("failed to generate MAC address: %w", err)
+	}
+	networkConfig.SetMACAddress(macAddr)
+	vmConfig.SetNetworkDevicesVirtualMachineConfiguration([]*vz.VirtioNetworkDeviceConfiguration{networkConfig})
+
+	// Configure serial console
+	consoleRead, consoleWriteHost, err := os.Pipe()
+	if err != nil {
+		return nil, nil, nil, nil, fmt.Errorf("failed to create console read pipe: %w", err)
+	}
+	consoleReadHost, consoleWrite, err := os.Pipe()
+	if err != nil {
+		consoleRead.Close()
+		consoleWriteHost.Close()
+		return nil, nil, nil, nil, fmt.Errorf("failed to create console write pipe: %w", err)
+	}
+
+	serialAttachment, err := vz.NewFileHandleSerialPortAttachment(consoleReadHost, consoleWriteHost)
+	if err != nil {
+		consoleRead.Close()
+		consoleWrite.Close()
+		consoleReadHost.Close()
+		consoleWriteHost.Close()
+		return nil, nil, nil, nil, fmt.Errorf("failed to create serial attachment: %w", err)
+	}
+
+	serialConfig, err := vz.NewVirtioConsoleDeviceSerialPortConfiguration(serialAttachment)
+	if err != nil {
+		consoleRead.Close()
+		consoleWrite.Close()
+		consoleReadHost.Close()
+		consoleWriteHost.Close()
+		return nil, nil, nil, nil, fmt.Errorf("failed to create serial config: %w", err)
+	}
+	vmConfig.SetSerialPortsVirtualMachineConfiguration([]*vz.VirtioConsoleDeviceSerialPortConfiguration{serialConfig})
+
+	// Configure vsock
+	vsockConfig, err := vz.NewVirtioSocketDeviceConfiguration()
+	if err != nil {
+		consoleRead.Close()
+		consoleWrite.Close()
+		return nil, nil, nil, nil, fmt.Errorf("failed to create vsock config: %w", err)
+	}
+	vmConfig.SetSocketDevicesVirtualMachineConfiguration([]vz.SocketDeviceConfiguration{vsockConfig})
+
+	// Configure entropy device
+	entropyConfig, err := vz.NewVirtioEntropyDeviceConfiguration()
+	if err != nil {
+		consoleRead.Close()
+		consoleWrite.Close()
+		return nil, nil, nil, nil, fmt.Errorf("failed to create entropy config: %w", err)
+	}
+	vmConfig.SetEntropyDevicesVirtualMachineConfiguration([]*vz.VirtioEntropyDeviceConfiguration{entropyConfig})
+
+	// Validate configuration
+	valid, err := vmConfig.Validate()
+	if err != nil || !valid {
+		consoleRead.Close()
+		consoleWrite.Close()
+		return nil, nil, nil, nil, fmt.Errorf("invalid VM configuration: %w", err)
+	}
+
+	// Create VM
+	vzVM, err := vz.NewVirtualMachine(vmConfig)
+	if err != nil {
+		consoleRead.Close()
+		consoleWrite.Close()
+		return nil, nil, nil, nil, fmt.Errorf("failed to create VM: %w", err)
+	}
+
+	// Start VM
+	if err := vzVM.Start(); err != nil {
+		consoleRead.Close()
+		consoleWrite.Close()
+		return nil, nil, nil, nil, fmt.Errorf("failed to start VM: %w", err)
+	}
+
+	// Get vsock device
+	socketDevices := vzVM.SocketDevices()
+	var socketDevice *vz.VirtioSocketDevice
+	if len(socketDevices) > 0 {
+		socketDevice = socketDevices[0]
+	}
+
+	return vzVM, socketDevice, consoleRead, consoleWrite, nil
+}
+
+// waitForDocker waits for Docker daemon to be ready inside the VM.
+func (m *VzVMManager) waitForDocker(ctx context.Context, socketDevice *vz.VirtioSocketDevice, projectID string) error {
+	deadline := time.Now().Add(60 * time.Second)
+	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ticker.C:
+			if time.Now().After(deadline) {
+				return fmt.Errorf("timeout waiting for Docker daemon")
+			}
+
+			// Try to ping Docker API
+			conn, err := socketDevice.Connect(dockerSockPort)
+			if err != nil {
+				log.Printf("Project VM %s: waiting for Docker (connect failed: %v)", projectID, err)
+				continue
+			}
+
+			// Create vsock connection wrapper
+			vsockConn := &vsockConn{
+				VirtioSocketConnection: conn,
+				localAddr:              &vsockAddr{cid: 2, port: 0},
+				remoteAddr:             &vsockAddr{cid: 3, port: dockerSockPort},
+			}
+
+			// Send Docker ping request
+			client := &http.Client{
+				Transport: &http.Transport{
+					DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+						return vsockConn, nil
+					},
+				},
+				Timeout: 3 * time.Second,
+			}
+
+			resp, err := client.Get("http://localhost/_ping")
+			if err != nil {
+				vsockConn.Close()
+				log.Printf("Project VM %s: waiting for Docker (ping failed: %v)", projectID, err)
+				continue
+			}
+			resp.Body.Close()
+
+			if resp.StatusCode == http.StatusOK {
+				log.Printf("Project VM %s: Docker daemon is ready", projectID)
+				return nil
+			}
+
+			vsockConn.Close()
+			log.Printf("Project VM %s: waiting for Docker (status: %d)", projectID, resp.StatusCode)
+		}
+	}
+}
+
+// cleanupIdleVMs periodically checks for idle VMs and shuts them down.
+func (m *VzVMManager) cleanupIdleVMs() {
+	defer m.wg.Done()
+
+	ticker := time.NewTicker(1 * time.Minute)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-m.stopCh:
+			return
+		case <-ticker.C:
+			m.projectVMMu.Lock()
+
+			for projectID, pvm := range m.projectVMs {
+				sessionCount := pvm.SessionCount()
+
+				pvm.sessionsMu.RLock()
+				lastUsed := pvm.lastUsedAt
+				pvm.sessionsMu.RUnlock()
+
+				// If no sessions and idle timeout exceeded, shutdown VM
+				if sessionCount == 0 && time.Since(lastUsed) > m.idleTimeout {
+					log.Printf("Shutting down idle project VM: %s (idle for %v)", projectID, time.Since(lastUsed))
+
+					if err := pvm.Shutdown(); err != nil {
+						log.Printf("Error stopping idle VM %s: %v", projectID, err)
+					}
+
+					delete(m.projectVMs, projectID)
+				}
+			}
+
+			m.projectVMMu.Unlock()
+		}
+	}
+}

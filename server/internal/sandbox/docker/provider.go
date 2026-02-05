@@ -59,38 +59,86 @@ type Provider struct {
 	// containerIDs maps sessionID -> Docker container ID
 	containerIDs   map[string]string
 	containerIDsMu sync.RWMutex
+
+	// vsockDialer is an optional custom dialer for VSOCK connections
+	vsockDialer func(ctx context.Context, network, addr string) (net.Conn, error)
+}
+
+// Option configures the Docker provider.
+type Option func(*Provider)
+
+// WithVsockDialer configures the Docker provider to use a VSOCK dialer
+// instead of the standard Docker socket. This is used when Docker daemon
+// runs inside a VM and is accessed via VSOCK.
+func WithVsockDialer(dialer func(ctx context.Context, network, addr string) (net.Conn, error)) Option {
+	return func(p *Provider) {
+		p.vsockDialer = dialer
+	}
 }
 
 // NewProvider creates a new Docker sandbox provider.
-func NewProvider(cfg *config.Config) (*Provider, error) {
-	opts := []client.Opt{
-		client.FromEnv,
-		client.WithAPIVersionNegotiation(),
+// By default, it connects to the local Docker daemon. Use WithVsockDialer option
+// to connect to Docker daemon inside a VM via VSOCK.
+func NewProvider(cfg *config.Config, opts ...Option) (*Provider, error) {
+	p := &Provider{
+		cfg:          cfg,
+		containerIDs: make(map[string]string),
 	}
 
-	if cfg.DockerHost != "" {
-		opts = append(opts, client.WithHost(cfg.DockerHost))
+	// Apply options
+	for _, opt := range opts {
+		opt(p)
 	}
 
-	cli, err := client.NewClientWithOpts(opts...)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create docker client: %w", err)
+	var cli *client.Client
+	var err error
+
+	// Create Docker client with custom transport if VSOCK dialer is provided
+	if p.vsockDialer != nil {
+		// Use VSOCK transport
+		httpClient := &http.Client{
+			Transport: &http.Transport{
+				DialContext: p.vsockDialer,
+			},
+		}
+
+		cli, err = client.NewClientWithOpts(
+			client.WithHTTPClient(httpClient),
+			client.WithHost("http://localhost"), // dummy host, VSOCK handles routing
+			client.WithAPIVersionNegotiation(),
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create docker client with vsock: %w", err)
+		}
+	} else {
+		// Use standard Docker client (local socket or configured host)
+		clientOpts := []client.Opt{
+			client.FromEnv,
+			client.WithAPIVersionNegotiation(),
+		}
+
+		if cfg.DockerHost != "" {
+			clientOpts = append(clientOpts, client.WithHost(cfg.DockerHost))
+		}
+
+		cli, err = client.NewClientWithOpts(clientOpts...)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create docker client: %w", err)
+		}
 	}
+
+	p.client = cli
 
 	// Verify connection
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	if _, err := cli.Ping(ctx); err != nil {
+	if _, err := p.client.Ping(ctx); err != nil {
 		_ = cli.Close()
 		return nil, fmt.Errorf("failed to connect to docker daemon: %w", err)
 	}
 
-	return &Provider{
-		client:       cli,
-		cfg:          cfg,
-		containerIDs: make(map[string]string),
-	}, nil
+	return p, nil
 }
 
 // containerName generates a consistent container name from session ID.
