@@ -1,14 +1,8 @@
 import { parsePatchFiles } from "@pierre/diffs";
 import { FileDiff } from "@pierre/diffs/react";
 import * as Diff from "diff";
-import {
-	CheckCircle,
-	ChevronDown,
-	ChevronRight,
-	FileEdit,
-	XCircle,
-} from "lucide-react";
-import { useMemo, useState } from "react";
+import { CheckCircle, FileEdit, XCircle } from "lucide-react";
+import { useMemo } from "react";
 import {
 	ToolInput as DefaultToolInput,
 	ToolOutput as DefaultToolOutput,
@@ -102,13 +96,6 @@ export default function EditToolRenderer({
 		outputValidation?.success ? outputValidation.data : null
 	) as EditToolOutput | null;
 
-	// Check if there's an error (before any early returns)
-	const hasError = !!(errorText || validOutput?.error);
-
-	// Collapse diff by default if there's an error
-	// Must be called before any early returns (hooks rule)
-	const [isExpanded, setIsExpanded] = useState(!hasError);
-
 	// Check if this tool is currently streaming (must be declared before use)
 	const isStreaming =
 		state === "input-streaming" || state === "input-available";
@@ -184,28 +171,15 @@ export default function EditToolRenderer({
 
 			{/* Diff Section */}
 			<div className="space-y-2">
-				<button
-					type="button"
-					onClick={() => setIsExpanded(!isExpanded)}
-					className="flex items-center gap-2 hover:opacity-70 transition-opacity"
-				>
-					{isExpanded ? (
-						<ChevronDown className="size-4 text-muted-foreground" />
-					) : (
-						<ChevronRight className="size-4 text-muted-foreground" />
-					)}
-					<h5 className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
-						Changes
-					</h5>
-				</button>
-				{isExpanded && validInput.old_string && validInput.new_string && (
-					<DiffView
-						oldString={validInput.old_string}
-						newString={validInput.new_string}
-						fileName={fileName}
-						isStreaming={isStreaming}
-					/>
-				)}
+				<h5 className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
+					Changes
+				</h5>
+				<DiffView
+					oldString={validInput.old_string}
+					newString={validInput.new_string}
+					fileName={fileName}
+					isStreaming={isStreaming}
+				/>
 			</div>
 
 			{/* Result Section */}

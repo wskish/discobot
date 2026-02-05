@@ -30,7 +30,6 @@ interface MessagePartsProps {
  * OptimizedToolWrapper - Wraps optimized tool rendering with raw view toggle
  *
  * Manages the state for switching between optimized and raw view.
- * Edit tool defaults to expanded state.
  */
 function OptimizedToolWrapper({
 	part,
@@ -41,11 +40,8 @@ function OptimizedToolWrapper({
 	const isOptimized = hasOptimizedRenderer(part.toolName);
 	const title = getToolTitle(part);
 
-	// Edit tool defaults to expanded
-	const isEditTool = part.toolName === "Edit";
-
 	return (
-		<Tool key={part.toolCallId} defaultOpen={isEditTool}>
+		<Tool key={part.toolCallId}>
 			<ToolHeader
 				type={part.type}
 				state={part.state}
