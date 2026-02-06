@@ -169,259 +169,270 @@ export function SessionViewHeader() {
 	}, []);
 
 	return (
-		<div className="h-10 flex items-center justify-between bg-background border-b border-border shrink-0">
-			<div className="flex items-center gap-0 flex-1 min-w-0 h-full overflow-hidden">
-				<Button
-					variant={activeView === "chat" ? "secondary" : "ghost"}
-					size="sm"
-					className="h-6 text-xs mx-2 shrink-0"
-					onClick={() => setActiveView("chat")}
-				>
-					Chat
-				</Button>
-				<Button
-					variant={activeView === "terminal" ? "secondary" : "ghost"}
-					size="sm"
-					className="h-6 text-xs shrink-0"
-					onClick={() => setActiveView("terminal")}
-				>
-					Terminal
-				</Button>
-				{diffStats && diffStats.filesChanged > 0 && (
+		<div
+			className={cn(
+				"h-10 flex items-center justify-between bg-background shrink-0",
+				selectedSession && "border-b border-border",
+			)}
+		>
+			{selectedSession && (
+				<div className="flex items-center gap-0 flex-1 min-w-0 h-full overflow-hidden animate-in fade-in duration-500">
 					<Button
-						variant={activeView === "consolidated-diff" ? "secondary" : "ghost"}
+						variant={activeView === "chat" ? "secondary" : "ghost"}
 						size="sm"
-						className="h-6 text-xs shrink-0 gap-1"
-						onClick={() => setActiveView("consolidated-diff")}
+						className="h-6 text-xs mx-2 shrink-0"
+						onClick={() => setActiveView("chat")}
 					>
-						<span className="text-green-500">+{diffStats.additions}</span>
-						<span className="text-red-500">-{diffStats.deletions}</span>
+						Chat
 					</Button>
-				)}
-				{selectedSessionId &&
-					services.map((service) => (
-						<div key={service.id} className="shrink-0">
-							<ServiceButton
-								service={service}
-								sessionId={selectedSessionId}
-								isActive={activeServiceId === service.id}
-								onSelect={() => setActiveView(`service:${service.id}`)}
-								onStart={() => startService(service.id)}
-							/>
-						</div>
-					))}
+					<Button
+						variant={activeView === "terminal" ? "secondary" : "ghost"}
+						size="sm"
+						className="h-6 text-xs shrink-0"
+						onClick={() => setActiveView("terminal")}
+					>
+						Terminal
+					</Button>
+					{diffStats && diffStats.filesChanged > 0 && (
+						<Button
+							variant={
+								activeView === "consolidated-diff" ? "secondary" : "ghost"
+							}
+							size="sm"
+							className="h-6 text-xs shrink-0 gap-1"
+							onClick={() => setActiveView("consolidated-diff")}
+						>
+							<span className="text-green-500">+{diffStats.additions}</span>
+							<span className="text-red-500">-{diffStats.deletions}</span>
+						</Button>
+					)}
+					{selectedSessionId &&
+						services.map((service) => (
+							<div key={service.id} className="shrink-0">
+								<ServiceButton
+									service={service}
+									sessionId={selectedSessionId}
+									isActive={activeServiceId === service.id}
+									onSelect={() => setActiveView(`service:${service.id}`)}
+									onStart={() => startService(service.id)}
+								/>
+							</div>
+						))}
 
-				{/* File tabs */}
-				{openFiles.length > 0 && (
-					<>
-						<div className="w-px h-6 bg-border mx-2 shrink-0" />
-						<div className="relative flex items-center min-w-0 h-full">
-							{showScrollLeft && (
-								<Button
-									variant="ghost"
-									size="icon"
-									className="absolute left-0 h-6 w-6 z-10 bg-muted/95 hover:bg-muted shrink-0"
-									onMouseDown={() => startScrolling("left")}
-									onMouseUp={stopScrolling}
-									onMouseLeave={stopScrolling}
-									onTouchStart={() => startScrolling("left")}
-									onTouchEnd={stopScrolling}
-								>
-									<ChevronLeft className="h-3.5 w-3.5" />
-								</Button>
-							)}
-							<div
-								ref={tabsContainerRef}
-								className="flex items-center overflow-x-auto min-w-0 h-full scrollbar-none"
-							>
-								{openFiles.map((file) => (
-									<div
-										key={file.id}
-										role="tab"
-										tabIndex={0}
-										aria-selected={activeFilePathFromView === file.id}
-										className={cn(
-											"flex items-center gap-2 px-3 h-full border-r border-border cursor-pointer transition-colors text-sm shrink-0",
-											activeFilePathFromView === file.id
-												? "bg-background text-foreground"
-												: "text-muted-foreground hover:bg-muted/50",
-										)}
-										onClick={() => setActiveView(`file:${file.id}`)}
-										onKeyDown={(e) => {
-											if (e.key === "Enter" || e.key === " ") {
-												setActiveView(`file:${file.id}`);
-											}
-										}}
+					{/* File tabs */}
+					{openFiles.length > 0 && (
+						<>
+							<div className="w-px h-6 bg-border mx-2 shrink-0" />
+							<div className="relative flex items-center min-w-0 h-full">
+								{showScrollLeft && (
+									<Button
+										variant="ghost"
+										size="icon"
+										className="absolute left-0 h-6 w-6 z-10 bg-muted/95 hover:bg-muted shrink-0"
+										onMouseDown={() => startScrolling("left")}
+										onMouseUp={stopScrolling}
+										onMouseLeave={stopScrolling}
+										onTouchStart={() => startScrolling("left")}
+										onTouchEnd={stopScrolling}
 									>
-										{file.status === "deleted" ? (
-											<FileMinus className="h-4 w-4 text-red-500" />
-										) : file.status === "added" ? (
-											<FilePlus className="h-4 w-4 text-green-500" />
-										) : (
-											<FileCode
-												className={cn(
-													"h-4 w-4",
-													file.status === "modified"
-														? "text-yellow-500"
-														: file.changed
-															? "text-yellow-500"
-															: "text-sky-500",
-												)}
-											/>
-										)}
-										<span
+										<ChevronLeft className="h-3.5 w-3.5" />
+									</Button>
+								)}
+								<div
+									ref={tabsContainerRef}
+									className="flex items-center overflow-x-auto min-w-0 h-full scrollbar-none"
+								>
+									{openFiles.map((file) => (
+										<div
+											key={file.id}
+											role="tab"
+											tabIndex={0}
+											aria-selected={activeFilePathFromView === file.id}
 											className={cn(
-												"truncate max-w-32",
-												file.status === "deleted" &&
-													"line-through text-muted-foreground",
+												"flex items-center gap-2 px-3 h-full border-r border-border cursor-pointer transition-colors text-sm shrink-0",
+												activeFilePathFromView === file.id
+													? "bg-background text-foreground"
+													: "text-muted-foreground hover:bg-muted/50",
 											)}
+											onClick={() => setActiveView(`file:${file.id}`)}
+											onKeyDown={(e) => {
+												if (e.key === "Enter" || e.key === " ") {
+													setActiveView(`file:${file.id}`);
+												}
+											}}
 										>
-											{file.name}
-										</span>
-										{file.status && (
+											{file.status === "deleted" ? (
+												<FileMinus className="h-4 w-4 text-red-500" />
+											) : file.status === "added" ? (
+												<FilePlus className="h-4 w-4 text-green-500" />
+											) : (
+												<FileCode
+													className={cn(
+														"h-4 w-4",
+														file.status === "modified"
+															? "text-yellow-500"
+															: file.changed
+																? "text-yellow-500"
+																: "text-sky-500",
+													)}
+												/>
+											)}
 											<span
 												className={cn(
-													"text-xs font-medium",
-													file.status === "added" && "text-green-500",
-													file.status === "modified" && "text-yellow-500",
-													file.status === "deleted" && "text-red-500",
-													file.status === "renamed" && "text-purple-500",
+													"truncate max-w-32",
+													file.status === "deleted" &&
+														"line-through text-muted-foreground",
 												)}
 											>
-												{file.status === "added"
-													? "A"
-													: file.status === "modified"
-														? "M"
-														: file.status === "deleted"
-															? "D"
-															: file.status === "renamed"
-																? "R"
-																: ""}
+												{file.name}
 											</span>
-										)}
-										<button
-											type="button"
-											onClick={(e) => {
-												e.stopPropagation();
-												handleTabClose(file.id);
-											}}
-											className="hover:bg-muted-foreground/20 rounded p-0.5 transition-colors"
-										>
-											<X className="h-3.5 w-3.5" />
-										</button>
-									</div>
-								))}
+											{file.status && (
+												<span
+													className={cn(
+														"text-xs font-medium",
+														file.status === "added" && "text-green-500",
+														file.status === "modified" && "text-yellow-500",
+														file.status === "deleted" && "text-red-500",
+														file.status === "renamed" && "text-purple-500",
+													)}
+												>
+													{file.status === "added"
+														? "A"
+														: file.status === "modified"
+															? "M"
+															: file.status === "deleted"
+																? "D"
+																: file.status === "renamed"
+																	? "R"
+																	: ""}
+												</span>
+											)}
+											<button
+												type="button"
+												onClick={(e) => {
+													e.stopPropagation();
+													handleTabClose(file.id);
+												}}
+												className="hover:bg-muted-foreground/20 rounded p-0.5 transition-colors"
+											>
+												<X className="h-3.5 w-3.5" />
+											</button>
+										</div>
+									))}
+								</div>
+								{showScrollRight && (
+									<Button
+										variant="ghost"
+										size="icon"
+										className="absolute right-0 h-6 w-6 z-10 bg-muted/95 hover:bg-muted shrink-0"
+										onMouseDown={() => startScrolling("right")}
+										onMouseUp={stopScrolling}
+										onMouseLeave={stopScrolling}
+										onTouchStart={() => startScrolling("right")}
+										onTouchEnd={stopScrolling}
+									>
+										<ChevronRight className="h-3.5 w-3.5" />
+									</Button>
+								)}
 							</div>
-							{showScrollRight && (
+						</>
+					)}
+				</div>
+			)}
+			{selectedSession && (
+				<div className="flex items-center gap-2 animate-in fade-in duration-500">
+					{activeService && activeService.status === "running" && (
+						<Button
+							variant="ghost"
+							size="sm"
+							className="h-6 text-xs gap-1"
+							onClick={() => stopService(activeService.id)}
+							title="Stop service"
+						>
+							<Square className="h-3 w-3 fill-current" />
+							Stop
+						</Button>
+					)}
+					{activeView === "terminal" && (
+						<>
+							{(terminalStatus === "disconnected" ||
+								terminalStatus === "error") && (
 								<Button
 									variant="ghost"
-									size="icon"
-									className="absolute right-0 h-6 w-6 z-10 bg-muted/95 hover:bg-muted shrink-0"
-									onMouseDown={() => startScrolling("right")}
-									onMouseUp={stopScrolling}
-									onMouseLeave={stopScrolling}
-									onTouchStart={() => startScrolling("right")}
-									onTouchEnd={stopScrolling}
+									size="sm"
+									className="h-6 text-xs gap-1"
+									onClick={handleTerminalReconnect}
 								>
-									<ChevronRight className="h-3.5 w-3.5" />
+									<RefreshCw className="h-3 w-3" />
+									Reconnect
 								</Button>
 							)}
+							<label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer select-none">
+								<input
+									type="checkbox"
+									checked={terminalRoot}
+									onChange={(e) => setTerminalRoot(e.target.checked)}
+									className="h-3 w-3 cursor-pointer"
+								/>
+								root
+							</label>
+							{selectedSessionId && (
+								<Button
+									variant="ghost"
+									size="sm"
+									onClick={handleCopySSH}
+									className="h-6 text-xs gap-1"
+									title={`Copy SSH command: ssh -p 3333 ${selectedSessionId}@${getSSHHost()}`}
+								>
+									{copied ? (
+										<Check className="h-3 w-3" />
+									) : (
+										<Copy className="h-3 w-3" />
+									)}
+									{copied ? "Copied!" : "Copy SSH"}
+								</Button>
+							)}
+						</>
+					)}
+					{changedFilesCount > 0 && (
+						<Button
+							variant="default"
+							size="sm"
+							className="h-6 text-xs gap-1"
+							onClick={handleCommit}
+							disabled={showCommitLoading || !selectedSessionId}
+							title="Commit changes"
+						>
+							{showCommitLoading ? (
+								<Loader2 className="h-3.5 w-3.5 animate-spin" />
+							) : (
+								<GitCommitHorizontal className="h-3.5 w-3.5" />
+							)}
+							{showCommitLoading ? "Committing..." : "Commit"}
+						</Button>
+					)}
+					{selectedSessionId && (
+						<div className="shrink-0">
+							<IDELauncher sessionId={selectedSessionId} />
 						</div>
-					</>
-				)}
-			</div>
-			<div className="flex items-center gap-2">
-				{activeService && activeService.status === "running" && (
-					<Button
-						variant="ghost"
-						size="sm"
-						className="h-6 text-xs gap-1"
-						onClick={() => stopService(activeService.id)}
-						title="Stop service"
-					>
-						<Square className="h-3 w-3 fill-current" />
-						Stop
-					</Button>
-				)}
-				{activeView === "terminal" && (
-					<>
-						{(terminalStatus === "disconnected" ||
-							terminalStatus === "error") && (
-							<Button
-								variant="ghost"
-								size="sm"
-								className="h-6 text-xs gap-1"
-								onClick={handleTerminalReconnect}
-							>
-								<RefreshCw className="h-3 w-3" />
-								Reconnect
-							</Button>
-						)}
-						<label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer select-none">
-							<input
-								type="checkbox"
-								checked={terminalRoot}
-								onChange={(e) => setTerminalRoot(e.target.checked)}
-								className="h-3 w-3 cursor-pointer"
-							/>
-							root
-						</label>
-						{selectedSessionId && (
-							<Button
-								variant="ghost"
-								size="sm"
-								onClick={handleCopySSH}
-								className="h-6 text-xs gap-1"
-								title={`Copy SSH command: ssh -p 3333 ${selectedSessionId}@${getSSHHost()}`}
-							>
-								{copied ? (
-									<Check className="h-3 w-3" />
-								) : (
-									<Copy className="h-3 w-3" />
-								)}
-								{copied ? "Copied!" : "Copy SSH"}
-							</Button>
-						)}
-					</>
-				)}
-				{changedFilesCount > 0 && (
-					<Button
-						variant="default"
-						size="sm"
-						className="h-6 text-xs gap-1"
-						onClick={handleCommit}
-						disabled={showCommitLoading || !selectedSessionId}
-						title="Commit changes"
-					>
-						{showCommitLoading ? (
-							<Loader2 className="h-3.5 w-3.5 animate-spin" />
-						) : (
-							<GitCommitHorizontal className="h-3.5 w-3.5" />
-						)}
-						{showCommitLoading ? "Committing..." : "Commit"}
-					</Button>
-				)}
-				{selectedSessionId && (
-					<div className="shrink-0">
-						<IDELauncher sessionId={selectedSessionId} />
-					</div>
-				)}
-				{onToggleRightSidebar && (
-					<Button
-						variant="ghost"
-						size={rightSidebarOpen ? "icon" : "sm"}
-						className={cn("h-6", rightSidebarOpen ? "w-6" : "text-xs")}
-						onClick={onToggleRightSidebar}
-						title={rightSidebarOpen ? "Close Files" : "Open Files"}
-					>
-						{rightSidebarOpen ? (
-							<PanelRightClose className="h-3.5 w-3.5" />
-						) : (
-							"Files"
-						)}
-					</Button>
-				)}
-			</div>
+					)}
+					{onToggleRightSidebar && (
+						<Button
+							variant="ghost"
+							size={rightSidebarOpen ? "icon" : "sm"}
+							className={cn("h-6", rightSidebarOpen ? "w-6" : "text-xs")}
+							onClick={onToggleRightSidebar}
+							title={rightSidebarOpen ? "Close Files" : "Open Files"}
+						>
+							{rightSidebarOpen ? (
+								<PanelRightClose className="h-3.5 w-3.5" />
+							) : (
+								"Files"
+							)}
+						</Button>
+					)}
+				</div>
+			)}
 		</div>
 	);
 }
