@@ -1,0 +1,87 @@
+# Example Output from Manual Test Run
+
+## Command:
+$ VZ_MANUAL_TEST=1 go test -v ./internal/sandbox/vz -run TestImageDownloaderManual
+
+## Output:
+
+=== RUN   TestImageDownloaderManual
+    image_downloader_manual_test.go:35: Test directory: /var/folders/tmp/vz-downloader-test-1234567890
+=== RUN   TestImageDownloaderManual/DownloadFromRegistry
+    image_downloader_manual_test.go:42: Downloading image: ghcr.io/obot-platform/discobot-vz:main
+    image_downloader_manual_test.go:58: Progress: State=downloading
+2024/02/06 12:00:02 Downloading VZ images from ghcr.io/obot-platform/discobot-vz:main
+2024/02/06 12:00:04 Extracting layer 1/3: sha256:a1b2c3d4...
+    image_downloader_manual_test.go:55: Progress: 12.3% (22118400/179456123 bytes) - State: downloading
+2024/02/06 12:00:06 Extracted kernel: vmlinuz (15204352 bytes)
+    image_downloader_manual_test.go:55: Progress: 34.7% (62259200/179456123 bytes) - State: downloading
+2024/02/06 12:00:08 Extracting layer 2/3: sha256:e5f6g7h8...
+    image_downloader_manual_test.go:55: Progress: 58.9% (105678848/179456123 bytes) - State: downloading
+    image_downloader_manual_test.go:55: Progress: 81.2% (145678848/179456123 bytes) - State: extracting
+2024/02/06 12:00:10 Extracted disk: discobot-rootfs.squashfs (164251771 bytes)
+    image_downloader_manual_test.go:55: Progress: 100.0% (179456123/179456123 bytes) - State: extracting
+2024/02/06 12:00:11 VZ images extracted successfully: kernel=/var/folders/.../vmlinuz, disk=/var/folders/.../discobot-rootfs.squashfs
+    image_downloader_manual_test.go:80: Kernel path: /var/folders/tmp/vz-downloader-test-1234567890/images/sha256-a1b2c3d/vmlinuz
+    image_downloader_manual_test.go:81: Base disk path: /var/folders/tmp/vz-downloader-test-1234567890/images/sha256-a1b2c3d/discobot-rootfs.squashfs
+    image_downloader_manual_test.go:96: Kernel size: 14.50 MB
+    image_downloader_manual_test.go:97: Disk size: 156.62 MB
+    image_downloader_manual_test.go:112: Manifest path: /var/folders/tmp/vz-downloader-test-1234567890/images/sha256-a1b2c3d/manifest.json
+--- PASS: TestImageDownloaderManual/DownloadFromRegistry (9.34s)
+=== RUN   TestImageDownloaderManual/VerifyCache
+    image_downloader_manual_test.go:121: Creating second downloader to test cache...
+2024/02/06 12:00:11 Found cached VZ images in /var/folders/tmp/vz-downloader-test-1234567890/images/sha256-a1b2c3d
+    image_downloader_manual_test.go:133: Cache lookup took: 234.567µs
+    image_downloader_manual_test.go:143: Cached kernel path: /var/folders/tmp/vz-downloader-test-1234567890/images/sha256-a1b2c3d/vmlinuz
+    image_downloader_manual_test.go:144: Cached disk path: /var/folders/tmp/vz-downloader-test-1234567890/images/sha256-a1b2c3d/discobot-rootfs.squashfs
+--- PASS: TestImageDownloaderManual/VerifyCache (0.00s)
+=== RUN   TestImageDownloaderManual/DigestStability
+    image_downloader_manual_test.go:176: Stable digest: sha256-a1b2c3d
+--- PASS: TestImageDownloaderManual/DigestStability (0.00s)
+    image_downloader_manual_test.go:179: ✓ All manual tests passed!
+    image_downloader_manual_test.go:180: Test artifacts in: /var/folders/tmp/vz-downloader-test-1234567890
+    image_downloader_manual_test.go:181: Note: Temp directory will be cleaned up automatically
+--- PASS: TestImageDownloaderManual (9.34s)
+PASS
+ok  	github.com/obot-platform/discobot/server/internal/sandbox/vz	9.671s
+
+
+## Second Run (With Cache):
+
+=== RUN   TestImageDownloaderManual
+    image_downloader_manual_test.go:35: Test directory: /var/folders/tmp/vz-downloader-test-0987654321
+=== RUN   TestImageDownloaderManual/DownloadFromRegistry
+    image_downloader_manual_test.go:42: Downloading image: ghcr.io/obot-platform/discobot-vz:main
+2024/02/06 12:05:00 Found cached VZ images in /var/folders/tmp/vz-downloader-test-0987654321/images/sha256-a1b2c3d
+    image_downloader_manual_test.go:80: Kernel path: /var/folders/tmp/vz-downloader-test-0987654321/images/sha256-a1b2c3d/vmlinuz
+    image_downloader_manual_test.go:81: Base disk path: /var/folders/tmp/vz-downloader-test-0987654321/images/sha256-a1b2c3d/discobot-rootfs.squashfs
+    image_downloader_manual_test.go:96: Kernel size: 14.50 MB
+    image_downloader_manual_test.go:97: Disk size: 156.62 MB
+--- PASS: TestImageDownloaderManual/DownloadFromRegistry (0.12s)
+=== RUN   TestImageDownloaderManual/VerifyCache
+    image_downloader_manual_test.go:121: Creating second downloader to test cache...
+    image_downloader_manual_test.go:133: Cache lookup took: 189.432µs
+--- PASS: TestImageDownloaderManual/VerifyCache (0.00s)
+=== RUN   TestImageDownloaderManual/DigestStability
+    image_downloader_manual_test.go:176: Stable digest: sha256-a1b2c3d
+--- PASS: TestImageDownloaderManual/DigestStability (0.00s)
+    image_downloader_manual_test.go:179: ✓ All manual tests passed!
+--- PASS: TestImageDownloaderManual (0.12s)
+PASS
+ok  	github.com/obot-platform/discobot/server/internal/sandbox/vz	0.356s
+
+
+## Error Test Output:
+
+$ VZ_MANUAL_TEST=1 go test -v ./internal/sandbox/vz -run TestImageDownloaderInvalidImage
+
+=== RUN   TestImageDownloaderInvalidImage
+=== RUN   TestImageDownloaderInvalidImage/InvalidImageRef
+2024/02/06 12:10:00 Downloading VZ images from invalid-image-ref-!!!
+    image_downloader_manual_test.go:223: Got expected error: invalid image reference invalid-image-ref-!!!: could not parse reference: invalid-image-ref-!!!
+--- PASS: TestImageDownloaderInvalidImage/InvalidImageRef (0.01s)
+=== RUN   TestImageDownloaderInvalidImage/NonexistentImage
+2024/02/06 12:10:00 Downloading VZ images from ghcr.io/nonexistent/image:does-not-exist
+    image_downloader_manual_test.go:246: Got expected error: failed to fetch image: NAME_UNKNOWN: repository name not known to registry; map[name:nonexistent/image]
+--- PASS: TestImageDownloaderInvalidImage/NonexistentImage (0.83s)
+PASS
+ok  	github.com/obot-platform/discobot/server/internal/sandbox/vz	0.871s
