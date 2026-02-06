@@ -311,7 +311,10 @@ export function Header({ leftSidebarOpen, onToggleSidebar }: HeaderProps) {
 									<ChevronDown className="h-3 w-3 shrink-0 text-muted-foreground" />
 								</button>
 							</DropdownMenuTrigger>
-							<DropdownMenuContent align="start" className="w-72">
+							<DropdownMenuContent
+								align="start"
+								className="min-w-72 max-w-[54rem]"
+							>
 								{[...workspaceSessions]
 									.sort(
 										(a, b) =>
