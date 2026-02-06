@@ -32,6 +32,7 @@ allowlist:
 # Header injection rules
 # Map of domain patterns to header rules
 # Each rule has "set" (replace) and/or "append" sections
+# Optional "conditions" restrict when headers are applied (all must match)
 # Use the REST API (POST/PATCH /api/config) to set secrets at runtime
 headers:
   # Example: Set headers (replaces any existing value)
@@ -49,9 +50,16 @@ headers:
       # e.g., "1.2.3.4" becomes "1.2.3.4, proxy.internal"
       "X-Forwarded-For": "proxy.internal"
 
-  # Example: Append only (useful for Via, X-Forwarded-For)
+  # Example: Conditional headers (only applied when conditions match)
   "api.example.com":
+    # ALL conditions must be true for headers to apply
+    conditions:
+      - header: "X-Environment"
+        equals: "production"
+      - header: "X-Region"
+        equals: "us-east-1"
     set:
+      "Authorization": "Bearer prod-token"
       "X-Custom-Header": "custom-value"
     append:
       "Via": "1.1 discobot-proxy"

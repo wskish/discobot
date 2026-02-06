@@ -218,3 +218,193 @@ func TestInjector_HostWithPort(t *testing.T) {
 		t.Errorf("X-Test = %q, want %q", got, "value")
 	}
 }
+
+func TestInjector_Apply_Conditions_Match(t *testing.T) {
+	inj := New()
+	inj.SetRules(config.HeadersConfig{
+		"api.example.com": config.HeaderRule{
+			Conditions: []config.Condition{
+				{Header: "X-Custom-Header", Equals: "special-value"},
+			},
+			Set: map[string]string{
+				"Authorization": "Bearer token",
+			},
+		},
+	})
+
+	req := httptest.NewRequest("GET", "http://api.example.com/test", nil)
+	req.Header.Set("X-Custom-Header", "special-value")
+	inj.Apply(req)
+
+	if got := req.Header.Get("Authorization"); got != "Bearer token" {
+		t.Errorf("Authorization = %q, want %q", got, "Bearer token")
+	}
+}
+
+func TestInjector_Apply_Conditions_NoMatch(t *testing.T) {
+	inj := New()
+	inj.SetRules(config.HeadersConfig{
+		"api.example.com": config.HeaderRule{
+			Conditions: []config.Condition{
+				{Header: "X-Custom-Header", Equals: "special-value"},
+			},
+			Set: map[string]string{
+				"Authorization": "Bearer token",
+			},
+		},
+	})
+
+	req := httptest.NewRequest("GET", "http://api.example.com/test", nil)
+	req.Header.Set("X-Custom-Header", "wrong-value")
+	inj.Apply(req)
+
+	// Header should not be set because condition didn't match
+	if got := req.Header.Get("Authorization"); got != "" {
+		t.Errorf("Authorization = %q, want empty (condition didn't match)", got)
+	}
+}
+
+func TestInjector_Apply_Conditions_MissingHeader(t *testing.T) {
+	inj := New()
+	inj.SetRules(config.HeadersConfig{
+		"api.example.com": config.HeaderRule{
+			Conditions: []config.Condition{
+				{Header: "X-Custom-Header", Equals: "special-value"},
+			},
+			Set: map[string]string{
+				"Authorization": "Bearer token",
+			},
+		},
+	})
+
+	req := httptest.NewRequest("GET", "http://api.example.com/test", nil)
+	// X-Custom-Header is not set
+	inj.Apply(req)
+
+	// Header should not be set because condition header is missing
+	if got := req.Header.Get("Authorization"); got != "" {
+		t.Errorf("Authorization = %q, want empty (condition header missing)", got)
+	}
+}
+
+func TestInjector_Apply_MultipleConditions_AllMatch(t *testing.T) {
+	inj := New()
+	inj.SetRules(config.HeadersConfig{
+		"api.example.com": config.HeaderRule{
+			Conditions: []config.Condition{
+				{Header: "X-Env", Equals: "production"},
+				{Header: "X-Region", Equals: "us-east-1"},
+			},
+			Set: map[string]string{
+				"Authorization": "Bearer prod-token",
+			},
+		},
+	})
+
+	req := httptest.NewRequest("GET", "http://api.example.com/test", nil)
+	req.Header.Set("X-Env", "production")
+	req.Header.Set("X-Region", "us-east-1")
+	inj.Apply(req)
+
+	if got := req.Header.Get("Authorization"); got != "Bearer prod-token" {
+		t.Errorf("Authorization = %q, want %q", got, "Bearer prod-token")
+	}
+}
+
+func TestInjector_Apply_MultipleConditions_OneDoesNotMatch(t *testing.T) {
+	inj := New()
+	inj.SetRules(config.HeadersConfig{
+		"api.example.com": config.HeaderRule{
+			Conditions: []config.Condition{
+				{Header: "X-Env", Equals: "production"},
+				{Header: "X-Region", Equals: "us-east-1"},
+			},
+			Set: map[string]string{
+				"Authorization": "Bearer prod-token",
+			},
+		},
+	})
+
+	req := httptest.NewRequest("GET", "http://api.example.com/test", nil)
+	req.Header.Set("X-Env", "production")
+	req.Header.Set("X-Region", "us-west-2") // Wrong region
+	inj.Apply(req)
+
+	// Header should not be set because one condition didn't match
+	if got := req.Header.Get("Authorization"); got != "" {
+		t.Errorf("Authorization = %q, want empty (one condition didn't match)", got)
+	}
+}
+
+func TestInjector_Apply_NoConditions(t *testing.T) {
+	inj := New()
+	inj.SetRules(config.HeadersConfig{
+		"api.example.com": config.HeaderRule{
+			// No conditions specified - should always apply
+			Set: map[string]string{
+				"Authorization": "Bearer token",
+			},
+		},
+	})
+
+	req := httptest.NewRequest("GET", "http://api.example.com/test", nil)
+	inj.Apply(req)
+
+	if got := req.Header.Get("Authorization"); got != "Bearer token" {
+		t.Errorf("Authorization = %q, want %q", got, "Bearer token")
+	}
+}
+
+func TestInjector_Apply_Conditions_WithAppend(t *testing.T) {
+	inj := New()
+	inj.SetRules(config.HeadersConfig{
+		"api.example.com": config.HeaderRule{
+			Conditions: []config.Condition{
+				{Header: "X-Auth-Type", Equals: "internal"},
+			},
+			Set: map[string]string{
+				"Authorization": "Bearer internal-token",
+			},
+			Append: map[string]string{
+				"X-Forwarded-For": "proxy.internal",
+			},
+		},
+	})
+
+	req := httptest.NewRequest("GET", "http://api.example.com/test", nil)
+	req.Header.Set("X-Auth-Type", "internal")
+	req.Header.Set("X-Forwarded-For", "1.2.3.4")
+	inj.Apply(req)
+
+	if got := req.Header.Get("Authorization"); got != "Bearer internal-token" {
+		t.Errorf("Authorization = %q, want %q", got, "Bearer internal-token")
+	}
+
+	expected := "1.2.3.4, proxy.internal"
+	if got := req.Header.Get("X-Forwarded-For"); got != expected {
+		t.Errorf("X-Forwarded-For = %q, want %q", got, expected)
+	}
+}
+
+func TestInjector_Apply_Conditions_CaseSensitive(t *testing.T) {
+	inj := New()
+	inj.SetRules(config.HeadersConfig{
+		"api.example.com": config.HeaderRule{
+			Conditions: []config.Condition{
+				{Header: "X-Custom", Equals: "Value"},
+			},
+			Set: map[string]string{
+				"Authorization": "Bearer token",
+			},
+		},
+	})
+
+	req := httptest.NewRequest("GET", "http://api.example.com/test", nil)
+	req.Header.Set("X-Custom", "value") // Different case
+	inj.Apply(req)
+
+	// Header should not be set because value is case-sensitive
+	if got := req.Header.Get("Authorization"); got != "" {
+		t.Errorf("Authorization = %q, want empty (case mismatch)", got)
+	}
+}

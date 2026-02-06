@@ -126,11 +126,16 @@ allowlist:
 
 # Header injection rules (domain -> header rules)
 # Each rule has "set" (replace) and/or "append" sections
+# Optional "conditions" restrict when headers are applied
 headers:
   "api.anthropic.com":
     set:
       "X-Custom-Header": "value1"
   "*.openai.com":
+    # Conditions: ALL must be true for headers to apply
+    conditions:
+      - header: "X-Environment"
+        equals: "production"
     set:
       "X-Request-Source": "discobot-proxy"
     append:
@@ -182,6 +187,9 @@ curl -X POST http://localhost:17081/api/config \
         "set": {"Authorization": "Bearer sk-ant-xxx"}
       },
       "*.github.com": {
+        "conditions": [
+          {"header": "X-Auth-Type", "equals": "enterprise"}
+        ],
         "set": {"Authorization": "token ghp_xxx"},
         "append": {"X-Forwarded-For": "proxy.internal"}
       }
@@ -197,6 +205,10 @@ Merges into existing config. Set a domain to `null` to delete:
 # Add headers for a new domain (existing domains unchanged)
 curl -X PATCH http://localhost:17081/api/config \
   -d '{"headers": {"api.openai.com": {"set": {"Authorization": "Bearer sk-xxx"}}}}'
+
+# Add conditional headers (applied only when X-Environment equals "prod")
+curl -X PATCH http://localhost:17081/api/config \
+  -d '{"headers": {"api.example.com": {"conditions": [{"header": "X-Environment", "equals": "prod"}], "set": {"Authorization": "Bearer prod-token"}}}}'
 
 # Add append-style headers
 curl -X PATCH http://localhost:17081/api/config \

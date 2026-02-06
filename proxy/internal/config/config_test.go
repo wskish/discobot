@@ -135,6 +135,63 @@ func TestValidate(t *testing.T) {
 			},
 			wantErr: true,
 		},
+		{
+			name: "valid header conditions",
+			modify: func(c *Config) {
+				c.Headers = HeadersConfig{
+					"api.example.com": HeaderRule{
+						Conditions: []Condition{
+							{Header: "X-Custom", Equals: "value"},
+						},
+						Set: map[string]string{"Authorization": "Bearer token"},
+					},
+				}
+			},
+			wantErr: false,
+		},
+		{
+			name: "invalid header condition - empty header name",
+			modify: func(c *Config) {
+				c.Headers = HeadersConfig{
+					"api.example.com": HeaderRule{
+						Conditions: []Condition{
+							{Header: "", Equals: "value"},
+						},
+						Set: map[string]string{"Authorization": "Bearer token"},
+					},
+				}
+			},
+			wantErr: true,
+		},
+		{
+			name: "invalid header condition - empty equals value",
+			modify: func(c *Config) {
+				c.Headers = HeadersConfig{
+					"api.example.com": HeaderRule{
+						Conditions: []Condition{
+							{Header: "X-Custom", Equals: ""},
+						},
+						Set: map[string]string{"Authorization": "Bearer token"},
+					},
+				}
+			},
+			wantErr: true,
+		},
+		{
+			name: "valid multiple conditions",
+			modify: func(c *Config) {
+				c.Headers = HeadersConfig{
+					"api.example.com": HeaderRule{
+						Conditions: []Condition{
+							{Header: "X-Env", Equals: "prod"},
+							{Header: "X-Region", Equals: "us-east-1"},
+						},
+						Set: map[string]string{"Authorization": "Bearer token"},
+					},
+				}
+			},
+			wantErr: false,
+		},
 	}
 
 	for _, tt := range tests {

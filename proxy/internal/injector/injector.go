@@ -29,8 +29,9 @@ func (i *Injector) SetRules(rules config.HeadersConfig) {
 	i.rules = make(map[string]config.HeaderRule)
 	for domain, rule := range rules {
 		i.rules[domain] = config.HeaderRule{
-			Set:    copyMap(rule.Set),
-			Append: copyMap(rule.Append),
+			Conditions: copyConditions(rule.Conditions),
+			Set:        copyMap(rule.Set),
+			Append:     copyMap(rule.Append),
 		}
 	}
 }
@@ -46,8 +47,9 @@ func (i *Injector) SetDomainHeaders(domain string, rule config.HeaderRule) {
 	}
 
 	i.rules[domain] = config.HeaderRule{
-		Set:    copyMap(rule.Set),
-		Append: copyMap(rule.Append),
+		Conditions: copyConditions(rule.Conditions),
+		Set:        copyMap(rule.Set),
+		Append:     copyMap(rule.Append),
 	}
 }
 
@@ -99,14 +101,20 @@ func (i *Injector) GetRules() map[string]config.HeaderRule {
 	result := make(map[string]config.HeaderRule, len(i.rules))
 	for k, v := range i.rules {
 		result[k] = config.HeaderRule{
-			Set:    copyMap(v.Set),
-			Append: copyMap(v.Append),
+			Conditions: copyConditions(v.Conditions),
+			Set:        copyMap(v.Set),
+			Append:     copyMap(v.Append),
 		}
 	}
 	return result
 }
 
 func applyRule(req *http.Request, rule config.HeaderRule) []string {
+	// Check if all conditions are met
+	if !evaluateConditions(req, rule.Conditions) {
+		return nil
+	}
+
 	var headers []string
 
 	// Apply "set" headers (replace)
@@ -129,6 +137,25 @@ func applyRule(req *http.Request, rule config.HeaderRule) []string {
 	return headers
 }
 
+// evaluateConditions checks if all conditions are met.
+// Returns true if there are no conditions or all conditions pass.
+func evaluateConditions(req *http.Request, conditions []config.Condition) bool {
+	// No conditions means always apply
+	if len(conditions) == 0 {
+		return true
+	}
+
+	// All conditions must be true
+	for _, cond := range conditions {
+		headerValue := req.Header.Get(cond.Header)
+		if headerValue != cond.Equals {
+			return false
+		}
+	}
+
+	return true
+}
+
 func extractHost(hostPort string) string {
 	host, _, err := net.SplitHostPort(hostPort)
 	if err != nil {
@@ -145,5 +172,14 @@ func copyMap(m map[string]string) map[string]string {
 	for k, v := range m {
 		c[k] = v
 	}
+	return c
+}
+
+func copyConditions(conditions []config.Condition) []config.Condition {
+	if conditions == nil {
+		return nil
+	}
+	c := make([]config.Condition, len(conditions))
+	copy(c, conditions)
 	return c
 }

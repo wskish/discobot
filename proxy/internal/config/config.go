@@ -48,8 +48,18 @@ type HeadersConfig map[string]HeaderRule
 
 // HeaderRule defines headers to set or append for a domain.
 type HeaderRule struct {
-	Set    map[string]string `yaml:"set,omitempty" json:"set,omitempty"`
-	Append map[string]string `yaml:"append,omitempty" json:"append,omitempty"`
+	Conditions []Condition       `yaml:"conditions,omitempty" json:"conditions,omitempty"`
+	Set        map[string]string `yaml:"set,omitempty" json:"set,omitempty"`
+	Append     map[string]string `yaml:"append,omitempty" json:"append,omitempty"`
+}
+
+// Condition represents a condition that must be met for headers to be applied.
+// All conditions must evaluate to true for the rule to apply.
+type Condition struct {
+	// Header is the name of the header to check
+	Header string `yaml:"header" json:"header"`
+	// Equals is the exact value the header must have
+	Equals string `yaml:"equals" json:"equals"`
 }
 
 // LoggingConfig contains logging settings.
@@ -145,10 +155,13 @@ func (c *Config) Validate() error {
 		return errors.New("proxy and API ports must be different")
 	}
 
-	// Validate domain patterns in headers
-	for pattern := range c.Headers {
+	// Validate domain patterns and conditions in headers
+	for pattern, rule := range c.Headers {
 		if !IsValidDomainPattern(pattern) {
 			return fmt.Errorf("invalid header domain pattern: %s", pattern)
+		}
+		if err := rule.Validate(); err != nil {
+			return fmt.Errorf("invalid header rule for %s: %w", pattern, err)
 		}
 	}
 
@@ -237,4 +250,26 @@ func isValidDomainChar(c rune) bool {
 		(c >= 'A' && c <= 'Z') ||
 		(c >= '0' && c <= '9') ||
 		c == '-' || c == '.'
+}
+
+// Validate checks if a HeaderRule is valid.
+func (r *HeaderRule) Validate() error {
+	// Validate conditions
+	for i, cond := range r.Conditions {
+		if err := cond.Validate(); err != nil {
+			return fmt.Errorf("condition %d: %w", i, err)
+		}
+	}
+	return nil
+}
+
+// Validate checks if a Condition is valid.
+func (c *Condition) Validate() error {
+	if c.Header == "" {
+		return errors.New("condition header name cannot be empty")
+	}
+	if c.Equals == "" {
+		return errors.New("condition equals value cannot be empty")
+	}
+	return nil
 }
