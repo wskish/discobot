@@ -171,7 +171,7 @@ export interface CreateWorkspaceRequest {
 	path: string;
 	displayName?: string;
 	sourceType: "local" | "git";
-	provider?: "docker" | "local";
+	provider?: string;
 }
 
 export interface CreateSessionRequest {

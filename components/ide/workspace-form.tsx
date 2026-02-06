@@ -188,7 +188,7 @@ export const WorkspaceForm = React.forwardRef<
 	ref,
 ) {
 	const [input, setInput] = React.useState(initialValue ?? "");
-	const [provider, setProvider] = React.useState<"docker" | "local">("docker");
+	const [provider, setProvider] = React.useState<string | undefined>(undefined);
 	const [showSuggestions, setShowSuggestions] = React.useState(false);
 	const [selectedIndex, setSelectedIndex] = React.useState(-1);
 	const [showAdvanced, setShowAdvanced] = React.useState(false);
@@ -253,11 +253,12 @@ export const WorkspaceForm = React.forwardRef<
 
 		const sourceType = inputType === "local" ? "local" : "git";
 		const path = sourceType === "git" ? normalizeGitPath(input) : input.trim();
-		onSubmit({
-			path,
-			sourceType,
-			provider,
-		});
+		const request: CreateWorkspaceRequest = { path, sourceType };
+		// Only include provider if the user explicitly selected one
+		if (provider !== undefined) {
+			request.provider = provider;
+		}
+		onSubmit(request);
 
 		setInput("");
 	}, [validation.isValid, inputType, input, provider, onSubmit]);
@@ -412,9 +413,30 @@ export const WorkspaceForm = React.forwardRef<
 						<div className="space-y-3 pl-6 border-l-2 border-border">
 							<Label className="text-sm font-medium">Sandbox Provider</Label>
 							<RadioGroup
-								value={provider}
-								onValueChange={(v) => setProvider(v as "docker" | "local")}
+								value={provider ?? ""}
+								onValueChange={(v) => setProvider(v)}
 							>
+								{providers.includes("vz") && (
+									<div className="flex items-start space-x-3 p-3 rounded-lg border hover:bg-accent/50 transition-colors cursor-pointer">
+										<RadioGroupItem
+											value="vz"
+											id="provider-vz"
+											className="mt-0.5"
+										/>
+										<Label
+											htmlFor="provider-vz"
+											className="flex-1 cursor-pointer"
+										>
+											<div className="flex items-center gap-2 mb-1">
+												<Container className="h-4 w-4 text-purple-500" />
+												<span className="font-medium">Virtual Machine</span>
+											</div>
+											<p className="text-xs text-muted-foreground">
+												Run in a lightweight VM using Apple Virtualization
+											</p>
+										</Label>
+									</div>
+								)}
 								{providers.includes("docker") && (
 									<div className="flex items-start space-x-3 p-3 rounded-lg border hover:bg-accent/50 transition-colors cursor-pointer">
 										<RadioGroupItem
