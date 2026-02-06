@@ -236,7 +236,8 @@ func (c *ChatService) waitForSessionReady(ctx context.Context, sessionID string)
 	}
 }
 
-// reconcileSandbox reinitializes the sandbox and updates status with SSE events.
+// reconcileSandbox reinitializes the sandbox by enqueuing a job and waiting for completion.
+// This ensures the job queue is the single source of truth for initialization.
 func (c *ChatService) reconcileSandbox(ctx context.Context, projectID, sessionID string) error {
 	log.Printf("Reconciling sandbox for session %s", sessionID)
 
@@ -252,11 +253,43 @@ func (c *ChatService) reconcileSandbox(ctx context.Context, projectID, sessionID
 		}
 	}
 
-	// Reinitialize the sandbox
-	if err := c.sessionService.Initialize(ctx, sessionID); err != nil {
-		return fmt.Errorf("failed to reinitialize sandbox: %w", err)
+	// Get session to retrieve workspace and agent IDs
+	session, err := c.store.GetSessionByID(ctx, sessionID)
+	if err != nil {
+		return fmt.Errorf("failed to get session: %w", err)
 	}
 
+	// If job enqueuer is not available (e.g., in tests), fall back to direct initialization
+	if c.jobEnqueuer == nil {
+		log.Printf("Job enqueuer not available, falling back to direct initialization for session %s", sessionID)
+		if err := c.sessionService.Initialize(ctx, sessionID); err != nil {
+			return fmt.Errorf("failed to reinitialize sandbox: %w", err)
+		}
+		return nil
+	}
+
+	// Enqueue initialization job (ignore error if job already exists - we'll wait for it anyway)
+	err = c.jobEnqueuer.EnqueueSessionInit(ctx, projectID, sessionID, session.WorkspaceID, *session.AgentID)
+	if err != nil {
+		// Job might already exist from a concurrent request - that's fine, we'll wait for it
+		log.Printf("Note: session init job may already exist for %s: %v", sessionID, err)
+	}
+
+	// Wait for job to complete using event-based notification
+	// This gives us near-instant notification when the job finishes
+	waitCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	defer cancel()
+
+	status, errorMsg, err := events.WaitForJobCompletion(waitCtx, c.eventBroker, c.store, projectID, "session", sessionID)
+	if err != nil {
+		return fmt.Errorf("failed to wait for job completion: %w", err)
+	}
+
+	if status == "failed" {
+		return fmt.Errorf("session initialization failed: %s", errorMsg)
+	}
+
+	log.Printf("Session %s initialized successfully via job", sessionID)
 	return nil
 }
 

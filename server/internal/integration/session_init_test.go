@@ -51,7 +51,7 @@ func TestSessionInitialize_SetsWorkspaceCommitOnFirstInit(t *testing.T) {
 
 	// Create session service and call Initialize
 	gitSvc := service.NewGitService(ts.Store, ts.GitProvider)
-	sessionSvc := service.NewSessionService(ts.Store, gitSvc, nil, ts.MockSandbox, nil)
+	sessionSvc := service.NewSessionService(ts.Store, gitSvc, nil, ts.MockSandbox, nil, nil)
 
 	ctx := context.Background()
 	if err := sessionSvc.Initialize(ctx, session.ID); err != nil {
@@ -106,7 +106,7 @@ func TestSessionInitialize_PreservesWorkspaceCommitOnReconcile(t *testing.T) {
 
 	// Create session service and call Initialize (first time)
 	gitSvc := service.NewGitService(ts.Store, ts.GitProvider)
-	sessionSvc := service.NewSessionService(ts.Store, gitSvc, nil, ts.MockSandbox, nil)
+	sessionSvc := service.NewSessionService(ts.Store, gitSvc, nil, ts.MockSandbox, nil, nil)
 
 	ctx := context.Background()
 	if err := sessionSvc.Initialize(ctx, session.ID); err != nil {
@@ -196,7 +196,7 @@ func TestSessionInitialize_EnsuresWorkspaceOnReconcile(t *testing.T) {
 
 	// Create session service and call Initialize (reconcile path)
 	gitSvc := service.NewGitService(ts.Store, ts.GitProvider)
-	sessionSvc := service.NewSessionService(ts.Store, gitSvc, nil, ts.MockSandbox, nil)
+	sessionSvc := service.NewSessionService(ts.Store, gitSvc, nil, ts.MockSandbox, nil, nil)
 
 	ctx := context.Background()
 	if err := sessionSvc.Initialize(ctx, session.ID); err != nil {
@@ -254,7 +254,7 @@ func TestSessionInitialize_WorkspaceCommitUsedForSandbox(t *testing.T) {
 
 	// First initialization
 	gitSvc := service.NewGitService(ts.Store, ts.GitProvider)
-	sessionSvc := service.NewSessionService(ts.Store, gitSvc, nil, ts.MockSandbox, nil)
+	sessionSvc := service.NewSessionService(ts.Store, gitSvc, nil, ts.MockSandbox, nil, nil)
 
 	ctx := context.Background()
 	if err := sessionSvc.Initialize(ctx, session.ID); err != nil {
@@ -359,7 +359,7 @@ func TestMapSession_IncludesWorkspaceFields(t *testing.T) {
 
 	// Use session service to get session (which uses mapSession internally)
 	gitSvc := service.NewGitService(ts.Store, ts.GitProvider)
-	sessionSvc := service.NewSessionService(ts.Store, gitSvc, nil, ts.MockSandbox, nil)
+	sessionSvc := service.NewSessionService(ts.Store, gitSvc, nil, ts.MockSandbox, nil, nil)
 
 	ctx := context.Background()
 	svcSession, err := sessionSvc.GetSession(ctx, session.ID)
@@ -397,7 +397,7 @@ func TestSessionInitialize_NoGitService(t *testing.T) {
 	}
 
 	// Create session service WITHOUT git service
-	sessionSvc := service.NewSessionService(ts.Store, nil, nil, ts.MockSandbox, nil)
+	sessionSvc := service.NewSessionService(ts.Store, nil, nil, ts.MockSandbox, nil, nil)
 
 	ctx := context.Background()
 	if err := sessionSvc.Initialize(ctx, session.ID); err != nil {

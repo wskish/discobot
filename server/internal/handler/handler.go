@@ -41,7 +41,7 @@ type Handler struct {
 }
 
 // New creates a new Handler with the required git and sandbox providers.
-func New(s *store.Store, cfg *config.Config, gitProvider git.Provider, sandboxProvider sandbox.Provider, sandboxManager *sandbox.Manager, eventBroker *events.Broker) *Handler {
+func New(s *store.Store, cfg *config.Config, gitProvider git.Provider, sandboxProvider sandbox.Provider, sandboxManager *sandbox.Manager, eventBroker *events.Broker, jobQueue *jobs.Queue) *Handler {
 	credSvc, err := service.NewCredentialService(s, cfg)
 	if err != nil {
 		// This should only fail if the encryption key is invalid
@@ -58,11 +58,8 @@ func New(s *store.Store, cfg *config.Config, gitProvider git.Provider, sandboxPr
 		sandboxSvc = service.NewSandboxService(s, sandboxProvider, cfg)
 	}
 
-	// Create job queue for background job processing
-	jobQueue := jobs.NewQueue(s)
-
 	// Create session service (shared between chat and session handlers)
-	sessionSvc := service.NewSessionService(s, gitSvc, credSvc, sandboxProvider, eventBroker)
+	sessionSvc := service.NewSessionService(s, gitSvc, credSvc, sandboxProvider, eventBroker, jobQueue)
 
 	// Create chat service (uses session service for session creation)
 	chatSvc := service.NewChatService(s, sessionSvc, credSvc, jobQueue, eventBroker, sandboxProvider, gitSvc)

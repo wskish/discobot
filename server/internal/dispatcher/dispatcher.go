@@ -2,6 +2,7 @@ package dispatcher
 
 import (
 	"context"
+	"encoding/json"
 	"log"
 	"sync"
 	"time"
@@ -9,6 +10,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/obot-platform/discobot/server/internal/config"
+	"github.com/obot-platform/discobot/server/internal/events"
 	"github.com/obot-platform/discobot/server/internal/jobs"
 	"github.com/obot-platform/discobot/server/internal/model"
 	"github.com/obot-platform/discobot/server/internal/store"
@@ -16,9 +18,10 @@ import (
 
 // Service manages job processing with leader election.
 type Service struct {
-	store    *store.Store
-	cfg      *config.Config
-	serverID string
+	store       *store.Store
+	cfg         *config.Config
+	serverID    string
+	eventBroker *events.Broker
 
 	// Registered executors by job type
 	executors map[jobs.JobType]JobExecutor
@@ -42,11 +45,12 @@ type Service struct {
 }
 
 // NewService creates a new dispatcher service.
-func NewService(s *store.Store, cfg *config.Config) *Service {
+func NewService(s *store.Store, cfg *config.Config, eventBroker *events.Broker) *Service {
 	return &Service{
 		store:       s,
 		cfg:         cfg,
 		serverID:    uuid.New().String(),
+		eventBroker: eventBroker,
 		executors:   make(map[jobs.JobType]JobExecutor),
 		runningJobs: make(map[jobs.JobType]int),
 		notifyCh:    make(chan struct{}, 100), // Buffered to avoid blocking enqueuers
@@ -290,6 +294,8 @@ func (d *Service) executeJob(job *model.Job) {
 		if err := d.store.FailJob(d.ctx, job.ID, err.Error()); err != nil {
 			log.Printf("Failed to mark job %s as failed: %v", job.ID, err)
 		}
+		// Publish job completion event (failure)
+		d.publishJobCompletionEvent(job, "failed", err.Error())
 		return
 	}
 
@@ -297,6 +303,8 @@ func (d *Service) executeJob(job *model.Job) {
 	if err := d.store.CompleteJob(d.ctx, job.ID); err != nil {
 		log.Printf("Failed to mark job %s as completed: %v", job.ID, err)
 	}
+	// Publish job completion event (success)
+	d.publishJobCompletionEvent(job, "completed", "")
 }
 
 // decrementRunning decrements the running job count for a type.
@@ -330,4 +338,56 @@ func (d *Service) staleJobCleanupLoop() {
 			}
 		}
 	}
+}
+
+// publishJobCompletionEvent publishes a job completion event to the event broker.
+func (d *Service) publishJobCompletionEvent(job *model.Job, status, errorMsg string) {
+	if d.eventBroker == nil {
+		return
+	}
+
+	// Extract resource info
+	resourceType := ""
+	resourceID := ""
+	if job.ResourceType != nil {
+		resourceType = *job.ResourceType
+	}
+	if job.ResourceID != nil {
+		resourceID = *job.ResourceID
+	}
+
+	// Extract project ID from job payload
+	projectID := d.extractProjectIDFromJob(job)
+	if projectID == "" {
+		log.Printf("Warning: could not extract projectId from job %s, skipping event publish", job.ID)
+		return
+	}
+
+	if err := d.eventBroker.PublishJobCompleted(
+		d.ctx,
+		projectID,
+		job.ID,
+		job.Type,
+		resourceType,
+		resourceID,
+		status,
+		errorMsg,
+	); err != nil {
+		log.Printf("Failed to publish job completion event for job %s: %v", job.ID, err)
+	}
+}
+
+// extractProjectIDFromJob extracts the projectId from the job payload.
+// Returns empty string if projectId cannot be found.
+func (d *Service) extractProjectIDFromJob(job *model.Job) string {
+	var payload map[string]interface{}
+	if err := json.Unmarshal(job.Payload, &payload); err != nil {
+		return ""
+	}
+
+	if projectID, ok := payload["projectId"].(string); ok {
+		return projectID
+	}
+
+	return ""
 }

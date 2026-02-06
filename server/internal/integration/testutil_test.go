@@ -144,7 +144,10 @@ func NewTestServer(t *testing.T) *TestServer {
 	sandboxManager := sandbox.NewManager()
 	sandboxManager.RegisterProvider("mock", mockSandbox)
 
-	h := handler.New(s, cfg, gitProvider, mockSandbox, sandboxManager, eventBroker)
+	// Create job queue early so it can be passed to services
+	jobQueue := jobs.NewQueue(s)
+
+	h := handler.New(s, cfg, gitProvider, mockSandbox, sandboxManager, eventBroker, jobQueue)
 
 	// Create and start dispatcher for job processing
 	cfg.DispatcherEnabled = true
@@ -157,9 +160,9 @@ func NewTestServer(t *testing.T) *TestServer {
 	workspaceSvc := service.NewWorkspaceService(s, gitProvider, eventBroker)
 
 	gitSvc := service.NewGitService(s, gitProvider)
-	sessionSvc := service.NewSessionService(s, gitSvc, nil, mockSandbox, eventBroker)
+	sessionSvc := service.NewSessionService(s, gitSvc, nil, mockSandbox, eventBroker, jobQueue)
 
-	disp := dispatcher.NewService(s, cfg)
+	disp := dispatcher.NewService(s, cfg, eventBroker)
 	disp.RegisterExecutor(jobs.NewWorkspaceInitExecutor(workspaceSvc))
 	disp.RegisterExecutor(jobs.NewSessionInitExecutor(sessionSvc))
 	disp.RegisterExecutor(jobs.NewSessionCommitExecutor(sessionSvc))
@@ -401,7 +404,10 @@ func NewTestServerNoAuth(t *testing.T) *TestServer {
 	sandboxManager := sandbox.NewManager()
 	sandboxManager.RegisterProvider("mock", mockSandbox)
 
-	h := handler.New(s, cfg, gitProvider, mockSandbox, sandboxManager, eventBroker)
+	// Create job queue early so it can be passed to services
+	jobQueue := jobs.NewQueue(s)
+
+	h := handler.New(s, cfg, gitProvider, mockSandbox, sandboxManager, eventBroker, jobQueue)
 
 	// Create and start dispatcher for job processing
 	cfg.DispatcherEnabled = true
@@ -414,9 +420,9 @@ func NewTestServerNoAuth(t *testing.T) *TestServer {
 	workspaceSvc := service.NewWorkspaceService(s, gitProvider, eventBroker)
 
 	gitSvc := service.NewGitService(s, gitProvider)
-	sessionSvc := service.NewSessionService(s, gitSvc, nil, mockSandbox, eventBroker)
+	sessionSvc := service.NewSessionService(s, gitSvc, nil, mockSandbox, eventBroker, jobQueue)
 
-	disp := dispatcher.NewService(s, cfg)
+	disp := dispatcher.NewService(s, cfg, eventBroker)
 	disp.RegisterExecutor(jobs.NewWorkspaceInitExecutor(workspaceSvc))
 	disp.RegisterExecutor(jobs.NewSessionInitExecutor(sessionSvc))
 	disp.RegisterExecutor(jobs.NewSessionCommitExecutor(sessionSvc))

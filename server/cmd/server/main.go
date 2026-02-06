@@ -192,6 +192,9 @@ func main() {
 	}
 	eventBroker := events.NewBroker(s, eventPoller)
 
+	// Create job queue early so it can be passed to services
+	jobQueue := jobs.NewQueue(s)
+
 	// Start sandbox watcher to sync session states with sandbox states
 	// This handles external changes (e.g., Docker containers deleted outside Discobot)
 	var sandboxWatcherCancel context.CancelFunc
@@ -232,7 +235,7 @@ func main() {
 	// Initialize and start job dispatcher
 	var disp *dispatcher.Service
 	if cfg.DispatcherEnabled {
-		disp = dispatcher.NewService(s, cfg)
+		disp = dispatcher.NewService(s, cfg, eventBroker)
 
 		// Register workspace init executor
 		workspaceSvc := service.NewWorkspaceService(s, gitProvider, eventBroker)
@@ -245,7 +248,7 @@ func main() {
 			if err != nil {
 				log.Fatalf("Failed to create credential service for dispatcher: %v", err)
 			}
-			sessionSvc := service.NewSessionService(s, gitSvc, credSvc, sandboxProvider, eventBroker)
+			sessionSvc := service.NewSessionService(s, gitSvc, credSvc, sandboxProvider, eventBroker, jobQueue)
 			disp.RegisterExecutor(jobs.NewSessionInitExecutor(sessionSvc))
 			disp.RegisterExecutor(jobs.NewSessionDeleteExecutor(sessionSvc))
 			disp.RegisterExecutor(jobs.NewSessionCommitExecutor(sessionSvc))
@@ -292,7 +295,7 @@ func main() {
 	r.Use(middleware.TauriAuth(cfg))
 
 	// Initialize handlers
-	h := handler.New(s, cfg, gitProvider, sandboxProvider, sandboxManager, eventBroker)
+	h := handler.New(s, cfg, gitProvider, sandboxProvider, sandboxManager, eventBroker, jobQueue)
 
 	// Wire up job queue notification to dispatcher for immediate execution
 	if disp != nil {

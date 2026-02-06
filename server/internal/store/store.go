@@ -513,6 +513,23 @@ func (s *Store) GetJobByID(ctx context.Context, id string) (*model.Job, error) {
 	return &job, nil
 }
 
+// GetJobByResourceID retrieves the most recent job for a specific resource.
+// Returns ErrNotFound if no job exists for the resource.
+func (s *Store) GetJobByResourceID(ctx context.Context, resourceType, resourceID string) (*model.Job, error) {
+	var job model.Job
+	err := s.db.WithContext(ctx).
+		Where("resource_type = ? AND resource_id = ?", resourceType, resourceID).
+		Order("created_at DESC").
+		First(&job).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+	return &job, nil
+}
+
 // HasActiveJobForResource checks if there's a pending or running job for the given resource.
 // Returns true if a job exists that would block enqueueing a new one.
 func (s *Store) HasActiveJobForResource(ctx context.Context, resourceType, resourceID string) (bool, error) {

@@ -21,6 +21,8 @@ const (
 	EventTypeSessionUpdated EventType = "session_updated"
 	// EventTypeWorkspaceUpdated indicates a workspace's state has changed
 	EventTypeWorkspaceUpdated EventType = "workspace_updated"
+	// EventTypeJobCompleted indicates a job has completed (success or failure)
+	EventTypeJobCompleted EventType = "job_completed"
 )
 
 // Event represents a server-sent event
@@ -54,6 +56,16 @@ type SessionUpdatedData struct {
 type WorkspaceUpdatedData struct {
 	WorkspaceID string `json:"workspaceId"`
 	Status      string `json:"status"`
+}
+
+// JobCompletedData is the payload for job_completed events
+type JobCompletedData struct {
+	JobID        string `json:"jobId"`
+	JobType      string `json:"jobType"`
+	ResourceType string `json:"resourceType,omitempty"`
+	ResourceID   string `json:"resourceId,omitempty"`
+	Status       string `json:"status"` // "completed" or "failed"
+	Error        string `json:"error,omitempty"`
 }
 
 // Subscriber represents a client subscribed to events for a specific project.
@@ -172,6 +184,32 @@ func (b *Broker) PublishWorkspaceUpdated(ctx context.Context, projectID, workspa
 	event := &Event{
 		ID:        generateEventID(),
 		Type:      EventTypeWorkspaceUpdated,
+		Timestamp: time.Now(),
+		Data:      dataBytes,
+	}
+
+	return b.Publish(ctx, projectID, event)
+}
+
+// PublishJobCompleted is a convenience method to publish job completion events.
+func (b *Broker) PublishJobCompleted(ctx context.Context, projectID, jobID, jobType, resourceType, resourceID, status, errorMsg string) error {
+	data := JobCompletedData{
+		JobID:        jobID,
+		JobType:      jobType,
+		ResourceType: resourceType,
+		ResourceID:   resourceID,
+		Status:       status,
+		Error:        errorMsg,
+	}
+
+	dataBytes, err := json.Marshal(data)
+	if err != nil {
+		return fmt.Errorf("failed to marshal event data: %w", err)
+	}
+
+	event := &Event{
+		ID:        generateEventID(),
+		Type:      EventTypeJobCompleted,
 		Timestamp: time.Now(),
 		Data:      dataBytes,
 	}
