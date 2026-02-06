@@ -29,6 +29,7 @@ import (
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/docker/go-connections/nat"
+	dockercontext "github.com/docker/go-sdk/context"
 
 	"github.com/obot-platform/discobot/server/internal/config"
 	"github.com/obot-platform/discobot/server/internal/sandbox"
@@ -51,6 +52,23 @@ const (
 	dataVolumePrefix = "discobot-data-"
 )
 
+// DetectDockerHost resolves the Docker host from the current Docker context.
+// This handles Docker Desktop, Colima, Rancher Desktop, Podman, and custom
+// contexts automatically. Returns empty string if detection fails.
+func DetectDockerHost() string {
+	host, err := dockercontext.CurrentDockerHost()
+	if err != nil {
+		return ""
+	}
+	if host != "" {
+		log.Printf("Detected Docker host from context: %s", host)
+	}
+	return host
+}
+
+// SessionProjectResolver looks up the project ID for a session from the database.
+type SessionProjectResolver func(ctx context.Context, sessionID string) (projectID string, err error)
+
 // Provider implements the sandbox.Provider interface using Docker.
 type Provider struct {
 	client *client.Client
@@ -62,6 +80,9 @@ type Provider struct {
 
 	// vsockDialer is an optional custom dialer for VSOCK connections
 	vsockDialer func(ctx context.Context, network, addr string) (net.Conn, error)
+
+	// sessionProjectResolver looks up session -> project mapping from the database.
+	sessionProjectResolver SessionProjectResolver
 }
 
 // Option configures the Docker provider.
@@ -73,6 +94,14 @@ type Option func(*Provider)
 func WithVsockDialer(dialer func(ctx context.Context, network, addr string) (net.Conn, error)) Option {
 	return func(p *Provider) {
 		p.vsockDialer = dialer
+	}
+}
+
+// WithSessionProjectResolver configures a function to look up the project ID
+// for a session from the database. Used for project-level cache volumes.
+func WithSessionProjectResolver(resolver SessionProjectResolver) Option {
+	return func(p *Provider) {
+		p.sessionProjectResolver = resolver
 	}
 }
 
@@ -103,8 +132,8 @@ func NewProvider(cfg *config.Config, opts ...Option) (*Provider, error) {
 		}
 
 		cli, err = client.NewClientWithOpts(
+			client.WithHost("http://localhost"), // must be before WithHTTPClient so it doesn't modify our VSOCK transport
 			client.WithHTTPClient(httpClient),
-			client.WithHost("http://localhost"), // dummy host, VSOCK handles routing
 			client.WithAPIVersionNegotiation(),
 		)
 		if err != nil {
@@ -119,6 +148,8 @@ func NewProvider(cfg *config.Config, opts ...Option) (*Provider, error) {
 
 		if cfg.DockerHost != "" {
 			clientOpts = append(clientOpts, client.WithHost(cfg.DockerHost))
+		} else if host := DetectDockerHost(); host != "" {
+			clientOpts = append(clientOpts, client.WithHost(host))
 		}
 
 		cli, err = client.NewClientWithOpts(clientOpts...)
@@ -314,10 +345,12 @@ func (p *Provider) Create(ctx context.Context, sessionID string, opts sandbox.Cr
 		})
 	}
 
-	// Add project cache volume mount if enabled and project ID is available
-	if p.cfg.CacheEnabled {
-		projectID := opts.Labels["discobot.project.id"]
-		if projectID != "" {
+	// Add project cache volume mount if enabled and project resolver is available
+	if p.cfg.CacheEnabled && p.sessionProjectResolver != nil {
+		projectID, resolveErr := p.sessionProjectResolver(ctx, sessionID)
+		if resolveErr != nil {
+			log.Printf("Warning: failed to resolve project for session %s: %v", sessionID, resolveErr)
+		} else if projectID != "" {
 			// Ensure the cache volume exists
 			cacheVolName, err := p.ensureCacheVolume(ctx, projectID)
 			if err != nil {
@@ -1023,6 +1056,12 @@ func (p *Provider) clearContainerID(sessionID string) {
 	p.containerIDsMu.Lock()
 	delete(p.containerIDs, sessionID)
 	p.containerIDsMu.Unlock()
+}
+
+// Client returns the underlying Docker client.
+// Used by the VZ provider for direct image operations (e.g., ImageLoad).
+func (p *Provider) Client() *client.Client {
+	return p.client
 }
 
 // Close closes the Docker client connection.
