@@ -114,10 +114,15 @@ export function SessionViewProvider({
 	const { session: selectedSession, isLoading: isSessionLoading } =
 		useSession(selectedSessionId);
 
-	// Right sidebar state
+	// Right sidebar state (persisted per session in sessionStorage)
+	const rightSidebarOpenKey = selectedSessionId
+		? `${STORAGE_KEYS.RIGHT_SIDEBAR_OPEN}:${selectedSessionId}`
+		: STORAGE_KEYS.RIGHT_SIDEBAR_OPEN;
+
 	const [rightSidebarOpen, setRightSidebarOpen] = usePersistedState(
-		STORAGE_KEYS.RIGHT_SIDEBAR_OPEN,
+		rightSidebarOpenKey,
 		false,
+		"session",
 	);
 
 	// Fetch session files for changed files count
