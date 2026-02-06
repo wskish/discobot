@@ -17,6 +17,9 @@ const appName = "discobot"
 // DefaultSandboxImage is the default sandbox image for sessions.
 const DefaultSandboxImage = "ghcr.io/obot-platform/discobot:main"
 
+// DefaultVZImage is the default VZ image containing kernel and rootfs for VMs.
+const DefaultVZImage = "ghcr.io/obot-platform/discobot-vz:main"
+
 // Config holds all configuration for the server
 type Config struct {
 	// Server settings
@@ -56,6 +59,7 @@ type Config struct {
 	VZKernelPath    string // Path to Linux kernel (vmlinuz)
 	VZInitrdPath    string // Path to initial ramdisk (optional)
 	VZBaseDiskPath  string // Path to base disk image to clone (optional)
+	VZImageRef      string // Docker registry image ref for auto-downloading kernel and rootfs
 
 	// Local provider settings
 	LocalProviderEnabled bool   // Enable local sandbox provider (default: false)
@@ -159,6 +163,7 @@ func Load() (*Config, error) {
 	cfg.VZKernelPath = getEnv("VZ_KERNEL_PATH", "")
 	cfg.VZInitrdPath = getEnv("VZ_INITRD_PATH", "")
 	cfg.VZBaseDiskPath = getEnv("VZ_BASE_DISK_PATH", "")
+	cfg.VZImageRef = getEnv("VZ_IMAGE_REF", DefaultVZImage)
 
 	// Local provider settings
 	cfg.LocalProviderEnabled = getEnvBool("LOCAL_PROVIDER_ENABLED", false)
