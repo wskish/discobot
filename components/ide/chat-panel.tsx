@@ -296,6 +296,7 @@ export function ChatPanel({
 	// Derive loading state from chat status
 	const isLoading = chatStatus === "streaming" || chatStatus === "submitted";
 	const hasError = chatStatus === "error";
+	const canStop = isLoading; // Can stop during both submitted and streaming
 
 	// Extract the current plan from throttled messages for consistent UI state
 	const currentPlan = React.useMemo(
@@ -431,7 +432,7 @@ export function ChatPanel({
 						sessionId={sessionId}
 						isNewSession={!resume}
 						onSubmit={handleSubmit}
-						onStop={chatStatus === "streaming" ? handleStop : undefined}
+						onStop={canStop ? handleStop : undefined}
 						status={chatStatus}
 						isLocked={
 							session?.commitStatus === CommitStatus.PENDING ||
