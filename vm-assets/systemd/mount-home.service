@@ -1,0 +1,15 @@
+[Unit]
+Description=Mount host home directory via VirtioFS
+DefaultDependencies=no
+After=local-fs.target
+Before=docker.service containerd.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/bin/mount-home.sh
+StandardOutput=journal+console
+StandardError=journal+console
+
+[Install]
+WantedBy=multi-user.target

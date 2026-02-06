@@ -271,11 +271,13 @@ RUN cp -a /var /var.skel
 COPY vm-assets/fstab /etc/fstab
 COPY vm-assets/systemd/docker-vsock-proxy.service /etc/systemd/system/
 COPY vm-assets/systemd/init-var.service /etc/systemd/system/
+COPY vm-assets/systemd/mount-home.service /etc/systemd/system/
 COPY vm-assets/systemd/docker.service.d/ /etc/systemd/system/docker.service.d/
 COPY vm-assets/systemd/containerd.service.d/ /etc/systemd/system/containerd.service.d/
 COPY vm-assets/network/20-dhcp.network /etc/systemd/network/
 COPY vm-assets/scripts/init-var.sh /usr/local/bin/
-RUN chmod +x /usr/local/bin/init-var.sh
+COPY vm-assets/scripts/mount-home.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/init-var.sh /usr/local/bin/mount-home.sh
 
 # Configure systemd for VM environment
 RUN set -ex \
@@ -288,8 +290,9 @@ RUN set -ex \
         systemd-networkd \
         systemd-resolved \
         systemd-timesyncd \
-    # Enable /var initialization service
+    # Enable /var initialization and home mount services
     && systemctl enable init-var.service \
+    && systemctl enable mount-home.service \
     # Enable Docker service and vsock proxy
     && systemctl enable docker \
     && systemctl enable docker-vsock-proxy
@@ -299,7 +302,8 @@ RUN useradd -m -s /bin/bash -u 1000 discobot || \
     (userdel -r $(getent passwd 1000 | cut -d: -f1) 2>/dev/null; useradd -m -s /bin/bash -u 1000 discobot)
 
 # Create minimal directory structure for VM
-RUN mkdir -p /.data /.workspace /workspace \
+# /Users is for macOS host home directory VirtioFS mounts (root is read-only squashfs)
+RUN mkdir -p /.data /.workspace /workspace /Users \
     && chown discobot:discobot /.data /workspace
 
 # Stage 6: Extract kernel and initrd, create root filesystem image

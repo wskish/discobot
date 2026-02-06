@@ -6,8 +6,9 @@ Requires=docker.service
 
 [Service]
 Type=simple
-# -b1 sets 1-byte buffer for immediate forwarding (no buffering delay)
-ExecStart=/usr/bin/socat -b1 VSOCK-LISTEN:2375,reuseaddr,fork UNIX-CONNECT:/var/run/docker.sock
+# -b131072 sets 128KB transfer block size for good throughput on bulk transfers
+# (socat still forwards immediately when data arrives, this just sets max read/write size)
+ExecStart=/usr/bin/socat -b131072 VSOCK-LISTEN:2375,reuseaddr,fork UNIX-CONNECT:/var/run/docker.sock
 Restart=always
 RestartSec=5
 

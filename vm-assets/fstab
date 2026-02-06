@@ -3,3 +3,6 @@
 
 # Data disk for /var - auto-format on first boot with systemd-makefs
 /dev/vdb  /var  ext4  defaults,x-systemd.makefs,x-systemd.growfs  0  2
+
+# tmpfs for writable directories on read-only root
+tmpfs  /tmp  tmpfs  defaults,nosuid,nodev  0  0
