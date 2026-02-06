@@ -153,21 +153,30 @@ func main() {
 		sandboxProvider = sandbox.NewProviderProxy(sandboxManager, providerGetter)
 		log.Printf("Sandbox provider proxy initialized with %d providers", len(sandboxManager.ListProviders()))
 
-		// Reconcile sandboxes on startup to ensure they use the correct image
+		// Start sandbox reconciliation in background to not block server startup
 		sandboxSvc := service.NewSandboxService(s, sandboxProvider, cfg)
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-		if err := sandboxSvc.ReconcileSandboxes(ctx); err != nil {
-			log.Printf("Warning: Failed to reconcile sandboxes: %v", err)
-		}
-		cancel()
+		go func() {
+			log.Println("Starting sandbox reconciliation in background...")
 
-		// Reconcile session states with actual sandbox states
-		// This catches sessions that think they're running but have failed sandboxes
-		ctx, cancel = context.WithTimeout(context.Background(), 2*time.Minute)
-		if err := sandboxSvc.ReconcileSessionStates(ctx); err != nil {
-			log.Printf("Warning: Failed to reconcile session states: %v", err)
-		}
-		cancel()
+			// Reconcile sandboxes to ensure they use the correct image
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+			if err := sandboxSvc.ReconcileSandboxes(ctx); err != nil {
+				log.Printf("Warning: Failed to reconcile sandboxes: %v", err)
+			} else {
+				log.Println("Sandbox reconciliation completed successfully")
+			}
+			cancel()
+
+			// Reconcile session states with actual sandbox states
+			// This catches sessions that think they're running but have failed sandboxes
+			ctx, cancel = context.WithTimeout(context.Background(), 10*time.Minute)
+			if err := sandboxSvc.ReconcileSessionStates(ctx); err != nil {
+				log.Printf("Warning: Failed to reconcile session states: %v", err)
+			} else {
+				log.Println("Session state reconciliation completed successfully")
+			}
+			cancel()
+		}()
 	}
 
 	// Create event poller and broker for SSE
