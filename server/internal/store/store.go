@@ -244,6 +244,12 @@ func (s *Store) ListWorkspacesByProject(ctx context.Context, projectID string) (
 	return workspaces, err
 }
 
+func (s *Store) ListWorkspacesByProvider(ctx context.Context, provider string) ([]*model.Workspace, error) {
+	var workspaces []*model.Workspace
+	err := s.db.WithContext(ctx).Where("provider = ?", provider).Find(&workspaces).Error
+	return workspaces, err
+}
+
 func (s *Store) CreateWorkspace(ctx context.Context, workspace *model.Workspace) error {
 	return s.db.WithContext(ctx).Create(workspace).Error
 }
@@ -642,7 +648,8 @@ func (s *Store) CompleteJob(ctx context.Context, jobID string) error {
 
 // FailJob marks a job as failed with an error message.
 // If attempts < max_attempts, requeues as pending for retry with backoff.
-func (s *Store) FailJob(ctx context.Context, jobID string, errMsg string) error {
+// The baseBackoff is multiplied by the attempt number for exponential backoff.
+func (s *Store) FailJob(ctx context.Context, jobID string, errMsg string, baseBackoff time.Duration) error {
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var job model.Job
 		if err := tx.First(&job, "id = ?", jobID).Error; err != nil {
@@ -651,7 +658,7 @@ func (s *Store) FailJob(ctx context.Context, jobID string, errMsg string) error 
 
 		if job.Attempts < job.MaxAttempts {
 			// Retry: reset to pending with exponential backoff
-			backoff := time.Duration(job.Attempts) * 30 * time.Second
+			backoff := time.Duration(job.Attempts) * baseBackoff
 			scheduledAt := time.Now().Add(backoff)
 
 			return tx.Model(&job).Updates(map[string]interface{}{

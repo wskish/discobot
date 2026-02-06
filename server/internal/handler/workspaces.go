@@ -42,9 +42,8 @@ func (h *Handler) CreateWorkspace(w http.ResponseWriter, r *http.Request) {
 	if req.SourceType == "" {
 		req.SourceType = "local"
 	}
-	if req.Provider == "" {
-		req.Provider = "docker"
-	}
+	// Leave provider empty if not specified — the sandbox manager will use
+	// the platform default at runtime (vz on macOS, docker elsewhere).
 
 	workspace, err := h.workspaceService.CreateWorkspace(r.Context(), projectID, req.Path, req.SourceType)
 	if err != nil {

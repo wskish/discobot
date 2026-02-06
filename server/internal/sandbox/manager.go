@@ -4,8 +4,19 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"runtime"
 	"time"
 )
+
+// PlatformDefaultProvider returns the default sandbox provider for the current OS.
+// On macOS (darwin), the default is "vz" (Virtualization.framework).
+// On all other platforms, the default is "docker".
+func PlatformDefaultProvider() string {
+	if runtime.GOOS == "darwin" {
+		return "vz"
+	}
+	return "docker"
+}
 
 // Manager manages multiple sandbox providers and routes requests to the appropriate one.
 type Manager struct {
@@ -14,10 +25,11 @@ type Manager struct {
 }
 
 // NewManager creates a new sandbox provider manager.
+// The default provider is determined by the platform: "vz" on macOS, "docker" elsewhere.
 func NewManager() *Manager {
 	return &Manager{
 		providers:       make(map[string]Provider),
-		defaultProvider: "docker", // Default to Docker
+		defaultProvider: PlatformDefaultProvider(),
 	}
 }
 
@@ -29,6 +41,25 @@ func (m *Manager) RegisterProvider(name string, provider Provider) {
 // SetDefault sets the default provider name.
 func (m *Manager) SetDefault(name string) {
 	m.defaultProvider = name
+}
+
+// DefaultProviderName returns the name of the current default provider.
+func (m *Manager) DefaultProviderName() string {
+	return m.defaultProvider
+}
+
+// EnsureDefaultAvailable checks that the default provider is registered.
+// If not, it falls back to any registered provider. Returns false if no providers are registered.
+func (m *Manager) EnsureDefaultAvailable() bool {
+	if _, ok := m.providers[m.defaultProvider]; ok {
+		return true
+	}
+	// Fall back to any registered provider
+	for name := range m.providers {
+		m.defaultProvider = name
+		return true
+	}
+	return false
 }
 
 // GetProvider returns the provider with the given name.

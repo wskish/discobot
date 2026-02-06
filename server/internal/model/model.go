@@ -173,10 +173,13 @@ const (
 	WorkspaceStatusError        = "error"        // Something failed during setup
 )
 
-// Workspace provider constants representing how sessions are executed
+// Workspace provider constants representing how sessions are executed.
+// When a workspace has no provider set (empty string), the platform default is used
+// at runtime: "vz" on macOS, "docker" on other platforms.
 const (
-	WorkspaceProviderDocker = "docker" // Run in Docker containers (default)
+	WorkspaceProviderDocker = "docker" // Run in Docker containers
 	WorkspaceProviderLocal  = "local"  // Run in local directory without isolation
+	WorkspaceProviderVZ     = "vz"     // Run in Virtualization.framework VMs (macOS only)
 )
 
 // Workspace represents a working directory (local folder or git repo).
@@ -186,7 +189,7 @@ type Workspace struct {
 	Path         string    `gorm:"not null;type:text" json:"path"`
 	DisplayName  *string   `gorm:"column:display_name;type:text" json:"displayName,omitempty"`
 	SourceType   string    `gorm:"column:source_type;not null;type:text" json:"sourceType"`
-	Provider     string    `gorm:"not null;type:text;default:docker" json:"provider"`
+	Provider     string    `gorm:"type:text;default:''" json:"provider"`
 	Status       string    `gorm:"not null;type:text;default:initializing" json:"status"`
 	ErrorMessage *string   `gorm:"column:error_message;type:text" json:"errorMessage,omitempty"`
 	Commit       *string   `gorm:"type:text" json:"commit,omitempty"`
