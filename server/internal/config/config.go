@@ -60,6 +60,7 @@ type Config struct {
 	VZInitrdPath    string // Path to initial ramdisk (optional)
 	VZBaseDiskPath  string // Path to base disk image to clone (optional)
 	VZImageRef      string // Docker registry image ref for auto-downloading kernel and rootfs
+	VZHomeDir       string // Host directory to share with VMs via VirtioFS (default: user home dir)
 
 	// Local provider settings
 	LocalProviderEnabled bool   // Enable local sandbox provider (default: false)
@@ -78,6 +79,8 @@ type Config struct {
 	DispatcherJobTimeout         time.Duration // Max time for a single job (default: 5m)
 	DispatcherStaleJobTimeout    time.Duration // Time after which running jobs are considered stale (default: 10m)
 	DispatcherImmediateExecution bool          // Try to execute jobs immediately when enqueued (default: true)
+	JobRetryBackoff             time.Duration // Base backoff between job retries, multiplied by attempt number (default: 5s)
+	JobMaxAttempts              int           // Default max attempts for jobs (default: 3)
 
 	// OAuth providers (for user login)
 	GitHubClientID     string
@@ -89,6 +92,9 @@ type Config struct {
 	AnthropicClientID     string
 	GitHubCopilotClientID string
 	CodexClientID         string
+
+	// Debug settings
+	DebugDocker bool // Expose Docker API proxy for VZ VMs (default: false)
 
 	// Tauri mode settings
 	TauriMode   bool   // Running inside Tauri app (TAURI=true)
@@ -164,6 +170,8 @@ func Load() (*Config, error) {
 	cfg.VZInitrdPath = getEnv("VZ_INITRD_PATH", "")
 	cfg.VZBaseDiskPath = getEnv("VZ_BASE_DISK_PATH", "")
 	cfg.VZImageRef = getEnv("VZ_IMAGE_REF", DefaultVZImage)
+	homeDir, _ := os.UserHomeDir()
+	cfg.VZHomeDir = getEnv("VZ_HOME_DIR", homeDir)
 
 	// Local provider settings
 	cfg.LocalProviderEnabled = getEnvBool("LOCAL_PROVIDER_ENABLED", false)
@@ -183,6 +191,8 @@ func Load() (*Config, error) {
 	cfg.DispatcherJobTimeout = getEnvDuration("DISPATCHER_JOB_TIMEOUT", 5*time.Minute)
 	cfg.DispatcherStaleJobTimeout = getEnvDuration("DISPATCHER_STALE_JOB_TIMEOUT", 10*time.Minute)
 	cfg.DispatcherImmediateExecution = getEnvBool("DISPATCHER_IMMEDIATE_EXECUTION", true)
+	cfg.JobRetryBackoff = getEnvDuration("JOB_RETRY_BACKOFF", 5*time.Second)
+	cfg.JobMaxAttempts = getEnvInt("JOB_MAX_ATTEMPTS", 3)
 
 	// OAuth providers for user login
 	cfg.GitHubClientID = getEnv("GITHUB_CLIENT_ID", "")
@@ -194,6 +204,9 @@ func Load() (*Config, error) {
 	cfg.AnthropicClientID = getEnv("ANTHROPIC_CLIENT_ID", "9d1c250a-e61b-44d9-88ed-5944d1962f5e")
 	cfg.GitHubCopilotClientID = getEnv("GITHUB_COPILOT_CLIENT_ID", "Iv1.b507a08c87ecfe98")
 	cfg.CodexClientID = getEnv("CODEX_CLIENT_ID", "app_EMoamEEZ73f0CkXaXp7hrann")
+
+	// Debug settings
+	cfg.DebugDocker = getEnvBool("DEBUG_DOCKER", false)
 
 	// Tauri mode settings
 	cfg.TauriMode = getEnvBool("TAURI", false)

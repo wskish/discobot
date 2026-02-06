@@ -44,6 +44,11 @@ type vzProjectVM struct {
 	sessions   map[string]bool
 	sessionsMu sync.RWMutex
 
+	// isWarm indicates this VM was pre-warmed at startup without sessions.
+	// Warm VMs are not subject to idle cleanup until a session has been
+	// added and then removed (at which point isWarm is cleared).
+	isWarm bool
+
 	// Lifecycle
 	createdAt  time.Time
 	lastUsedAt time.Time
@@ -62,6 +67,7 @@ func (pvm *vzProjectVM) AddSession(sessionID string) {
 
 	pvm.sessions[sessionID] = true
 	pvm.lastUsedAt = time.Now()
+	pvm.isWarm = false // No longer warm-only once a real session is added
 }
 
 // RemoveSession unregisters a session from this VM.
@@ -101,6 +107,30 @@ func (pvm *vzProjectVM) DockerDialer() func(ctx context.Context, network, addr s
 			VirtioSocketConnection: conn,
 			localAddr:              &vsockAddr{cid: 2, port: 0},
 			remoteAddr:             &vsockAddr{cid: 3, port: dockerSockPort},
+		}, nil
+	}
+}
+
+// PortDialer returns a VSOCK dialer function for an arbitrary port.
+func (pvm *vzProjectVM) PortDialer(port uint32) func(ctx context.Context, network, addr string) (net.Conn, error) {
+	return func(ctx context.Context, network, addr string) (net.Conn, error) {
+		pvm.mu.RLock()
+		socketDevice := pvm.socketDevice
+		pvm.mu.RUnlock()
+
+		if socketDevice == nil {
+			return nil, fmt.Errorf("vsock not available for project VM %s", pvm.projectID)
+		}
+
+		conn, err := socketDevice.Connect(port)
+		if err != nil {
+			return nil, fmt.Errorf("vsock connect port %d: %w", port, err)
+		}
+
+		return &vsockConn{
+			VirtioSocketConnection: conn,
+			localAddr:              &vsockAddr{cid: 2, port: 0},
+			remoteAddr:             &vsockAddr{cid: 3, port: port},
 		}, nil
 	}
 }
@@ -205,6 +235,28 @@ func (m *VzVMManager) GetVM(projectID string) (vm.ProjectVM, bool) {
 		return nil, false
 	}
 	return pvm, true
+}
+
+// WarmVM creates a VM for the project without associating any sessions.
+// This is used at startup to pre-warm VMs so they're ready when sessions are created.
+func (m *VzVMManager) WarmVM(ctx context.Context, projectID string) (vm.ProjectVM, error) {
+	m.projectVMMu.Lock()
+	defer m.projectVMMu.Unlock()
+
+	if pvm, exists := m.projectVMs[projectID]; exists {
+		log.Printf("Project VM %s already exists, skipping warm", projectID)
+		return pvm, nil
+	}
+
+	log.Printf("Warming project VM for project: %s", projectID)
+	pvm, err := m.createProjectVM(ctx, projectID, "")
+	if err != nil {
+		return nil, fmt.Errorf("failed to warm project VM: %w", err)
+	}
+
+	m.projectVMs[projectID] = pvm
+	log.Printf("Project VM %s warmed successfully", projectID)
+	return pvm, nil
 }
 
 // RemoveSession removes a session from the project VM.
@@ -325,6 +377,11 @@ func (m *VzVMManager) createProjectVM(ctx context.Context, projectID, sessionID 
 
 	log.Printf("Docker daemon ready in VM: %s", projectID)
 
+	sessions := make(map[string]bool)
+	if sessionID != "" {
+		sessions[sessionID] = true
+	}
+
 	pvm := &vzProjectVM{
 		projectID:    projectID,
 		vm:           vzVM,
@@ -332,7 +389,8 @@ func (m *VzVMManager) createProjectVM(ctx context.Context, projectID, sessionID 
 		diskPath:     diskPath,
 		dataDiskPath: dataDiskPath,
 		consoleLog:   consoleLog,
-		sessions:     map[string]bool{sessionID: true},
+		sessions:     sessions,
+		isWarm:       sessionID == "",
 		createdAt:    time.Now(),
 		lastUsedAt:   time.Now(),
 	}
@@ -378,6 +436,11 @@ func (m *VzVMManager) buildAndStartVM(rootDiskPath, dataDiskPath, projectID stri
 		"root=/dev/vda",
 		"rootfstype=squashfs", // SquashFS root filesystem
 		"ro",                  // Read-only root filesystem
+	}
+
+	// Pass host home directory path to guest via kernel cmdline
+	if m.config.HomeDir != "" {
+		cmdLine = append(cmdLine, fmt.Sprintf("discobot.homedir=%s", m.config.HomeDir))
 	}
 
 	// Create boot loader
@@ -506,6 +569,37 @@ func (m *VzVMManager) buildAndStartVM(rootDiskPath, dataDiskPath, projectID stri
 	}
 	vmConfig.SetEntropyDevicesVirtualMachineConfiguration([]*vz.VirtioEntropyDeviceConfiguration{entropyConfig})
 
+	// Configure VirtioFS shared directory (host home directory, read-only)
+	if m.config.HomeDir != "" {
+		sharedDir, err := vz.NewSharedDirectory(m.config.HomeDir, true) // true = read-only
+		if err != nil {
+			consoleRead.Close()
+			consoleWrite.Close()
+			return nil, nil, nil, nil, fmt.Errorf("failed to create shared directory: %w", err)
+		}
+
+		dirShare, err := vz.NewSingleDirectoryShare(sharedDir)
+		if err != nil {
+			consoleRead.Close()
+			consoleWrite.Close()
+			return nil, nil, nil, nil, fmt.Errorf("failed to create directory share: %w", err)
+		}
+
+		fsDeviceConfig, err := vz.NewVirtioFileSystemDeviceConfiguration("home")
+		if err != nil {
+			consoleRead.Close()
+			consoleWrite.Close()
+			return nil, nil, nil, nil, fmt.Errorf("failed to create VirtioFS device config: %w", err)
+		}
+		fsDeviceConfig.SetDirectoryShare(dirShare)
+
+		vmConfig.SetDirectorySharingDevicesVirtualMachineConfiguration(
+			[]vz.DirectorySharingDeviceConfiguration{fsDeviceConfig},
+		)
+
+		log.Printf("VirtioFS: sharing %s as read-only (tag: home)", m.config.HomeDir)
+	}
+
 	// Validate configuration
 	valid, err := vmConfig.Validate()
 	if err != nil || !valid {
@@ -587,6 +681,7 @@ func (m *VzVMManager) waitForDocker(ctx context.Context, socketDevice *vz.Virtio
 			resp.Body.Close()
 
 			if resp.StatusCode == http.StatusOK {
+				vsockConn.Close()
 				log.Printf("Project VM %s: Docker daemon is ready", projectID)
 				return nil
 			}
@@ -616,10 +711,12 @@ func (m *VzVMManager) cleanupIdleVMs() {
 
 				pvm.sessionsMu.RLock()
 				lastUsed := pvm.lastUsedAt
+				isWarm := pvm.isWarm
 				pvm.sessionsMu.RUnlock()
 
-				// If no sessions and idle timeout exceeded, shutdown VM
-				if sessionCount == 0 && time.Since(lastUsed) > m.idleTimeout {
+				// If no sessions and idle timeout exceeded, shutdown VM.
+				// Skip warm VMs that have never had sessions.
+				if sessionCount == 0 && !isWarm && time.Since(lastUsed) > m.idleTimeout {
 					log.Printf("Shutting down idle project VM: %s (idle for %v)", projectID, time.Since(lastUsed))
 
 					if err := pvm.Shutdown(); err != nil {

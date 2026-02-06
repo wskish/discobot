@@ -2,20 +2,28 @@ package vz
 
 import (
 	"archive/tar"
+	"bytes"
+	"compress/gzip"
 	"context"
 	"crypto/sha256"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/google/go-containerregistry/pkg/name"
+	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
+	"github.com/klauspost/compress/zstd"
+	"github.com/ulikunitz/xz"
+	"github.com/ulikunitz/xz/lzma"
 )
 
 // DownloadState represents the current state of the image download process.
@@ -206,10 +214,22 @@ func (d *ImageDownloader) download(ctx context.Context) error {
 		return fmt.Errorf("invalid image reference %s: %w", d.cfg.ImageRef, err)
 	}
 
-	// Fetch image manifest with context for cancellation support
-	img, err := remote.Image(ref, remote.WithContext(ctx))
+	// Resolve the correct platform for multi-arch images.
+	// VZ only runs on macOS (Apple Silicon = linux/arm64 guest).
+	platform := v1.Platform{
+		OS:           "linux",
+		Architecture: runtime.GOARCH,
+	}
+	log.Printf("Pulling image for platform %s/%s", platform.OS, platform.Architecture)
+
+	desc, err := remote.Get(ref, remote.WithContext(ctx), remote.WithPlatform(platform))
 	if err != nil {
-		return fmt.Errorf("failed to fetch image: %w", err)
+		return fmt.Errorf("failed to fetch image descriptor: %w", err)
+	}
+
+	img, err := desc.Image()
+	if err != nil {
+		return fmt.Errorf("failed to resolve image: %w", err)
 	}
 
 	// Get image size
@@ -303,6 +323,11 @@ func (d *ImageDownloader) download(ctx context.Context) error {
 		return fmt.Errorf("disk file (discobot-rootfs.squashfs) not found in image")
 	}
 
+	// Decompress vmlinuz for Apple VZ (which requires uncompressed ELF)
+	if err := d.decompressKernel(filepath.Join(tempDir, "vmlinuz")); err != nil {
+		return fmt.Errorf("failed to decompress kernel: %w", err)
+	}
+
 	// Write metadata
 	metadata := map[string]interface{}{
 		"image_ref":   d.cfg.ImageRef,
@@ -316,6 +341,11 @@ func (d *ImageDownloader) download(ctx context.Context) error {
 	}
 	if err := os.WriteFile(filepath.Join(tempDir, "manifest.json"), metadataJSON, 0644); err != nil {
 		return fmt.Errorf("failed to write metadata: %w", err)
+	}
+
+	// Remove any existing cache directory (e.g., from a previous partial download)
+	if err := os.RemoveAll(cacheDir); err != nil {
+		return fmt.Errorf("failed to remove existing cache directory: %w", err)
 	}
 
 	// Atomic rename from temp to final directory
@@ -377,6 +407,213 @@ func (d *ImageDownloader) writeFile(r io.Reader, destPath string, mode int64) er
 	}
 
 	return nil
+}
+
+// compressionFormat describes a known kernel compression format.
+type compressionFormat struct {
+	name       string
+	magic      []byte
+	decompress func([]byte) ([]byte, error)
+}
+
+// knownFormats lists compression formats to scan for inside vmlinuz.
+var knownFormats = []compressionFormat{
+	{"gzip", []byte{0x1f, 0x8b, 0x08}, func(data []byte) ([]byte, error) {
+		r, err := gzip.NewReader(bytes.NewReader(data))
+		if err != nil {
+			return nil, err
+		}
+		defer r.Close()
+		return io.ReadAll(r)
+	}},
+	{"zstd", []byte{0x28, 0xb5, 0x2f, 0xfd}, func(data []byte) ([]byte, error) {
+		// The kernel's zstd compressor uses 128MB windows.
+		dec, err := zstd.NewReader(nil, zstd.WithDecoderMaxWindow(1<<31), zstd.WithDecoderConcurrency(1))
+		if err != nil {
+			return nil, err
+		}
+		defer dec.Close()
+		// DecodeAll decodes all concatenated frames. When the compressed kernel
+		// is embedded in a vmlinuz payload, trailing bytes after the frame cause
+		// a "magic number mismatch" error on the non-existent second frame.
+		// The first frame's data is still returned, so use it if valid.
+		out, decErr := dec.DecodeAll(data, nil)
+		if len(out) > 0 {
+			return out, nil
+		}
+		return nil, decErr
+	}},
+	{"xz", []byte{0xfd, '7', 'z', 'X', 'Z', 0x00}, func(data []byte) ([]byte, error) {
+		r, err := xz.NewReader(bytes.NewReader(data))
+		if err != nil {
+			return nil, err
+		}
+		return io.ReadAll(r)
+	}},
+	{"lzma", []byte{0x5d, 0x00, 0x00}, func(data []byte) ([]byte, error) {
+		r, err := lzma.NewReader(bytes.NewReader(data))
+		if err != nil {
+			return nil, err
+		}
+		return io.ReadAll(r)
+	}},
+}
+
+// isKernelImage checks if data is a valid uncompressed Linux kernel.
+// Supports x86_64 ELF and ARM64 Image formats.
+func isKernelImage(data []byte) bool {
+	// x86_64 ELF: starts with 0x7f ELF
+	if len(data) >= 4 && bytes.Equal(data[:4], []byte{0x7f, 'E', 'L', 'F'}) {
+		return true
+	}
+	// ARM64 Image: has "ARMd" magic at offset 0x38
+	if len(data) > 0x3c && bytes.Equal(data[0x38:0x3c], []byte("ARMd")) {
+		return true
+	}
+	return false
+}
+
+// decompressKernel extracts an uncompressed kernel from a vmlinuz file.
+// Apple Virtualization framework requires an uncompressed kernel image
+// (ELF for x86_64 or Image for ARM64).
+//
+// vmlinuz files may be:
+// 1. Already uncompressed (ELF or ARM64 Image)
+// 2. Directly compressed (gzip/zstd/xz/lzma at offset 0)
+// 3. An x86 PE/EFI boot stub with compressed payload embedded at an offset
+//
+// For case 3, we use the Linux boot protocol header to locate the payload,
+// then fall back to scanning for compression magic bytes throughout the file
+// (like the kernel's scripts/extract-vmlinux).
+func (d *ImageDownloader) decompressKernel(path string) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+
+	// Case 1: already uncompressed kernel
+	if isKernelImage(data) {
+		log.Printf("Kernel is already uncompressed")
+		return nil
+	}
+
+	// Case 2: directly compressed (e.g., ARM64 gzip vmlinuz)
+	for _, cf := range knownFormats {
+		if len(data) < len(cf.magic) || !bytes.Equal(data[:len(cf.magic)], cf.magic) {
+			continue
+		}
+		log.Printf("vmlinuz is directly %s compressed, decompressing", cf.name)
+		decompressed, err := cf.decompress(data)
+		if err != nil {
+			log.Printf("Direct %s decompression failed: %v", cf.name, err)
+			break // fall through to other methods
+		}
+		if isKernelImage(decompressed) {
+			log.Printf("Successfully decompressed %s kernel (%d bytes)", cf.name, len(decompressed))
+			return os.WriteFile(path, decompressed, 0644)
+		}
+		log.Printf("Direct %s decompression produced non-kernel data, continuing", cf.name)
+		break
+	}
+
+	// Case 3: x86 PE/EFI stub — use the Linux boot protocol header to find the payload.
+	if len(data) > 0x250 && bytes.Equal(data[0x202:0x206], []byte("HdrS")) {
+		setupSects := int(data[0x1f1])
+		if setupSects == 0 {
+			setupSects = 4 // default per boot protocol
+		}
+		protectedModeStart := (setupSects + 1) * 512
+		payloadOffset := int(binary.LittleEndian.Uint32(data[0x248:0x24c]))
+		payloadLength := int(binary.LittleEndian.Uint32(data[0x24c:0x250]))
+
+		absOffset := protectedModeStart + payloadOffset
+		absEnd := absOffset + payloadLength
+
+		log.Printf("Linux boot protocol: setup_sects=%d, protected_mode_start=%d, payload_offset=%d, payload_length=%d, abs_offset=%d",
+			setupSects, protectedModeStart, payloadOffset, payloadLength, absOffset)
+
+		if absOffset > 0 && absEnd <= len(data) && payloadLength > 0 {
+			payload := data[absOffset:absEnd]
+			if result, err := d.tryDecompress(payload); err == nil {
+				log.Printf("Successfully extracted kernel (%d bytes) via boot protocol header", len(result))
+				return os.WriteFile(path, result, 0644)
+			} else {
+				log.Printf("Boot protocol payload decompression failed: %v, falling back to magic scan", err)
+			}
+		} else {
+			log.Printf("Boot protocol header has invalid offsets, falling back to magic scan")
+		}
+	}
+
+	// Fallback: scan for compression magic bytes throughout the file
+	// (like the kernel's scripts/extract-vmlinux).
+	for _, cf := range knownFormats {
+		searchFrom := 0
+		for {
+			idx := bytes.Index(data[searchFrom:], cf.magic)
+			if idx < 0 {
+				break
+			}
+			offset := searchFrom + idx
+			searchFrom = offset + 1
+
+			log.Printf("Found %s signature at offset %d, attempting decompression", cf.name, offset)
+
+			decompressed, err := cf.decompress(data[offset:])
+			if err != nil {
+				log.Printf("Failed to decompress %s at offset %d: %v", cf.name, offset, err)
+				continue
+			}
+
+			if !isKernelImage(decompressed) {
+				log.Printf("Decompressed %s at offset %d did not produce valid kernel, skipping", cf.name, offset)
+				continue
+			}
+
+			log.Printf("Successfully extracted kernel (%d bytes) from %s at offset %d", len(decompressed), cf.name, offset)
+			return os.WriteFile(path, decompressed, 0644)
+		}
+	}
+
+	return fmt.Errorf("could not extract kernel from vmlinuz (file starts with %x)", data[:min(4, len(data))])
+}
+
+// tryDecompress attempts to decompress data using each known format.
+func (d *ImageDownloader) tryDecompress(data []byte) ([]byte, error) {
+	for _, cf := range knownFormats {
+		if len(data) < len(cf.magic) || !bytes.Equal(data[:len(cf.magic)], cf.magic) {
+			continue
+		}
+
+		log.Printf("Payload matches %s format", cf.name)
+		decompressed, err := cf.decompress(data)
+		if err != nil {
+			return nil, fmt.Errorf("%s decompress: %w", cf.name, err)
+		}
+
+		if isKernelImage(decompressed) {
+			return decompressed, nil
+		}
+		return nil, fmt.Errorf("%s decompressed data is not a valid kernel (starts with %x)", cf.name, decompressed[:min(4, len(decompressed))])
+	}
+
+	// No magic match — try all formats anyway (payload may have a small header before compression)
+	for _, cf := range knownFormats {
+		idx := bytes.Index(data, cf.magic)
+		if idx < 0 || idx > 1024 {
+			continue
+		}
+		log.Printf("Found %s signature at payload offset %d", cf.name, idx)
+		decompressed, err := cf.decompress(data[idx:])
+		if err != nil {
+			continue
+		}
+		if isKernelImage(decompressed) {
+			return decompressed, nil
+		}
+	}
+
+	return nil, fmt.Errorf("no known compression format matched payload (starts with %x)", data[:min(4, len(data))])
 }
 
 // updateState updates the download state thread-safely.

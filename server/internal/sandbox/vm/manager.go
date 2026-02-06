@@ -26,6 +26,10 @@ type ProjectVM interface {
 	// The dialer is used to create a Docker client with custom transport.
 	DockerDialer() func(ctx context.Context, network, addr string) (net.Conn, error)
 
+	// PortDialer returns a dialer function for connecting to an arbitrary VSOCK port.
+	// This is used to reach forwarded ports (e.g., container published ports) inside the VM.
+	PortDialer(port uint32) func(ctx context.Context, network, addr string) (net.Conn, error)
+
 	// Shutdown gracefully stops the VM.
 	Shutdown() error
 }
@@ -41,6 +45,10 @@ type ProjectVMManager interface {
 
 	// GetVM returns the VM for the given project, if it exists.
 	GetVM(projectID string) (ProjectVM, bool)
+
+	// WarmVM creates a VM for the project without associating any sessions.
+	// This is used at startup to pre-warm VMs so they're ready when sessions are created.
+	WarmVM(ctx context.Context, projectID string) (ProjectVM, error)
 
 	// RemoveSession removes a session from the project VM.
 	// The VM may be shut down based on idle timeout policies.
@@ -84,4 +92,8 @@ type Config struct {
 
 	// MemoryMB is the memory per VM in megabytes (0 = default).
 	MemoryMB int
+
+	// HomeDir is the host directory to share with the VM via VirtioFS (read-only).
+	// If set, the directory is mounted at /host-home inside the guest.
+	HomeDir string
 }
