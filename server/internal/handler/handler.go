@@ -27,6 +27,7 @@ type Handler struct {
 	gitService          *service.GitService
 	gitProvider         git.Provider
 	sandboxProvider     sandbox.Provider
+	sandboxManager      *sandbox.Manager
 	sandboxService      *service.SandboxService
 	sessionService      *service.SessionService
 	chatService         *service.ChatService
@@ -40,7 +41,7 @@ type Handler struct {
 }
 
 // New creates a new Handler with the required git and sandbox providers.
-func New(s *store.Store, cfg *config.Config, gitProvider git.Provider, sandboxProvider sandbox.Provider, eventBroker *events.Broker) *Handler {
+func New(s *store.Store, cfg *config.Config, gitProvider git.Provider, sandboxProvider sandbox.Provider, sandboxManager *sandbox.Manager, eventBroker *events.Broker) *Handler {
 	credSvc, err := service.NewCredentialService(s, cfg)
 	if err != nil {
 		// This should only fail if the encryption key is invalid
@@ -80,6 +81,7 @@ func New(s *store.Store, cfg *config.Config, gitProvider git.Provider, sandboxPr
 		gitService:        gitSvc,
 		gitProvider:       gitProvider,
 		sandboxProvider:   sandboxProvider,
+		sandboxManager:    sandboxManager,
 		sandboxService:    sandboxSvc,
 		sessionService:    sessionSvc,
 		chatService:       chatSvc,
