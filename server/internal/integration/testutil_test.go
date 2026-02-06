@@ -145,7 +145,7 @@ func NewTestServer(t *testing.T) *TestServer {
 	sandboxManager.RegisterProvider("mock", mockSandbox)
 
 	// Create job queue early so it can be passed to services
-	jobQueue := jobs.NewQueue(s)
+	jobQueue := jobs.NewQueue(s, cfg)
 
 	h := handler.New(s, cfg, gitProvider, mockSandbox, sandboxManager, eventBroker, jobQueue)
 
@@ -405,7 +405,7 @@ func NewTestServerNoAuth(t *testing.T) *TestServer {
 	sandboxManager.RegisterProvider("mock", mockSandbox)
 
 	// Create job queue early so it can be passed to services
-	jobQueue := jobs.NewQueue(s)
+	jobQueue := jobs.NewQueue(s, cfg)
 
 	h := handler.New(s, cfg, gitProvider, mockSandbox, sandboxManager, eventBroker, jobQueue)
 

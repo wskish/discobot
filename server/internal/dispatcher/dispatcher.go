@@ -22,6 +22,7 @@ type Service struct {
 	cfg         *config.Config
 	serverID    string
 	eventBroker *events.Broker
+	singleNode  bool // true when using SQLite (single-host mode)
 
 	// Registered executors by job type
 	executors map[jobs.JobType]JobExecutor
@@ -51,6 +52,7 @@ func NewService(s *store.Store, cfg *config.Config, eventBroker *events.Broker) 
 		cfg:         cfg,
 		serverID:    uuid.New().String(),
 		eventBroker: eventBroker,
+		singleNode:  cfg.DatabaseDriver == "sqlite",
 		executors:   make(map[jobs.JobType]JobExecutor),
 		runningJobs: make(map[jobs.JobType]int),
 		notifyCh:    make(chan struct{}, 100), // Buffered to avoid blocking enqueuers
@@ -93,9 +95,25 @@ func (d *Service) Start(parentCtx context.Context) {
 
 	log.Printf("Dispatcher starting with server ID: %s", d.serverID)
 
-	// Start leader election loop
-	d.wg.Add(1)
-	go d.leaderElectionLoop()
+	if d.singleNode {
+		// SQLite is single-host: become leader immediately and clean up
+		// any stale jobs left over from a previous process.
+		d.isLeaderMu.Lock()
+		d.isLeader = true
+		d.isLeaderMu.Unlock()
+		log.Printf("Single-node mode (SQLite): immediately became leader (server: %s)", d.serverID)
+
+		count, err := d.store.CleanupStaleJobs(d.ctx, 0)
+		if err != nil {
+			log.Printf("Stale job cleanup on startup error: %v", err)
+		} else if count > 0 {
+			log.Printf("Reset %d stale jobs on startup", count)
+		}
+	} else {
+		// Multi-node: start leader election loop
+		d.wg.Add(1)
+		go d.leaderElectionLoop()
+	}
 
 	// Start job processing loop
 	d.wg.Add(1)
@@ -127,8 +145,8 @@ func (d *Service) Stop() {
 		log.Println("Timeout waiting for dispatcher goroutines")
 	}
 
-	// Release leadership
-	if d.IsLeader() {
+	// Release leadership (skip for single-node since we never wrote a DB row)
+	if !d.singleNode && d.IsLeader() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		if err := d.store.ReleaseLeadership(ctx, d.serverID); err != nil {
@@ -278,7 +296,7 @@ func (d *Service) executeJob(job *model.Job) {
 	if !ok {
 		errMsg := "no executor registered for job type"
 		log.Printf("Job %s failed: %s", job.ID, errMsg)
-		if err := d.store.FailJob(d.ctx, job.ID, errMsg); err != nil {
+		if err := d.store.FailJob(d.ctx, job.ID, errMsg, d.cfg.JobRetryBackoff); err != nil {
 			log.Printf("Failed to mark job %s as failed: %v", job.ID, err)
 		}
 		return
@@ -291,7 +309,7 @@ func (d *Service) executeJob(job *model.Job) {
 	err := executor.Execute(ctx, job)
 	if err != nil {
 		log.Printf("Job %s failed: %v", job.ID, err)
-		if err := d.store.FailJob(d.ctx, job.ID, err.Error()); err != nil {
+		if err := d.store.FailJob(d.ctx, job.ID, err.Error(), d.cfg.JobRetryBackoff); err != nil {
 			log.Printf("Failed to mark job %s as failed: %v", job.ID, err)
 		}
 		// Publish job completion event (failure)

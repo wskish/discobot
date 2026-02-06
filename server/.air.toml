@@ -5,7 +5,7 @@ tmp_dir = "build"
 [build]
   args_bin = []
   entrypoint = "./build/main"
-  cmd = "go build -o ./build/main ./cmd/server"
+  cmd = "go build -o ./build/main ./cmd/server && if [ \"$(uname)\" = \"Darwin\" ]; then codesign --entitlements discobot-server.entitlements --force --sign - ./build/main; fi"
   delay = 1000
   exclude_dir = ["assets", "buid", "vendor", "testdata", "node_modules", "workspaces"]
   exclude_file = []

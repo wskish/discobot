@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 
+	"github.com/obot-platform/discobot/server/internal/config"
 	"github.com/obot-platform/discobot/server/internal/model"
 	"github.com/obot-platform/discobot/server/internal/store"
 )
@@ -12,12 +13,13 @@ import (
 // Queue provides helper methods for enqueueing jobs.
 type Queue struct {
 	store      *store.Store
+	cfg        *config.Config
 	notifyFunc func() // Called after job creation to notify dispatcher
 }
 
 // NewQueue creates a new job queue helper.
-func NewQueue(s *store.Store) *Queue {
-	return &Queue{store: s}
+func NewQueue(s *store.Store, cfg *config.Config) *Queue {
+	return &Queue{store: s, cfg: cfg}
 }
 
 // SetNotifyFunc sets the function to call after job creation.
@@ -69,7 +71,7 @@ func (q *Queue) EnqueueSessionInit(ctx context.Context, projectID, sessionID, wo
 		Type:         string(JobTypeSessionInit),
 		Payload:      payload,
 		Status:       string(model.JobStatusPending),
-		MaxAttempts:  3,
+		MaxAttempts:  q.cfg.JobMaxAttempts,
 		Priority:     10, // Higher priority for session init
 		ResourceType: &resourceType,
 		ResourceID:   &sessionID,
@@ -107,7 +109,7 @@ func (q *Queue) EnqueueWorkspaceInit(ctx context.Context, projectID, workspaceID
 		Type:         string(JobTypeWorkspaceInit),
 		Payload:      payload,
 		Status:       string(model.JobStatusPending),
-		MaxAttempts:  3,
+		MaxAttempts:  q.cfg.JobMaxAttempts,
 		Priority:     10, // Higher priority for workspace init
 		ResourceType: &resourceType,
 		ResourceID:   &workspaceID,
@@ -145,7 +147,7 @@ func (q *Queue) EnqueueSessionDelete(ctx context.Context, projectID, sessionID s
 		Type:         string(JobTypeSessionDelete),
 		Payload:      payload,
 		Status:       string(model.JobStatusPending),
-		MaxAttempts:  3,
+		MaxAttempts:  q.cfg.JobMaxAttempts,
 		Priority:     5, // Lower priority than init - deletion can wait
 		ResourceType: &resourceType,
 		ResourceID:   &sessionID,
