@@ -20,6 +20,7 @@ import (
 	"github.com/obot-platform/discobot/server/internal/database"
 	"github.com/obot-platform/discobot/server/internal/dispatcher"
 	"github.com/obot-platform/discobot/server/internal/events"
+	"github.com/obot-platform/discobot/server/internal/model"
 	"github.com/obot-platform/discobot/server/internal/git"
 	"github.com/obot-platform/discobot/server/internal/handler"
 	"github.com/obot-platform/discobot/server/internal/jobs"
@@ -92,8 +93,18 @@ func main() {
 	// Create a manager that can route to different providers based on workspace configuration
 	sandboxManager := sandbox.NewManager()
 
+	// Shared resolver: looks up project ID for a session from the database.
+	// Used by Docker (for cache volumes) and VZ (for project VM routing).
+	sessionProjectResolver := func(ctx context.Context, sessionID string) (string, error) {
+		session, err := s.GetSessionByID(ctx, sessionID)
+		if err != nil {
+			return "", err
+		}
+		return session.ProjectID, nil
+	}
+
 	// Initialize Docker provider (default)
-	if dockerProvider, dockerErr := docker.NewProvider(cfg); dockerErr != nil {
+	if dockerProvider, dockerErr := docker.NewProvider(cfg, docker.WithSessionProjectResolver(sessionProjectResolver)); dockerErr != nil {
 		log.Printf("Warning: Failed to initialize Docker sandbox provider: %v", dockerErr)
 	} else {
 		sandboxManager.RegisterProvider("docker", dockerProvider)
@@ -120,8 +131,9 @@ func main() {
 			InitrdPath:    cfg.VZInitrdPath,
 			BaseDiskPath:  cfg.VZBaseDiskPath,
 			ImageRef:      cfg.VZImageRef,
+			HomeDir:       cfg.VZHomeDir,
 		}
-		if vzProvider, vzErr := vz.NewProvider(cfg, vzCfg); vzErr != nil {
+		if vzProvider, vzErr := vz.NewProvider(cfg, vzCfg, sessionProjectResolver); vzErr != nil {
 			log.Printf("Warning: Failed to initialize VZ sandbox provider: %v", vzErr)
 		} else {
 			sandboxManager.RegisterProvider("vz", vzProvider)
@@ -130,13 +142,67 @@ func main() {
 			} else {
 				log.Printf("VZ sandbox provider registered (images downloading in background)")
 			}
+
+			// Warm VZ VMs in background for projects that have VZ workspaces
+			go func() {
+				warmCtx, warmCancel := context.WithTimeout(context.Background(), 10*time.Minute)
+				defer warmCancel()
+
+				// Wait for VZ provider to be ready (may be downloading images)
+				log.Println("Waiting for VZ provider to be ready before warming VMs...")
+				if err := vzProvider.WaitForReady(warmCtx); err != nil {
+					log.Printf("Warning: VZ provider not ready, skipping VM warming: %v", err)
+					return
+				}
+
+				// Find all workspaces that explicitly use VZ provider
+				vzWorkspaces, err := s.ListWorkspacesByProvider(warmCtx, model.WorkspaceProviderVZ)
+				if err != nil {
+					log.Printf("Warning: Failed to list VZ workspaces: %v", err)
+					return
+				}
+
+				// Also find workspaces with no provider set — on macOS the platform
+				// default is "vz", so these will be routed to the VZ provider at runtime.
+				defaultWorkspaces, err := s.ListWorkspacesByProvider(warmCtx, "")
+				if err != nil {
+					log.Printf("Warning: Failed to list default-provider workspaces: %v", err)
+				}
+
+				// Collect unique project IDs
+				projectIDs := make(map[string]bool)
+				for _, ws := range vzWorkspaces {
+					projectIDs[ws.ProjectID] = true
+				}
+				for _, ws := range defaultWorkspaces {
+					projectIDs[ws.ProjectID] = true
+				}
+
+				if len(projectIDs) == 0 {
+					log.Println("No VZ workspaces found, skipping VM warming")
+					return
+				}
+
+				log.Printf("Warming VMs for %d projects with VZ workspaces", len(projectIDs))
+
+				for projectID := range projectIDs {
+					if err := vzProvider.WarmVM(warmCtx, projectID); err != nil {
+						log.Printf("Warning: Failed to warm VM for project %s: %v", projectID, err)
+						continue
+					}
+				}
+
+				log.Println("VM warming complete")
+			}()
 		}
 	}
 
 	// Create provider proxy that routes based on workspace configuration
 	// The proxy will look up the session's workspace and use its provider setting
 	var sandboxProvider sandbox.Provider
-	if len(sandboxManager.ListProviders()) > 0 {
+	if sandboxManager.EnsureDefaultAvailable() {
+		log.Printf("Default sandbox provider: %s", sandboxManager.DefaultProviderName())
+
 		// Create a sandbox service for the provider getter function
 		// This is a bit of a chicken-and-egg problem, so we'll pass the store directly
 		providerGetter := func(ctx context.Context, sessionID string) (string, error) {
@@ -152,9 +218,9 @@ func main() {
 				return "", fmt.Errorf("failed to get workspace: %w", err)
 			}
 
-			// Default to docker if not set
+			// Use platform default if workspace has no provider set
 			if workspace.Provider == "" {
-				return "docker", nil
+				return sandboxManager.DefaultProviderName(), nil
 			}
 
 			return workspace.Provider, nil
@@ -197,7 +263,7 @@ func main() {
 	eventBroker := events.NewBroker(s, eventPoller)
 
 	// Create job queue early so it can be passed to services
-	jobQueue := jobs.NewQueue(s)
+	jobQueue := jobs.NewQueue(s, cfg)
 
 	// Start sandbox watcher to sync session states with sandbox states
 	// This handles external changes (e.g., Docker containers deleted outside Discobot)

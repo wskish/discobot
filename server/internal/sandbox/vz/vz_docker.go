@@ -5,16 +5,25 @@ package vz
 import (
 	"context"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
+
+	containerTypes "github.com/docker/docker/api/types/container"
+	dockerclient "github.com/docker/docker/client"
 
 	"github.com/obot-platform/discobot/server/internal/config"
 	"github.com/obot-platform/discobot/server/internal/sandbox"
 	"github.com/obot-platform/discobot/server/internal/sandbox/docker"
 	"github.com/obot-platform/discobot/server/internal/sandbox/vm"
 )
+
+// SessionProjectResolver looks up the project ID for a session from the database.
+// Returns the project ID or an error if the session doesn't exist.
+type SessionProjectResolver func(ctx context.Context, sessionID string) (projectID string, err error)
 
 // DockerProvider is a hybrid provider that:
 // - Uses Apple Virtualization framework to create project-level VMs (one VM per project)
@@ -38,25 +47,31 @@ type DockerProvider struct {
 	dockerProviders   map[string]*docker.Provider
 	dockerProvidersMu sync.RWMutex
 
-	// sessionToProject maps sessionID -> projectID for routing
-	sessionToProject   map[string]string
-	sessionToProjectMu sync.RWMutex
+	// sessionProjectResolver looks up session -> project mapping from the database.
+	sessionProjectResolver SessionProjectResolver
+
+	// hostDockerClient connects to the host's Docker daemon (for image transfer to VMs)
+	hostDockerClient     *dockerclient.Client
+	hostDockerClientOnce sync.Once
+	hostDockerClientErr  error
 }
 
 // NewProvider creates a new VZ+Docker hybrid provider.
 // This is the main entry point that matches the Provider interface.
-func NewProvider(cfg *config.Config, vmConfig *vm.Config) (*DockerProvider, error) {
-	return NewDockerProvider(cfg, *vmConfig)
+// The resolver function looks up the project ID for a session from the database.
+func NewProvider(cfg *config.Config, vmConfig *vm.Config, resolver SessionProjectResolver) (*DockerProvider, error) {
+	return NewDockerProvider(cfg, *vmConfig, resolver)
 }
 
 // NewDockerProvider creates a new VZ+Docker hybrid provider.
 // If kernel and base disk paths are not configured, it starts an async download
 // from the container registry specified in vmConfig.ImageRef.
-func NewDockerProvider(cfg *config.Config, vmConfig vm.Config) (*DockerProvider, error) {
+// The resolver function looks up the project ID for a session from the database.
+func NewDockerProvider(cfg *config.Config, vmConfig vm.Config, resolver SessionProjectResolver) (*DockerProvider, error) {
 	p := &DockerProvider{
-		cfg:              cfg,
-		dockerProviders:  make(map[string]*docker.Provider),
-		sessionToProject: make(map[string]string),
+		cfg:                    cfg,
+		dockerProviders:        make(map[string]*docker.Provider),
+		sessionProjectResolver: resolver,
 	}
 
 	// Check if we need to download images
@@ -143,8 +158,10 @@ func (p *DockerProvider) Image() string {
 // 2. Creates a Docker provider connected to that VM's Docker daemon via VSOCK
 // 3. Creates a container inside the VM using the Docker provider
 func (p *DockerProvider) Create(ctx context.Context, sessionID string, opts sandbox.CreateOptions) (*sandbox.Sandbox, error) {
-	if opts.ProjectID == "" {
-		return nil, fmt.Errorf("ProjectID is required for VZ+Docker provider")
+	// Resolve project ID from the session in the database
+	projectID, err := p.sessionProjectResolver(ctx, sessionID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve project for session %s: %w", sessionID, err)
 	}
 
 	// Check if vmManager is ready
@@ -156,42 +173,33 @@ func (p *DockerProvider) Create(ctx context.Context, sessionID string, opts sand
 		return nil, fmt.Errorf("VZ provider not ready, images still downloading")
 	}
 
-	log.Printf("Creating sandbox for session %s in project %s", sessionID, opts.ProjectID)
+	log.Printf("Creating sandbox for session %s in project %s", sessionID, projectID)
 
 	// Get or create project VM
-	pvm, err := vmManager.GetOrCreateVM(ctx, opts.ProjectID, sessionID)
+	pvm, err := vmManager.GetOrCreateVM(ctx, projectID, sessionID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get/create project VM: %w", err)
 	}
 
 	// Get or create Docker provider for this project
-	dockerProv, err := p.getOrCreateDockerProvider(opts.ProjectID, pvm)
+	dockerProv, err := p.getOrCreateDockerProvider(ctx, projectID, pvm)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get/create Docker provider: %w", err)
 	}
 
-	// Store session to project mapping
-	p.sessionToProjectMu.Lock()
-	p.sessionToProject[sessionID] = opts.ProjectID
-	p.sessionToProjectMu.Unlock()
-
 	// Create container inside the VM
 	sb, err := dockerProv.Create(ctx, sessionID, opts)
 	if err != nil {
-		// Clean up mapping on failure
-		p.sessionToProjectMu.Lock()
-		delete(p.sessionToProject, sessionID)
-		p.sessionToProjectMu.Unlock()
 		return nil, err
 	}
 
-	log.Printf("Created container for session %s in project VM %s", sessionID, opts.ProjectID)
+	log.Printf("Created container for session %s in project VM %s", sessionID, projectID)
 	return sb, nil
 }
 
 // Start starts a sandbox (container inside the project VM).
 func (p *DockerProvider) Start(ctx context.Context, sessionID string) error {
-	dockerProv, err := p.getDockerProviderForSession(sessionID)
+	_, dockerProv, err := p.getDockerProviderForSession(ctx, sessionID)
 	if err != nil {
 		return err
 	}
@@ -200,7 +208,7 @@ func (p *DockerProvider) Start(ctx context.Context, sessionID string) error {
 
 // Stop stops a sandbox (container inside the project VM).
 func (p *DockerProvider) Stop(ctx context.Context, sessionID string, timeout time.Duration) error {
-	dockerProv, err := p.getDockerProviderForSession(sessionID)
+	_, dockerProv, err := p.getDockerProviderForSession(ctx, sessionID)
 	if err != nil {
 		return err
 	}
@@ -210,7 +218,7 @@ func (p *DockerProvider) Stop(ctx context.Context, sessionID string, timeout tim
 // Remove removes a sandbox (container inside the project VM).
 // Also removes the session from the project VM reference count.
 func (p *DockerProvider) Remove(ctx context.Context, sessionID string, opts ...sandbox.RemoveOption) error {
-	dockerProv, err := p.getDockerProviderForSession(sessionID)
+	projectID, dockerProv, err := p.getDockerProviderForSession(ctx, sessionID)
 	if err != nil {
 		return err
 	}
@@ -221,15 +229,8 @@ func (p *DockerProvider) Remove(ctx context.Context, sessionID string, opts ...s
 	}
 
 	// Remove session from project VM
-	p.sessionToProjectMu.Lock()
-	projectID, exists := p.sessionToProject[sessionID]
-	delete(p.sessionToProject, sessionID)
-	p.sessionToProjectMu.Unlock()
-
-	if exists {
-		if err := p.vmManager.RemoveSession(projectID, sessionID); err != nil {
-			log.Printf("Warning: failed to remove session from project VM: %v", err)
-		}
+	if err := p.vmManager.RemoveSession(projectID, sessionID); err != nil {
+		log.Printf("Warning: failed to remove session from project VM: %v", err)
 	}
 
 	return nil
@@ -237,7 +238,7 @@ func (p *DockerProvider) Remove(ctx context.Context, sessionID string, opts ...s
 
 // Get returns sandbox information.
 func (p *DockerProvider) Get(ctx context.Context, sessionID string) (*sandbox.Sandbox, error) {
-	dockerProv, err := p.getDockerProviderForSession(sessionID)
+	_, dockerProv, err := p.getDockerProviderForSession(ctx, sessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -246,7 +247,7 @@ func (p *DockerProvider) Get(ctx context.Context, sessionID string) (*sandbox.Sa
 
 // GetSecret returns the sandbox secret.
 func (p *DockerProvider) GetSecret(ctx context.Context, sessionID string) (string, error) {
-	dockerProv, err := p.getDockerProviderForSession(sessionID)
+	_, dockerProv, err := p.getDockerProviderForSession(ctx, sessionID)
 	if err != nil {
 		return "", err
 	}
@@ -279,7 +280,7 @@ func (p *DockerProvider) List(ctx context.Context) ([]*sandbox.Sandbox, error) {
 
 // Exec executes a command in the sandbox.
 func (p *DockerProvider) Exec(ctx context.Context, sessionID string, cmd []string, opts sandbox.ExecOptions) (*sandbox.ExecResult, error) {
-	dockerProv, err := p.getDockerProviderForSession(sessionID)
+	_, dockerProv, err := p.getDockerProviderForSession(ctx, sessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -288,7 +289,7 @@ func (p *DockerProvider) Exec(ctx context.Context, sessionID string, cmd []strin
 
 // Attach creates an interactive PTY session.
 func (p *DockerProvider) Attach(ctx context.Context, sessionID string, opts sandbox.AttachOptions) (sandbox.PTY, error) {
-	dockerProv, err := p.getDockerProviderForSession(sessionID)
+	_, dockerProv, err := p.getDockerProviderForSession(ctx, sessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -297,7 +298,7 @@ func (p *DockerProvider) Attach(ctx context.Context, sessionID string, opts sand
 
 // ExecStream executes a streaming command.
 func (p *DockerProvider) ExecStream(ctx context.Context, sessionID string, cmd []string, opts sandbox.ExecStreamOptions) (sandbox.Stream, error) {
-	dockerProv, err := p.getDockerProviderForSession(sessionID)
+	_, dockerProv, err := p.getDockerProviderForSession(ctx, sessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -305,12 +306,47 @@ func (p *DockerProvider) ExecStream(ctx context.Context, sessionID string, cmd [
 }
 
 // HTTPClient returns an HTTP client for communicating with the sandbox.
+// Overrides the Docker provider's localhost-based transport with VSOCK port forwarding,
+// since the VM's localhost is not reachable from the macOS host.
 func (p *DockerProvider) HTTPClient(ctx context.Context, sessionID string) (*http.Client, error) {
-	dockerProv, err := p.getDockerProviderForSession(sessionID)
+	projectID, dockerProv, err := p.getDockerProviderForSession(ctx, sessionID)
 	if err != nil {
 		return nil, err
 	}
-	return dockerProv.HTTPClient(ctx, sessionID)
+
+	// Get the container's mapped port
+	sb, err := dockerProv.Get(ctx, sessionID)
+	if err != nil {
+		return nil, err
+	}
+
+	log.Printf("HTTPClient: sandbox %s status=%s ports=%+v", sessionID, sb.Status, sb.Ports)
+
+	// Find port 3002's host mapping
+	var hostPort int
+	for _, port := range sb.Ports {
+		if port.ContainerPort == 3002 {
+			hostPort = port.HostPort
+			break
+		}
+	}
+	if hostPort == 0 {
+		return nil, fmt.Errorf("sandbox does not expose port 3002 (status=%s, ports=%v)", sb.Status, sb.Ports)
+	}
+
+	// Get VM and create VSOCK-based transport
+	pvm, ok := p.vmManager.GetVM(projectID)
+	if !ok {
+		return nil, fmt.Errorf("no running VM for project %s", projectID)
+	}
+
+	dialer := pvm.PortDialer(uint32(hostPort))
+
+	return &http.Client{
+		Transport: &http.Transport{
+			DialContext: dialer,
+		},
+	}, nil
 }
 
 // Watch watches for sandbox state changes across all Docker providers.
@@ -376,6 +412,11 @@ func (p *DockerProvider) Close() error {
 	}
 	p.dockerProvidersMu.Unlock()
 
+	// Close host Docker client if initialized
+	if p.hostDockerClient != nil {
+		_ = p.hostDockerClient.Close()
+	}
+
 	return nil
 }
 
@@ -429,6 +470,20 @@ func (p *DockerProvider) Status() ProviderStatus {
 	return status
 }
 
+// GetVMForProject returns the project VM if it exists.
+// This is used by the debug Docker proxy to get the VSOCK dialer.
+func (p *DockerProvider) GetVMForProject(projectID string) (vm.ProjectVM, bool) {
+	p.downloadMu.RLock()
+	vmManager := p.vmManager
+	p.downloadMu.RUnlock()
+
+	if vmManager == nil {
+		return nil, false
+	}
+
+	return vmManager.GetVM(projectID)
+}
+
 // IsReady returns true if the provider is ready to create VMs.
 func (p *DockerProvider) IsReady() bool {
 	p.downloadMu.RLock()
@@ -436,9 +491,145 @@ func (p *DockerProvider) IsReady() bool {
 	return p.vmManager != nil
 }
 
+// WarmVM pre-creates a VM for the given project without starting any containers.
+// Returns an error if the provider is not ready (images still downloading).
+func (p *DockerProvider) WarmVM(ctx context.Context, projectID string) error {
+	p.downloadMu.RLock()
+	vmManager := p.vmManager
+	p.downloadMu.RUnlock()
+
+	if vmManager == nil {
+		return fmt.Errorf("VZ provider not ready, images still downloading")
+	}
+
+	_, err := vmManager.WarmVM(ctx, projectID)
+	return err
+}
+
+// WaitForReady blocks until the VZ provider is ready (images downloaded and VM manager initialized).
+// Returns an error if the download fails or the context is cancelled.
+func (p *DockerProvider) WaitForReady(ctx context.Context) error {
+	if p.IsReady() {
+		return nil
+	}
+
+	p.downloadMu.RLock()
+	downloader := p.imageDownloader
+	p.downloadMu.RUnlock()
+
+	if downloader == nil {
+		return fmt.Errorf("VZ provider not properly initialized")
+	}
+
+	if err := downloader.Wait(ctx); err != nil {
+		return fmt.Errorf("VZ image download failed: %w", err)
+	}
+
+	// Poll briefly for vmManager to be set after download completes
+	for i := 0; i < 50; i++ {
+		if p.IsReady() {
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(100 * time.Millisecond):
+		}
+	}
+
+	return fmt.Errorf("VZ provider not ready after download completed")
+}
+
+// getHostDockerClient returns a Docker client connected to the host's Docker daemon.
+// Used to export locally-built images for transfer into VMs.
+func (p *DockerProvider) getHostDockerClient() (*dockerclient.Client, error) {
+	p.hostDockerClientOnce.Do(func() {
+		clientOpts := []dockerclient.Opt{
+			dockerclient.FromEnv,
+			dockerclient.WithAPIVersionNegotiation(),
+		}
+		if p.cfg.DockerHost != "" {
+			clientOpts = append(clientOpts, dockerclient.WithHost(p.cfg.DockerHost))
+		} else if host := docker.DetectDockerHost(); host != "" {
+			clientOpts = append(clientOpts, dockerclient.WithHost(host))
+		}
+
+		cli, err := dockerclient.NewClientWithOpts(clientOpts...)
+		if err != nil {
+			p.hostDockerClientErr = fmt.Errorf("failed to create host docker client: %w", err)
+			return
+		}
+		p.hostDockerClient = cli
+	})
+	return p.hostDockerClient, p.hostDockerClientErr
+}
+
+// ensureImageInVM loads the sandbox image from the host's Docker into the VM's Docker
+// when the image is a locally-built sha256 digest that cannot be pulled from a registry.
+func (p *DockerProvider) ensureImageInVM(ctx context.Context, dockerProv *docker.Provider) error {
+	image := p.cfg.SandboxImage
+
+	// Only handle local digest images — registry images are pulled by ensureImage()
+	if !strings.HasPrefix(image, "sha256:") {
+		return nil
+	}
+
+	// Check if image already exists in VM's Docker
+	vmClient := dockerProv.Client()
+	if inspect, err := vmClient.ImageInspect(ctx, image); err == nil {
+		log.Printf("Image %s already exists in VM Docker (ID: %s)", image[:19], inspect.ID[:19])
+		return nil
+	} else {
+		log.Printf("Image %s not found in VM Docker, will load from host: %v", image[:19], err)
+	}
+
+	// Get host Docker client
+	hostClient, err := p.getHostDockerClient()
+	if err != nil {
+		return fmt.Errorf("failed to get host docker client: %w", err)
+	}
+
+	// Verify image exists on host
+	if _, err := hostClient.ImageInspect(ctx, image); err != nil {
+		return fmt.Errorf("image %s not found on host docker: %w", image[:19], err)
+	}
+
+	// Get image size for progress reporting
+	inspectResult, _, err := hostClient.ImageInspectWithRaw(ctx, image)
+	if err != nil {
+		return fmt.Errorf("failed to inspect image on host: %w", err)
+	}
+	imageSize := inspectResult.Size
+	log.Printf("Loading image %s (%d MB) from host Docker into VM Docker...", image[:19], imageSize/(1024*1024))
+
+	// Stream image from host to VM: ImageSave → progressReader → ImageLoad
+	reader, err := hostClient.ImageSave(ctx, []string{image})
+	if err != nil {
+		return fmt.Errorf("failed to export image from host: %w", err)
+	}
+	defer reader.Close()
+
+	pr := &progressReader{
+		reader:   reader,
+		total:    imageSize,
+		logEvery: 100 * 1024 * 1024, // Log every 100MB
+		label:    image[:19],
+	}
+
+	resp, err := vmClient.ImageLoad(ctx, pr, dockerclient.ImageLoadWithQuiet(true))
+	if err != nil {
+		return fmt.Errorf("failed to load image into VM: %w", err)
+	}
+	defer resp.Body.Close()
+	_, _ = io.Copy(io.Discard, resp.Body)
+
+	log.Printf("Successfully loaded image %s into VM Docker", image[:19])
+	return nil
+}
+
 // getOrCreateDockerProvider gets or creates a Docker provider for the given project.
 // The Docker provider connects to the Docker daemon inside the project VM via VSOCK.
-func (p *DockerProvider) getOrCreateDockerProvider(projectID string, pvm vm.ProjectVM) (*docker.Provider, error) {
+func (p *DockerProvider) getOrCreateDockerProvider(ctx context.Context, projectID string, pvm vm.ProjectVM) (*docker.Provider, error) {
 	p.dockerProvidersMu.RLock()
 	if prov, exists := p.dockerProviders[projectID]; exists {
 		p.dockerProvidersMu.RUnlock()
@@ -465,19 +656,80 @@ func (p *DockerProvider) getOrCreateDockerProvider(projectID string, pvm vm.Proj
 		return nil, fmt.Errorf("failed to create Docker provider: %w", err)
 	}
 
+	// Load sandbox image into VM if it's a local digest
+	if err := p.ensureImageInVM(ctx, dockerProv); err != nil {
+		return nil, fmt.Errorf("failed to load sandbox image into VM: %w", err)
+	}
+
+	// Start proxy container for VSOCK port forwarding
+	if err := p.startProxyContainer(ctx, projectID, dockerProv); err != nil {
+		return nil, fmt.Errorf("failed to start proxy container for project %s: %w", projectID, err)
+	}
+
 	p.dockerProviders[projectID] = dockerProv
 	log.Printf("Docker provider created for project %s", projectID)
 	return dockerProv, nil
 }
 
-// getDockerProviderForSession returns the Docker provider for the given session.
-func (p *DockerProvider) getDockerProviderForSession(sessionID string) (*docker.Provider, error) {
-	p.sessionToProjectMu.RLock()
-	projectID, exists := p.sessionToProject[sessionID]
-	p.sessionToProjectMu.RUnlock()
+// startProxyContainer creates and starts the VSOCK port proxy container inside the VM.
+// The proxy watches Docker events for containers with published ports and creates
+// socat VSOCK listeners to forward those ports to the host.
+func (p *DockerProvider) startProxyContainer(ctx context.Context, projectID string, dockerProv *docker.Provider) error {
+	cli := dockerProv.Client()
+	suffix := projectID
+	if len(suffix) > 8 {
+		suffix = suffix[:8]
+	}
+	name := fmt.Sprintf("discobot-proxy-%s", suffix)
 
-	if !exists {
-		return nil, fmt.Errorf("session %s not found", sessionID)
+	// Check if proxy container already exists and is running
+	existing, err := cli.ContainerInspect(ctx, name)
+	if err == nil {
+		if existing.State.Running {
+			log.Printf("Proxy container %s already running for project %s", name, projectID)
+			return nil
+		}
+		// Exists but not running — remove and recreate
+		_ = cli.ContainerRemove(ctx, existing.ID, containerTypes.RemoveOptions{Force: true})
+	}
+
+	containerConfig := &containerTypes.Config{
+		Image: p.cfg.SandboxImage,
+		Cmd:   []string{"/opt/discobot/bin/discobot-agent", "proxy"},
+		Labels: map[string]string{
+			"discobot.proxy":      "true",
+			"discobot.project.id": projectID,
+		},
+	}
+
+	hostConfig := &containerTypes.HostConfig{
+		NetworkMode: "host",
+		Binds:       []string{"/var/run/docker.sock:/var/run/docker.sock"},
+		RestartPolicy: containerTypes.RestartPolicy{
+			Name: containerTypes.RestartPolicyAlways,
+		},
+	}
+
+	resp, err := cli.ContainerCreate(ctx, containerConfig, hostConfig, nil, nil, name)
+	if err != nil {
+		return fmt.Errorf("failed to create proxy container: %w", err)
+	}
+
+	if err := cli.ContainerStart(ctx, resp.ID, containerTypes.StartOptions{}); err != nil {
+		return fmt.Errorf("failed to start proxy container: %w", err)
+	}
+
+	log.Printf("Started proxy container %s (%s) for project %s", name, resp.ID[:12], projectID)
+	return nil
+}
+
+// getDockerProviderForSession resolves the session's project ID from the database
+// and returns the corresponding Docker provider. Returns sandbox.ErrNotFound if
+// the session doesn't exist or has no running VM.
+func (p *DockerProvider) getDockerProviderForSession(ctx context.Context, sessionID string) (string, *docker.Provider, error) {
+	projectID, err := p.sessionProjectResolver(ctx, sessionID)
+	if err != nil {
+		return "", nil, fmt.Errorf("%w: failed to resolve project for session %s: %v", sandbox.ErrNotFound, sessionID, err)
 	}
 
 	p.dockerProvidersMu.RLock()
@@ -485,8 +737,37 @@ func (p *DockerProvider) getDockerProviderForSession(sessionID string) (*docker.
 	p.dockerProvidersMu.RUnlock()
 
 	if !exists {
-		return nil, fmt.Errorf("Docker provider not found for project %s", projectID)
+		return "", nil, fmt.Errorf("%w: no running VM for project %s (session %s)", sandbox.ErrNotFound, projectID, sessionID)
 	}
 
-	return dockerProv, nil
+	return projectID, dockerProv, nil
+}
+
+// progressReader wraps an io.Reader and logs transfer progress.
+type progressReader struct {
+	reader      io.Reader
+	total       int64 // Total expected bytes (0 if unknown)
+	read        int64 // Bytes read so far
+	lastLogged  int64 // Bytes read at last log
+	logEvery    int64 // Log every N bytes
+	label       string
+}
+
+func (pr *progressReader) Read(p []byte) (int, error) {
+	n, err := pr.reader.Read(p)
+	pr.read += int64(n)
+
+	if pr.read-pr.lastLogged >= pr.logEvery {
+		pr.lastLogged = pr.read
+		readMB := pr.read / (1024 * 1024)
+		if pr.total > 0 {
+			totalMB := pr.total / (1024 * 1024)
+			pct := pr.read * 100 / pr.total
+			log.Printf("Image load %s: %d/%d MB (%d%%)", pr.label, readMB, totalMB, pct)
+		} else {
+			log.Printf("Image load %s: %d MB transferred", pr.label, readMB)
+		}
+	}
+
+	return n, err
 }
