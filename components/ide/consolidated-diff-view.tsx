@@ -97,7 +97,7 @@ function FileDiffSection({
 			{/* File header - always visible */}
 			<div
 				className={cn(
-					"flex items-center justify-between px-4 py-2 bg-muted/20",
+					"sticky top-0 z-10 flex items-center justify-between px-4 py-2 bg-muted/20 backdrop-blur-sm",
 					isReviewed && "opacity-60",
 				)}
 			>
