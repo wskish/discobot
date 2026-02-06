@@ -259,11 +259,6 @@ func (c *ChatService) reconcileSandbox(ctx context.Context, projectID, sessionID
 		return fmt.Errorf("failed to get session: %w", err)
 	}
 
-	// Check if session has an agent assigned
-	if session.AgentID == nil {
-		return fmt.Errorf("session %s does not have an agent assigned", sessionID)
-	}
-
 	// If job enqueuer is not available (e.g., in tests), fall back to direct initialization
 	if c.jobEnqueuer == nil {
 		log.Printf("Job enqueuer not available, falling back to direct initialization for session %s", sessionID)
@@ -273,8 +268,14 @@ func (c *ChatService) reconcileSandbox(ctx context.Context, projectID, sessionID
 		return nil
 	}
 
+	// Determine agent ID for job (use empty string if not assigned - Initialize will handle fallback)
+	agentID := ""
+	if session.AgentID != nil {
+		agentID = *session.AgentID
+	}
+
 	// Enqueue initialization job (ignore error if job already exists - we'll wait for it anyway)
-	err = c.jobEnqueuer.EnqueueSessionInit(ctx, projectID, sessionID, session.WorkspaceID, *session.AgentID)
+	err = c.jobEnqueuer.EnqueueSessionInit(ctx, projectID, sessionID, session.WorkspaceID, agentID)
 	if err != nil {
 		// Job might already exist from a concurrent request - that's fine, we'll wait for it
 		log.Printf("Note: session init job may already exist for %s: %v", sessionID, err)
