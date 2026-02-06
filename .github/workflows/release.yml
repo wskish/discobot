@@ -135,6 +135,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_TARGET_TRIPLE: ${{ matrix.target }}
           TAURI_BUNDLER_DMG_IGNORE_CI: false
+          DISCOBOT_VERSION: ${{ steps.version.outputs.version }}
           # macOS code signing
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}

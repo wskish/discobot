@@ -33,6 +33,7 @@ import (
 	"github.com/obot-platform/discobot/server/internal/service"
 	"github.com/obot-platform/discobot/server/internal/ssh"
 	"github.com/obot-platform/discobot/server/internal/store"
+	"github.com/obot-platform/discobot/server/internal/version"
 	"github.com/obot-platform/discobot/server/static"
 )
 
@@ -45,6 +46,9 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to load configuration: %v", err)
 	}
+
+	// Log version
+	log.Printf("Discobot Server version %s", version.Get())
 
 	// Connect to database
 	db, err := database.New(cfg)

@@ -9,6 +9,16 @@ const projectRoot = dirname(__dirname);
 const serverDir = join(projectRoot, "server");
 const binariesDir = join(projectRoot, "src-tauri", "binaries");
 
+// Get version from environment (CI) or default to "main" for dev builds
+// In CI, DISCOBOT_VERSION is set from the git tag (e.g., "0.1.0-12")
+let version = process.env.DISCOBOT_VERSION || "main";
+
+// Add 'v' prefix for Go binary (e.g., "0.1.0-12" → "v0.1.0-12")
+// Keep "main" as-is for dev builds
+if (version !== "main" && !version.startsWith("v")) {
+	version = `v${version}`;
+}
+
 // Create binaries directory
 mkdirSync(binariesDir, { recursive: true });
 
@@ -41,11 +51,13 @@ const ext = targetTriple.includes("windows") ? ".exe" : "";
 const outputName = `discobot-server-${targetTriple}${ext}`;
 const outputPath = join(binariesDir, outputName);
 
-console.log(`Building discobot-server for ${targetTriple}...`);
+console.log(`Building discobot-server ${version} for ${targetTriple}...`);
 
-execSync(`go build -o "${outputPath}" ./cmd/server`, {
+// Build with version injected via ldflags
+const ldflags = `-X github.com/obot-platform/discobot/server/internal/version.Version=${version}`;
+execSync(`go build -ldflags "${ldflags}" -o "${outputPath}" ./cmd/server`, {
 	cwd: serverDir,
 	stdio: "inherit",
 });
 
-console.log(`Built: ${outputPath}`);
+console.log(`Built: ${outputPath} (version: ${version})`);
