@@ -72,6 +72,7 @@ export function SessionView({
 		rightSidebarOpen,
 		refreshDiffData,
 		registerChatResumeStream,
+		handleFileSelect,
 	} = useSessionViewContext();
 
 	// Track if this session started as new - if so, we skip the loading screen
@@ -284,6 +285,9 @@ export function SessionView({
 											onResize={handleRightSidebarResize}
 										/>
 										<FilePanel
+											sessionId={selectedSessionId}
+											activeView={activeView}
+											onFileSelect={handleFileSelect}
 											className="overflow-hidden"
 											style={{ width: rightSidebarWidth }}
 										/>
