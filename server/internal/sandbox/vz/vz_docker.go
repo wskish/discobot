@@ -28,8 +28,8 @@ type DockerProvider struct {
 
 	// vmManager manages project-level VMs (abstraction)
 	// May be nil during async initialization
-	vmManager   vm.ProjectVMManager
-	downloadMu  sync.RWMutex
+	vmManager  vm.ProjectVMManager
+	downloadMu sync.RWMutex
 
 	// imageDownloader handles async download of VZ images from registry
 	imageDownloader *ImageDownloader

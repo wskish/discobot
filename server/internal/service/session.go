@@ -968,6 +968,11 @@ func (s *SessionService) reconcileSandbox(ctx context.Context, projectID, sessio
 		return fmt.Errorf("failed to get session: %w", err)
 	}
 
+	// Check if session has an agent assigned
+	if session.AgentID == nil {
+		return fmt.Errorf("session %s does not have an agent assigned", sessionID)
+	}
+
 	// If job enqueuer is not available (e.g., in tests), fall back to direct initialization
 	if s.jobEnqueuer == nil {
 		log.Printf("Job enqueuer not available, falling back to direct initialization for session %s", sessionID)

@@ -49,7 +49,7 @@ func TestSessionInitialize_NilAgentFallsBackToDefault(t *testing.T) {
 
 	// Initialize session
 	gitSvc := service.NewGitService(ts.Store, ts.GitProvider)
-	sessionSvc := service.NewSessionService(ts.Store, gitSvc, nil, ts.MockSandbox, nil)
+	sessionSvc := service.NewSessionService(ts.Store, gitSvc, nil, ts.MockSandbox, nil, nil)
 
 	if err := sessionSvc.Initialize(ctx, session.ID); err != nil {
 		t.Fatalf("Initialize failed: %v", err)
@@ -122,7 +122,7 @@ func TestSessionInitialize_DeletedAgentFallsBackToDefault(t *testing.T) {
 
 	// Initialize session
 	gitSvc := service.NewGitService(ts.Store, ts.GitProvider)
-	sessionSvc := service.NewSessionService(ts.Store, gitSvc, nil, ts.MockSandbox, nil)
+	sessionSvc := service.NewSessionService(ts.Store, gitSvc, nil, ts.MockSandbox, nil, nil)
 
 	if err := sessionSvc.Initialize(ctx, session.ID); err != nil {
 		t.Fatalf("Initialize failed: %v", err)
@@ -181,7 +181,7 @@ func TestSessionInitialize_ValidAgentNoFallback(t *testing.T) {
 
 	// Initialize session
 	gitSvc := service.NewGitService(ts.Store, ts.GitProvider)
-	sessionSvc := service.NewSessionService(ts.Store, gitSvc, nil, ts.MockSandbox, nil)
+	sessionSvc := service.NewSessionService(ts.Store, gitSvc, nil, ts.MockSandbox, nil, nil)
 
 	if err := sessionSvc.Initialize(ctx, session.ID); err != nil {
 		t.Fatalf("Initialize failed: %v", err)
@@ -238,7 +238,7 @@ func TestSessionInitialize_NoDefaultAgentError(t *testing.T) {
 
 	// Initialize session (should fail)
 	gitSvc := service.NewGitService(ts.Store, ts.GitProvider)
-	sessionSvc := service.NewSessionService(ts.Store, gitSvc, nil, ts.MockSandbox, nil)
+	sessionSvc := service.NewSessionService(ts.Store, gitSvc, nil, ts.MockSandbox, nil, nil)
 
 	err := sessionSvc.Initialize(ctx, session.ID)
 	if err == nil {
@@ -303,7 +303,7 @@ func TestSessionInitialize_DeletedAgentNoDefaultError(t *testing.T) {
 
 	// Initialize session (should fail)
 	gitSvc := service.NewGitService(ts.Store, ts.GitProvider)
-	sessionSvc := service.NewSessionService(ts.Store, gitSvc, nil, ts.MockSandbox, nil)
+	sessionSvc := service.NewSessionService(ts.Store, gitSvc, nil, ts.MockSandbox, nil, nil)
 
 	err := sessionSvc.Initialize(ctx, session.ID)
 	if err == nil {

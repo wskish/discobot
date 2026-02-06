@@ -36,9 +36,9 @@ type vzProjectVM struct {
 	projectID    string
 	vm           *vz.VirtualMachine
 	socketDevice *vz.VirtioSocketDevice
-	diskPath     string     // Root disk (read-only)
-	dataDiskPath string     // Data disk (writable)
-	consoleLog   *os.File   // Console log file
+	diskPath     string   // Root disk (read-only)
+	dataDiskPath string   // Data disk (writable)
+	consoleLog   *os.File // Console log file
 
 	// Session reference counting
 	sessions   map[string]bool
