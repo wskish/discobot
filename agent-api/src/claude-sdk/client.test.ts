@@ -407,14 +407,11 @@ describe("ClaudeSDKClient session restoration after restart", () => {
 		if (existsSync(testMessagesFile)) {
 			rmSync(testMessagesFile);
 		}
-		// Remove Claude session file if exists
-		const claudeSessionFile = join(
-			CLAUDE_PROJECTS_DIR,
-			ENCODED_CWD,
-			`${CLAUDE_SESSION_ID}.jsonl`,
-		);
-		if (existsSync(claudeSessionFile)) {
-			rmSync(claudeSessionFile);
+		// Remove all Claude session files in the test directory
+		const claudeSessionDir = join(CLAUDE_PROJECTS_DIR, ENCODED_CWD);
+		if (existsSync(claudeSessionDir)) {
+			rmSync(claudeSessionDir, { recursive: true, force: true });
+			mkdirSync(claudeSessionDir, { recursive: true });
 		}
 	});
 
@@ -839,6 +836,150 @@ describe("ClaudeSDKClient session restoration after restart", () => {
 			toolPart.errorText,
 			"Permission denied",
 			"Tool error text should be set",
+		);
+	});
+
+	it("uses existing Claude session when default session requested and only one session exists", async () => {
+		// Scenario: session.json mapping file is lost, but a Claude CLI session exists
+		const EXISTING_CLAUDE_SESSION_ID = "existing-session-abc-123";
+
+		// Step 1: Create a Claude session file (simulating an existing Claude CLI session)
+		await createClaudeSessionFile(EXISTING_CLAUDE_SESSION_ID, [
+			{
+				type: "user",
+				uuid: "user-msg-1",
+				message: {
+					role: "user",
+					content: "Hello from existing session",
+				},
+			},
+			{
+				type: "assistant",
+				uuid: "asst-msg-1",
+				message: {
+					id: "asst-msg-1",
+					role: "assistant",
+					content: [{ type: "text", text: "Response from existing session" }],
+				},
+			},
+		]);
+
+		// Step 2: DO NOT create a session mapping (simulating lost session.json)
+		// This means no mapping exists for the "default" session
+
+		// Step 3: Create a new client
+		const client = new ClaudeSDKClient({
+			cwd: TEST_CWD,
+		});
+
+		// Step 4: Call ensureSession with no arguments (uses "default")
+		// This should discover the existing Claude session and use it
+		const sessionId = await client.ensureSession();
+
+		// Step 5: Verify it used the existing Claude session ID
+		assert.strictEqual(
+			sessionId,
+			EXISTING_CLAUDE_SESSION_ID,
+			"Should use the existing Claude session ID",
+		);
+
+		// Step 6: Get the session and verify messages are loaded
+		const session = client.getSession(sessionId);
+		assert.ok(session, "Session should exist after ensureSession");
+
+		const messages = session.getMessages();
+		assert.strictEqual(
+			messages.length,
+			2,
+			"Should have loaded messages from existing Claude session",
+		);
+
+		// Verify user message content
+		const userMsg = messages.find((m) => m.role === "user");
+		assert.ok(userMsg, "User message should be present");
+		const userTextPart = userMsg.parts.find((p) => p.type === "text");
+		assert.strictEqual(
+			userTextPart?.type === "text" ? userTextPart.text : undefined,
+			"Hello from existing session",
+			"User message text should match",
+		);
+
+		// Verify assistant message content
+		const asstMsg = messages.find((m) => m.role === "assistant");
+		assert.ok(asstMsg, "Assistant message should be present");
+		const asstTextPart = asstMsg.parts.find((p) => p.type === "text");
+		assert.strictEqual(
+			asstTextPart?.type === "text" ? asstTextPart.text : undefined,
+			"Response from existing session",
+			"Assistant message text should match",
+		);
+	});
+
+	it("creates new session when default requested and no Claude sessions exist", async () => {
+		// No Claude session files exist
+
+		const client = new ClaudeSDKClient({
+			cwd: TEST_CWD,
+		});
+
+		// Should create a new "default" session
+		const sessionId = await client.ensureSession();
+
+		assert.strictEqual(
+			sessionId,
+			"default",
+			"Should create default session when no sessions exist",
+		);
+
+		const session = client.getSession(sessionId);
+		assert.ok(session, "Default session should exist");
+
+		const messages = session.getMessages();
+		assert.strictEqual(
+			messages.length,
+			0,
+			"New session should have no messages",
+		);
+	});
+
+	it("creates new session when default requested and multiple Claude sessions exist", async () => {
+		// Create multiple Claude session files
+		await createClaudeSessionFile("session-1", [
+			{
+				type: "user",
+				uuid: "user-1",
+				message: { role: "user", content: "Session 1" },
+			},
+		]);
+		await createClaudeSessionFile("session-2", [
+			{
+				type: "user",
+				uuid: "user-2",
+				message: { role: "user", content: "Session 2" },
+			},
+		]);
+
+		const client = new ClaudeSDKClient({
+			cwd: TEST_CWD,
+		});
+
+		// Should create a new "default" session (not use any of the existing ones)
+		const sessionId = await client.ensureSession();
+
+		assert.strictEqual(
+			sessionId,
+			"default",
+			"Should create default session when multiple sessions exist",
+		);
+
+		const session = client.getSession(sessionId);
+		assert.ok(session, "Default session should exist");
+
+		const messages = session.getMessages();
+		assert.strictEqual(
+			messages.length,
+			0,
+			"New default session should have no messages",
 		);
 	});
 });

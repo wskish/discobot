@@ -137,6 +137,44 @@ export class ClaudeSDKClient implements Agent {
 		let ctx = this.sessions.get(sid);
 
 		if (!ctx) {
+			// If looking up the default session and it doesn't exist,
+			// check if there's exactly one Claude CLI session available and use it
+			if (sid === this.DEFAULT_SESSION_ID) {
+				const availableSessions = await this.discoverAvailableSessions();
+				if (availableSessions.length === 1) {
+					const existingSessionId = availableSessions[0].sessionId;
+					console.log(
+						`[SDK] Default session not found, using existing Claude session: ${existingSessionId}`,
+					);
+
+					// Create a DiskBackedSession using the discovered Claude session ID
+					// Since this is a Claude CLI session, the sessionId and claudeSessionId are the same
+					const session = new DiskBackedSession(
+						existingSessionId,
+						this.options.cwd,
+					);
+
+					ctx = {
+						sessionId: existingSessionId,
+						claudeSessionId: existingSessionId, // Same as sessionId for discovered sessions
+						session,
+						translationState: null,
+					};
+					this.sessions.set(existingSessionId, ctx);
+
+					// Load messages from the Claude CLI session file
+					if (session instanceof DiskBackedSession) {
+						await session.load(existingSessionId);
+						console.log(
+							`[SDK] Loaded messages from Claude session: ${existingSessionId}`,
+						);
+					}
+
+					this.currentSessionId = existingSessionId;
+					return existingSessionId;
+				}
+			}
+
 			// Create DiskBackedSession - don't call load() here since the discobot session ID
 			// won't match the Claude CLI's session ID. loadSessionFromDisk will handle loading
 			// messages using the correct claudeSessionId mapping.
