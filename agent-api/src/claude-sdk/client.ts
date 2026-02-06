@@ -4,7 +4,7 @@ import {
 	query,
 	type SDKMessage,
 } from "@anthropic-ai/claude-agent-sdk";
-import type { TextUIPart, UIMessage, UIMessageChunk } from "ai";
+import type { UIMessage, UIMessageChunk } from "ai";
 import type { Agent, EnvironmentUpdate } from "../agent/interface.js";
 import type { Session } from "../agent/session.js";
 import {
@@ -13,6 +13,7 @@ import {
 	type SessionData as StoreSessionData,
 	saveSession,
 } from "../store/session.js";
+import { messageToContentBlocks } from "./content-blocks.js";
 import { DiskBackedSession } from "./disk-backed-session.js";
 import {
 	type ClaudeSessionInfo,
@@ -254,8 +255,9 @@ export class ClaudeSDKClient implements Agent {
 		// Initialize translation state for this prompt (will be set properly on message_start)
 		ctx.translationState = null;
 
-		// Extract text from message
-		const promptText = this.messageToPrompt(message);
+		// Convert message parts to Claude SDK content blocks format
+		// This includes text and image attachments
+		const contentBlocks = messageToContentBlocks(message);
 
 		// Create abort controller for this prompt
 		this.activeAbortController = new AbortController();
@@ -294,8 +296,22 @@ export class ClaudeSDKClient implements Agent {
 			// rather than PostToolUse hooks to maintain proper event ordering
 		};
 
+		// Create async generator for the prompt with content blocks
+		// This format supports both text and image attachments
+		const promptGenerator = (async function* () {
+			yield {
+				type: "user" as const,
+				message: {
+					role: "user" as const,
+					content: contentBlocks,
+				},
+				parent_tool_use_id: null,
+				session_id: ctx.claudeSessionId || "",
+			};
+		})();
+
 		// Start query and yield chunks
-		const q = query({ prompt: promptText, options: sdkOptions });
+		const q = query({ prompt: promptGenerator, options: sdkOptions });
 
 		try {
 			for await (const sdkMsg of q) {
@@ -402,14 +418,6 @@ export class ClaudeSDKClient implements Agent {
 
 	getEnvironment(): Record<string, string> {
 		return { ...this.env };
-	}
-
-	// Private helper methods
-	private messageToPrompt(message: UIMessage): string {
-		const textParts = message.parts
-			.filter((p): p is TextUIPart => p.type === "text")
-			.map((p) => p.text);
-		return textParts.join("\n");
 	}
 
 	/**
