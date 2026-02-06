@@ -259,6 +259,14 @@ func mountAgentFSAtPath(sessionID, mountPath string, u *userInfo) error {
 }
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "proxy" {
+		if err := runProxy(); err != nil {
+			fmt.Fprintf(os.Stderr, "discobot-agent-proxy: %v\n", err)
+			os.Exit(1)
+		}
+		return
+	}
+
 	if err := run(); err != nil {
 		fmt.Fprintf(os.Stderr, "discobot-agent: %v\n", err)
 		// Sleep forever to allow debugging via docker exec
