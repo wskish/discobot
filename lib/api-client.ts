@@ -15,6 +15,7 @@ export class FileConflictError extends Error {
 import type {
 	Agent,
 	AuthProvider,
+	CancelChatResponse,
 	ChatMessage,
 	CodexAuthorizeResponse,
 	CodexExchangeRequest,
@@ -294,6 +295,16 @@ class ApiClient {
 	 */
 	getChatStreamUrl(sessionId: string): string {
 		return appendAuthToken(`${this.base}/chat/${sessionId}/stream`);
+	}
+
+	/**
+	 * Cancel an in-progress chat completion.
+	 * @param sessionId Session ID
+	 */
+	async cancelChat(sessionId: string): Promise<CancelChatResponse> {
+		return this.fetch(`/chat/${sessionId}/cancel`, {
+			method: "POST",
+		});
 	}
 
 	// Agents

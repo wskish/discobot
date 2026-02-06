@@ -105,6 +105,7 @@ export class ClaudeSDKClient implements Agent {
 	private env: Record<string, string>;
 	private claudeCliPath: string | null = null;
 	private connected = false;
+	private activeAbortController: AbortController | null = null;
 
 	constructor(private options: ClaudeSDKClientOptions) {
 		console.log("ClaudeSDKClient constructor", options);
@@ -256,7 +257,13 @@ export class ClaudeSDKClient implements Agent {
 		// Extract text from message
 		const promptText = this.messageToPrompt(message);
 
+		// Create abort controller for this prompt
+		this.activeAbortController = new AbortController();
+		const signal = this.activeAbortController.signal;
+
 		// Configure SDK options
+		// Note: The SDK doesn't support abort signals directly, so we handle cancellation
+		// by checking the signal during iteration and breaking out of the loop
 		const sdkOptions: Options = {
 			cwd: this.options.cwd,
 			model: this.options.model,
@@ -292,12 +299,19 @@ export class ClaudeSDKClient implements Agent {
 
 		try {
 			for await (const sdkMsg of q) {
+				// Check for cancellation
+				if (signal.aborted) {
+					console.log("[SDK] Prompt cancelled, stopping iteration");
+					return; // Stop iteration cleanly
+				}
+
 				const chunks = this.translateSDKMessage(ctx, sdkMsg);
 				for (const chunk of chunks) {
 					yield chunk;
 				}
 			}
 		} finally {
+			this.activeAbortController = null;
 			// Reload messages from disk after prompt completes
 			// This ensures getMessages() returns the updated conversation
 			if (ctx.session instanceof DiskBackedSession && ctx.claudeSessionId) {
@@ -307,8 +321,11 @@ export class ClaudeSDKClient implements Agent {
 	}
 
 	async cancel(_sessionId?: string): Promise<void> {
-		// SDK query is async generator, cancellation happens when we stop iterating
-		// For now, we don't have active queries to cancel
+		if (this.activeAbortController) {
+			console.log("[SDK] Cancelling active prompt");
+			this.activeAbortController.abort();
+			this.activeAbortController = null;
+		}
 	}
 
 	async clearSession(sessionId?: string): Promise<void> {

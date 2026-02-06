@@ -30,6 +30,8 @@ interface PromptInputWithHistoryProps {
 	isNewSession?: boolean;
 	/** Submit handler */
 	onSubmit: (message: PromptInputMessage, e: React.FormEvent) => void;
+	/** Stop handler (called when stop button is clicked during streaming) */
+	onStop?: () => void;
 	/** Input status */
 	status: "ready" | "streaming" | "submitted" | "error";
 	/** Whether input is locked */
@@ -84,6 +86,7 @@ export const PromptInputWithHistory = React.memo(
 				sessionId,
 				isNewSession = false,
 				onSubmit,
+				onStop,
 				status,
 				isLocked = false,
 				placeholder,
@@ -176,6 +179,7 @@ export const PromptInputWithHistory = React.memo(
 								{queueButton}
 								<PromptInputSubmit
 									status={status}
+									onStop={onStop}
 									disabled={isLocked || submitDisabled}
 								/>
 							</div>

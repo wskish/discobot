@@ -11,6 +11,7 @@ import {
 	QueuePanel,
 } from "@/components/ide/chat-plan-queue";
 import { PromptInputWithHistory } from "@/components/ide/prompt-input-with-history";
+import { api } from "@/lib/api-client";
 import { getApiBase } from "@/lib/api-config";
 import {
 	CommitStatus,
@@ -114,6 +115,9 @@ export function ChatPanel({
 	// Ref for textarea to enable focusing
 	const textareaRef = React.useRef<HTMLTextAreaElement>(null);
 
+	// Ref for abort controller to cancel ongoing chat requests
+	const abortControllerRef = React.useRef<AbortController | null>(null);
+
 	// Focus textarea when showing new session screen
 	React.useEffect(() => {
 		if (!resume && textareaRef.current) {
@@ -165,6 +169,10 @@ export function ChatPanel({
 				fetch: (async (url, options) => {
 					const { resume, workspaceId, agentId } = selectionRef.current;
 
+					// Create abort controller for this request
+					const controller = new AbortController();
+					abortControllerRef.current = controller;
+
 					// Only modify body for new sessions
 					if (!resume && options?.body) {
 						const body = JSON.parse(options.body as string);
@@ -174,6 +182,7 @@ export function ChatPanel({
 						const response = await fetch(url, {
 							...options,
 							body: JSON.stringify(body),
+							signal: controller.signal,
 						});
 
 						// If we got a 200 response, the server has acknowledged the session
@@ -187,7 +196,7 @@ export function ChatPanel({
 						return response;
 					}
 
-					return fetch(url, options);
+					return fetch(url, { ...options, signal: controller.signal });
 				}) as typeof fetch,
 			}),
 		[onSessionCreated, sessionId],
@@ -198,6 +207,20 @@ export function ChatPanel({
 	const handleChatError = React.useCallback((error: Error) => {
 		console.error("Chat stream error:", error);
 	}, []);
+
+	// Handle stop button click - cancel ongoing chat request
+	const handleStop = React.useCallback(async () => {
+		// Abort the SSE fetch request
+		abortControllerRef.current?.abort();
+		abortControllerRef.current = null;
+
+		// Call backend cancel endpoint to stop sandbox execution
+		try {
+			await api.cancelChat(sessionId);
+		} catch (err) {
+			console.error("Failed to cancel chat:", err);
+		}
+	}, [sessionId]);
 
 	const {
 		messages,
@@ -408,6 +431,7 @@ export function ChatPanel({
 						sessionId={sessionId}
 						isNewSession={!resume}
 						onSubmit={handleSubmit}
+						onStop={chatStatus === "streaming" ? handleStop : undefined}
 						status={chatStatus}
 						isLocked={
 							session?.commitStatus === CommitStatus.PENDING ||

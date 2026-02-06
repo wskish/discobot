@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -255,6 +256,43 @@ func writeSSEError(w http.ResponseWriter, errorText string) {
 		return
 	}
 	_, _ = fmt.Fprintf(w, "data: %s\n\n", jsonData)
+}
+
+// ChatCancel handles cancelling an in-progress chat completion.
+// POST /api/projects/{projectId}/chat/{sessionId}/cancel
+func (h *Handler) ChatCancel(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	projectID := middleware.GetProjectID(ctx)
+	sessionID := r.PathValue("sessionId")
+
+	if sessionID == "" {
+		h.Error(w, http.StatusBadRequest, "sessionId is required")
+		return
+	}
+
+	// Validate session belongs to this project
+	existingSession, err := h.chatService.GetSessionByID(ctx, sessionID)
+	if err != nil {
+		h.Error(w, http.StatusNotFound, "session not found")
+		return
+	}
+	if existingSession.ProjectID != projectID {
+		h.Error(w, http.StatusForbidden, "session does not belong to this project")
+		return
+	}
+
+	// Cancel the completion
+	result, err := h.chatService.CancelCompletion(ctx, projectID, sessionID)
+	if err != nil {
+		if errors.Is(err, service.ErrNoActiveCompletion) {
+			h.Error(w, http.StatusConflict, "no active completion to cancel")
+			return
+		}
+		h.Error(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	h.JSON(w, http.StatusOK, result)
 }
 
 // writeSSEErrorAndDone sends an error SSE event followed by the [DONE] signal.

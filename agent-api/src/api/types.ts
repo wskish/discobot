@@ -10,6 +10,7 @@
  *   GET  /health      - Detailed health status
  *   GET  /chat        - Get all messages
  *   POST /chat        - Start completion (returns 202 Accepted, runs in background)
+ *   POST /chat/cancel - Cancel in-progress completion
  *   GET  /chat/status - Get completion status
  *   DELETE /chat      - Clear session and messages
  */
@@ -86,6 +87,24 @@ export interface ChatStartedResponse {
 export interface ChatConflictResponse {
 	error: "completion_in_progress";
 	completionId: string;
+}
+
+/**
+ * POST /chat/cancel response (200 OK)
+ * Returned when cancellation is successful.
+ */
+export interface CancelCompletionResponse {
+	success: true;
+	completionId: string;
+	status: "cancelled";
+}
+
+/**
+ * POST /chat/cancel response (409 Conflict)
+ * Returned when no completion is active to cancel.
+ */
+export interface NoActiveCompletionResponse {
+	error: "no_active_completion";
 }
 
 /**

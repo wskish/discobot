@@ -443,6 +443,54 @@ func (c *SandboxChatClient) GetChatStatus(ctx context.Context, sessionID string)
 	return &status, nil
 }
 
+// CancelCompletion cancels an in-progress completion in the sandbox.
+// Returns ErrNoActiveCompletion if no completion is active (409 status).
+// Retries with exponential backoff on connection errors.
+func (c *SandboxChatClient) CancelCompletion(ctx context.Context, sessionID string) (*CancelCompletionResponse, error) {
+	resp, err := retryWithBackoff(ctx, func() (*http.Response, int, error) {
+		client, err := c.getHTTPClient(ctx, sessionID)
+		if err != nil {
+			return nil, 0, err
+		}
+
+		req, err := http.NewRequestWithContext(ctx, "POST", "http://sandbox/chat/cancel", nil)
+		if err != nil {
+			return nil, 0, fmt.Errorf("failed to create request: %w", err)
+		}
+
+		if err := c.applyRequestAuth(ctx, req, sessionID, nil); err != nil {
+			return nil, 0, err
+		}
+
+		resp, err := client.Do(req)
+		if err != nil {
+			return nil, 0, err
+		}
+
+		return resp, resp.StatusCode, nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to cancel completion: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode == http.StatusConflict {
+		return nil, ErrNoActiveCompletion
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("sandbox returned status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var result CancelCompletionResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	return &result, nil
+}
+
 // ============================================================================
 // File System Methods
 // ============================================================================

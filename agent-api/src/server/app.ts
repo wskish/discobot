@@ -49,7 +49,7 @@ import {
 	isCompletionRunning,
 } from "../store/session.js";
 import { getCommitPatches, isCommitsError } from "./commits.js";
-import { tryStartCompletion } from "./completion.js";
+import { tryCancelCompletion, tryStartCompletion } from "./completion.js";
 import {
 	getDiff,
 	isFileError,
@@ -220,6 +220,12 @@ export function createApp(options: AppOptions) {
 	// GET /chat/status - Get completion status
 	app.get("/chat/status", (c) => {
 		return c.json<ChatStatusResponse>(getCompletionState());
+	});
+
+	// POST /chat/cancel - Cancel in-progress completion
+	app.post("/chat/cancel", (c) => {
+		const result = tryCancelCompletion();
+		return c.json(result.response, result.status);
 	});
 
 	// DELETE /chat - Clear default session and messages
