@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
-import useSWR from "swr";
+import useSWR, { mutate } from "swr";
 import { api } from "../api-client";
 import type {
 	FileStatus,
@@ -8,6 +8,43 @@ import type {
 	SessionFileEntry,
 	SessionSingleFileDiffResponse,
 } from "../api-types";
+
+/**
+ * Invalidate session files caches, triggering refetches.
+ * Use this when a session is created or files are updated externally.
+ */
+export function invalidateSessionFiles(sessionId: string) {
+	// Invalidate root files cache
+	mutate(`session-files-${sessionId}-root`);
+	// Invalidate diff cache
+	mutate(`session-diff-${sessionId}-files`);
+	// Invalidate all individual file diffs
+	mutate(
+		(key: string) =>
+			typeof key === "string" && key.startsWith(`session-diff-${sessionId}-`),
+	);
+	// Invalidate all individual file contents
+	mutate(
+		(key: string) =>
+			typeof key === "string" && key.startsWith(`session-file-${sessionId}-`),
+	);
+}
+
+/**
+ * Helper to prevent SWR from retrying on 404 errors.
+ * When a session or file doesn't exist, we don't want to keep retrying.
+ * Exported for testing.
+ */
+export function shouldRetryOnError(error: unknown): boolean {
+	// Don't retry on 404 - resource doesn't exist
+	const status =
+		(error as { status?: number })?.status ||
+		(error as { response?: { status?: number } })?.response?.status;
+	if (status === 404) {
+		return false;
+	}
+	return true;
+}
 
 /**
  * File node for the lazy-loading tree view.
@@ -59,9 +96,14 @@ export function useSessionFiles(sessionId: string | null, loadAllFiles = true) {
 	const [loadingPaths, setLoadingPaths] = useState<Set<string>>(new Set());
 
 	// Load root directory listing - only when loadAllFiles is true
-	const { data: rootData, isLoading: isLoadingRoot } = useSWR(
+	const {
+		data: rootData,
+		isLoading: isLoadingRoot,
+		error: rootError,
+	} = useSWR(
 		sessionId && loadAllFiles ? `session-files-${sessionId}-root` : null,
 		() => (sessionId ? api.listSessionFiles(sessionId, ".") : null),
+		{ shouldRetryOnError },
 	);
 
 	// Load diff status (files that have changed) - always load
@@ -69,11 +111,25 @@ export function useSessionFiles(sessionId: string | null, loadAllFiles = true) {
 		data: diffData,
 		isLoading: isLoadingDiff,
 		mutate: mutateDiff,
-	} = useSWR(sessionId ? `session-diff-${sessionId}-files` : null, async () => {
-		if (!sessionId) return null;
-		const result = await api.getSessionDiff(sessionId, { format: "files" });
-		return result as SessionDiffFilesResponse;
-	});
+		error: diffError,
+	} = useSWR(
+		sessionId ? `session-diff-${sessionId}-files` : null,
+		async () => {
+			if (!sessionId) return null;
+			const result = await api.getSessionDiff(sessionId, { format: "files" });
+			return result as SessionDiffFilesResponse;
+		},
+		{ shouldRetryOnError },
+	);
+
+	// Check if we have a 404 error (session doesn't exist)
+	const sessionNotFound = useMemo(() => {
+		const isRootError404 =
+			rootError?.status === 404 || rootError?.response?.status === 404;
+		const isDiffError404 =
+			diffError?.status === 404 || diffError?.response?.status === 404;
+		return isRootError404 || isDiffError404;
+	}, [rootError, diffError]);
 
 	// Build a map of file path to status for quick lookup
 	const diffEntriesMap = useMemo(() => {
@@ -124,7 +180,7 @@ export function useSessionFiles(sessionId: string | null, loadAllFiles = true) {
 	// Auto-expands single-child directory chains recursively
 	const expandDirectory = useCallback(
 		async (path: string) => {
-			if (!sessionId) return;
+			if (!sessionId || sessionNotFound) return;
 
 			// Add to expanded set
 			setExpandedPaths((prev) => new Set(prev).add(path));
@@ -212,7 +268,14 @@ export function useSessionFiles(sessionId: string | null, loadAllFiles = true) {
 				});
 			}
 		},
-		[sessionId, loadingPaths, diffEntriesMap, fileTree, findNodeInTree],
+		[
+			sessionId,
+			sessionNotFound,
+			loadingPaths,
+			diffEntriesMap,
+			fileTree,
+			findNodeInTree,
+		],
 	);
 
 	// Collapse a directory
@@ -245,7 +308,7 @@ export function useSessionFiles(sessionId: string | null, loadAllFiles = true) {
 
 	// Expand all directories in the current tree, recursively loading unloaded directories
 	const expandAll = useCallback(async () => {
-		if (!sessionId) return;
+		if (!sessionId || sessionNotFound) return;
 
 		// Capture sessionId as a non-null value for TypeScript
 		const currentSessionId = sessionId;
@@ -319,7 +382,14 @@ export function useSessionFiles(sessionId: string | null, loadAllFiles = true) {
 
 		// Set all collected paths as expanded
 		setExpandedPaths(pathsToExpand);
-	}, [sessionId, fileTree, childrenCache, loadingPaths, diffEntriesMap]);
+	}, [
+		sessionId,
+		sessionNotFound,
+		fileTree,
+		childrenCache,
+		loadingPaths,
+		diffEntriesMap,
+	]);
 
 	// Collapse all directories
 	const collapseAll = useCallback(() => {
@@ -354,6 +424,8 @@ export function useSessionFiles(sessionId: string | null, loadAllFiles = true) {
 		collapseAll,
 		isPathLoading,
 		refresh,
+		/** True if the session was not found (404 error) */
+		sessionNotFound,
 	};
 }
 
@@ -371,6 +443,7 @@ export function useSessionFileDiff(
 			const result = await api.getSessionDiff(sessionId, { path });
 			return result as SessionSingleFileDiffResponse;
 		},
+		{ shouldRetryOnError },
 	);
 
 	return {
@@ -391,6 +464,7 @@ export function useSessionFileContent(
 	const { data, error, isLoading, mutate } = useSWR(
 		sessionId && path ? `session-file-${sessionId}-${path}` : null,
 		() => (sessionId && path ? api.readSessionFile(sessionId, path) : null),
+		{ shouldRetryOnError },
 	);
 
 	return {

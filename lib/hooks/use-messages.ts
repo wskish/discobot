@@ -1,9 +1,17 @@
 import type { UIMessage } from "ai";
-import useSWR from "swr";
+import useSWR, { mutate } from "swr";
 import { api } from "../api-client";
 
 // Stable empty array to avoid creating new references on every render
 const EMPTY_MESSAGES: UIMessage[] = [];
+
+/**
+ * Invalidate messages cache for a session, triggering a refetch.
+ * Use this when a session is created or messages are updated externally.
+ */
+export function invalidateMessages(sessionId: string) {
+	mutate(`messages-${sessionId}`);
+}
 
 /**
  * Deduplicates messages by ID and logs a warning if duplicates are found.

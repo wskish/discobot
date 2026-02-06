@@ -1,11 +1,13 @@
 import { generateId } from "ai";
 import * as React from "react";
 import type { Session } from "@/lib/api-types";
+import { invalidateMessages } from "@/lib/hooks/use-messages";
 import {
 	STORAGE_KEYS,
 	usePersistedState,
 } from "@/lib/hooks/use-persisted-state";
-import { useSession } from "@/lib/hooks/use-sessions";
+import { invalidateSessionFiles } from "@/lib/hooks/use-session-files";
+import { invalidateSession, useSession } from "@/lib/hooks/use-sessions";
 import { useWorkspaces } from "@/lib/hooks/use-workspaces";
 
 export type MainContentView =
@@ -159,7 +161,16 @@ export function MainContentProvider({ children }: MainContentProviderProps) {
 
 	const sessionCreated = React.useCallback(
 		(sessionId: string, _workspaceId: string, _agentId: string) => {
-			// Only update if we're currently in new-session view and the session ID matches
+			// Invalidate SWR caches to trigger refetch of session data
+			// This must happen regardless of view state because the session was created
+			// on the backend and any hooks watching this session should refetch
+			// This is crucial because hooks may have gotten 404 errors before
+			// the session was created and stopped retrying
+			invalidateSession(sessionId);
+			invalidateMessages(sessionId);
+			invalidateSessionFiles(sessionId);
+
+			// Only update view if we're currently in new-session view and the session ID matches
 			if (view.type === "new-session" && view.sessionId === sessionId) {
 				setView((prev) => {
 					// ensure we aren't dealing with a stale callback. this happens when the user

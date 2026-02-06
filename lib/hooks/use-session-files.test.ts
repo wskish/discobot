@@ -6,6 +6,7 @@ import {
 	hasChangedDescendant,
 	type LazyFileNode,
 	shouldAutoExpand,
+	shouldRetryOnError,
 } from "./use-session-files";
 
 describe("shouldAutoExpand", () => {
@@ -882,5 +883,90 @@ describe("expandAll recursion pattern", () => {
 		assert.strictEqual(srcNodes.length, 1);
 		assert.strictEqual(srcNodes[0].name, "deleted.txt");
 		assert.strictEqual(srcNodes[0].status, "deleted");
+	});
+});
+
+describe("shouldRetryOnError - 404 handling", () => {
+	it("should return false for errors with status 404", () => {
+		const error = { status: 404 };
+		const result = shouldRetryOnError(error);
+		assert.strictEqual(result, false);
+	});
+
+	it("should return false for errors with response.status 404", () => {
+		const error = { response: { status: 404 } };
+		const result = shouldRetryOnError(error);
+		assert.strictEqual(result, false);
+	});
+
+	it("should return true for errors with status 500", () => {
+		const error = { status: 500 };
+		const result = shouldRetryOnError(error);
+		assert.strictEqual(result, true);
+	});
+
+	it("should return true for errors with status 429 (rate limit)", () => {
+		const error = { status: 429 };
+		const result = shouldRetryOnError(error);
+		assert.strictEqual(result, true);
+	});
+
+	it("should return true for errors with status 503 (service unavailable)", () => {
+		const error = { status: 503 };
+		const result = shouldRetryOnError(error);
+		assert.strictEqual(result, true);
+	});
+
+	it("should return true for network errors without status", () => {
+		const error = { message: "Network error" };
+		const result = shouldRetryOnError(error);
+		assert.strictEqual(result, true);
+	});
+
+	it("should return true for null/undefined errors", () => {
+		assert.strictEqual(shouldRetryOnError(null), true);
+		assert.strictEqual(shouldRetryOnError(undefined), true);
+	});
+
+	it("should return true for errors with response.status 401 (unauthorized)", () => {
+		const error = { response: { status: 401 } };
+		const result = shouldRetryOnError(error);
+		assert.strictEqual(result, true);
+	});
+
+	it("should return true for errors with response.status 403 (forbidden)", () => {
+		const error = { response: { status: 403 } };
+		const result = shouldRetryOnError(error);
+		assert.strictEqual(result, true);
+	});
+
+	it("should handle errors with both status and response.status (prefer direct status)", () => {
+		const error = { status: 404, response: { status: 500 } };
+		const result = shouldRetryOnError(error);
+		assert.strictEqual(result, false);
+	});
+
+	it("should handle errors with only response.status when direct status is missing", () => {
+		const error = { status: undefined, response: { status: 404 } };
+		const result = shouldRetryOnError(error);
+		assert.strictEqual(result, false);
+	});
+
+	it("should return true for empty object errors", () => {
+		const error = {};
+		const result = shouldRetryOnError(error);
+		assert.strictEqual(result, true);
+	});
+
+	it("should handle string errors", () => {
+		const error = "Something went wrong";
+		const result = shouldRetryOnError(error);
+		assert.strictEqual(result, true);
+	});
+
+	it("should handle Error instances", () => {
+		const error = new Error("Failed to fetch");
+		const result = shouldRetryOnError(error);
+		assert.strictEqual(result, true);
 	});
 });
