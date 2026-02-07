@@ -1305,6 +1305,18 @@ func main() {
 		})
 	})
 
+	// Start debug Docker proxy if enabled
+	var debugDockerServer *handler.DebugDockerServer
+	if cfg.DebugDocker {
+		var err error
+		debugDockerServer, err = handler.NewDebugDockerServer(sandboxManager, "local", cfg.DebugDockerPort)
+		if err != nil {
+			log.Printf("Warning: Failed to create debug Docker proxy: %v", err)
+		} else {
+			debugDockerServer.Start()
+		}
+	}
+
 	// Create server
 	// Note: No timeouts set - SSE endpoints need long-lived connections
 	srv := &http.Server{
@@ -1326,6 +1338,11 @@ func main() {
 	<-quit
 
 	log.Println("Shutting down server...")
+
+	// Stop debug Docker proxy
+	if debugDockerServer != nil {
+		debugDockerServer.Stop()
+	}
 
 	// Stop sandbox watcher
 	if sandboxWatcherCancel != nil {

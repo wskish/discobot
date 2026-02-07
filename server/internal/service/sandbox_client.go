@@ -82,8 +82,10 @@ func isRetryableError(err error) bool {
 	errStr := err.Error()
 	return strings.Contains(errStr, "connection refused") ||
 		strings.Contains(errStr, "connection reset") ||
+		strings.Contains(errStr, "Connection reset by peer") ||
 		strings.Contains(errStr, "no such host") ||
 		strings.Contains(errStr, "i/o timeout") ||
+		strings.Contains(errStr, "vsock connect") ||
 		strings.Contains(errStr, "EOF")
 }
 

@@ -83,6 +83,15 @@ type Provider interface {
 	Watch(ctx context.Context) (<-chan StateEvent, error)
 }
 
+// DockerProxyProvider is an optional interface that sandbox providers can implement
+// to expose the Docker daemon for debugging. This is used by the debug Docker proxy
+// to forward Docker API requests to the sandbox runtime (e.g., inside a VZ VM).
+type DockerProxyProvider interface {
+	// DockerTransport returns an http.RoundTripper that communicates with the Docker
+	// daemon for the given project. Returns an error if the project VM doesn't exist.
+	DockerTransport(projectID string) (http.RoundTripper, error)
+}
+
 // RemoveOption configures sandbox removal behavior.
 type RemoveOption func(*RemoveConfig)
 
