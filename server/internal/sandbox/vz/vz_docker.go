@@ -677,10 +677,11 @@ func (p *DockerProvider) getOrCreateDockerProvider(ctx context.Context, projectI
 
 	log.Printf("Creating Docker provider for project VM: %s", projectID)
 
-	// Create Docker provider with VSOCK transport
+	// Create Docker provider with VSOCK transport and session resolver for cache volumes
 	dockerProv, err := docker.NewProvider(
 		p.cfg,
 		docker.WithVsockDialer(pvm.DockerDialer()),
+		docker.WithSessionProjectResolver(p.sessionProjectResolver),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create Docker provider: %w", err)
