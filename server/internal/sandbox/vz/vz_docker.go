@@ -320,8 +320,6 @@ func (p *DockerProvider) HTTPClient(ctx context.Context, sessionID string) (*htt
 		return nil, err
 	}
 
-	log.Printf("HTTPClient: sandbox %s status=%s ports=%+v", sessionID, sb.Status, sb.Ports)
-
 	// Find port 3002's host mapping
 	var hostPort int
 	for _, port := range sb.Ports {
@@ -331,7 +329,7 @@ func (p *DockerProvider) HTTPClient(ctx context.Context, sessionID string) (*htt
 		}
 	}
 	if hostPort == 0 {
-		return nil, fmt.Errorf("sandbox does not expose port 3002 (status=%s, ports=%v)", sb.Status, sb.Ports)
+		return nil, fmt.Errorf("sandbox does not expose port 3002")
 	}
 
 	// Get VM and create VSOCK-based transport
@@ -482,6 +480,19 @@ func (p *DockerProvider) GetVMForProject(projectID string) (vm.ProjectVM, bool) 
 	}
 
 	return vmManager.GetVM(projectID)
+}
+
+// DockerTransport returns an http.RoundTripper that communicates with the Docker
+// daemon inside the VM for the given project. Implements sandbox.DockerProxyProvider.
+func (p *DockerProvider) DockerTransport(projectID string) (http.RoundTripper, error) {
+	projectVM, ok := p.GetVMForProject(projectID)
+	if !ok {
+		return nil, fmt.Errorf("no VM found for project %q", projectID)
+	}
+
+	return &http.Transport{
+		DialContext: projectVM.DockerDialer(),
+	}, nil
 }
 
 // IsReady returns true if the provider is ready to create VMs.
@@ -682,14 +693,20 @@ func (p *DockerProvider) startProxyContainer(ctx context.Context, projectID stri
 	}
 	name := fmt.Sprintf("discobot-proxy-%s", suffix)
 
-	// Check if proxy container already exists and is running
+	// Check if proxy container already exists
 	existing, err := cli.ContainerInspect(ctx, name)
 	if err == nil {
-		if existing.State.Running {
+		// Recreate if image changed or not privileged
+		needsRecreate := existing.Config.Image != p.cfg.SandboxImage ||
+			!existing.HostConfig.Privileged
+
+		if existing.State.Running && !needsRecreate {
 			log.Printf("Proxy container %s already running for project %s", name, projectID)
 			return nil
 		}
-		// Exists but not running — remove and recreate
+		if needsRecreate {
+			log.Printf("Proxy container %s has stale config, recreating", name)
+		}
 		_ = cli.ContainerRemove(ctx, existing.ID, containerTypes.RemoveOptions{Force: true})
 	}
 
@@ -704,6 +721,8 @@ func (p *DockerProvider) startProxyContainer(ctx context.Context, projectID stri
 
 	hostConfig := &containerTypes.HostConfig{
 		NetworkMode: "host",
+		IpcMode:     "host",
+		Privileged:  true, // Required for /dev/vsock access
 		Binds:       []string{"/var/run/docker.sock:/var/run/docker.sock"},
 		RestartPolicy: containerTypes.RestartPolicy{
 			Name: containerTypes.RestartPolicyAlways,

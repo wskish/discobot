@@ -94,7 +94,8 @@ type Config struct {
 	CodexClientID         string
 
 	// Debug settings
-	DebugDocker bool // Expose Docker API proxy for VZ VMs (default: false)
+	DebugDocker     bool // Expose Docker API proxy for VZ VMs (default: false)
+	DebugDockerPort int  // Port for debug Docker proxy (default: 2375)
 
 	// Tauri mode settings
 	TauriMode   bool   // Running inside Tauri app (TAURI=true)
@@ -207,6 +208,7 @@ func Load() (*Config, error) {
 
 	// Debug settings
 	cfg.DebugDocker = getEnvBool("DEBUG_DOCKER", false)
+	cfg.DebugDockerPort = getEnvInt("DEBUG_DOCKER_PORT", 2375)
 
 	// Tauri mode settings
 	cfg.TauriMode = getEnvBool("TAURI", false)
