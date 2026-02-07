@@ -1,6 +1,6 @@
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
-import { AlertCircle } from "lucide-react";
+import { AlertCircle, RefreshCw } from "lucide-react";
 import * as React from "react";
 import type { PromptInputMessage } from "@/components/ai-elements/prompt-input";
 import { ChatConversation } from "@/components/ide/chat-conversation";
@@ -388,6 +388,15 @@ export function ChatPanel({
 						<AlertCircle className="h-4 w-4 shrink-0" />
 						<span className="text-sm font-medium">Error</span>
 						<span className="text-sm">: {chatError.message}</span>
+						<button
+							type="button"
+							onClick={() => invalidateMessages()}
+							className="ml-auto p-1.5 rounded-md hover:bg-destructive/20 transition-colors"
+							title="Retry"
+							aria-label="Retry"
+						>
+							<RefreshCw className="h-4 w-4" />
+						</button>
 					</div>
 				)}
 			</div>
