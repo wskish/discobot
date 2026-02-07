@@ -1,19 +1,22 @@
 import type { ServerWebSocket } from "bun";
-import { hasMetadata, loadConfig, METADATA_PATH } from "./config/metadata.js";
-import { isSocatAvailable, startVsockForwarder } from "./config/vsock.js";
 import { createApp } from "./server/app.js";
 import {
 	createBunWebSocketHandler,
 	type WebSocketData,
 } from "./services/websocket-proxy.js";
 
-// Load configuration from VirtioFS metadata or environment variables
-const config = loadConfig();
+// Load configuration from environment variables
+const agentCwd = process.env.AGENT_CWD || process.cwd();
+const port = Number(process.env.PORT) || 3002;
+const sharedSecretHash = process.env.DISCOBOT_SECRET;
+if (process.env.DISCOBOT_SECRET) {
+	delete process.env.DISCOBOT_SECRET;
+}
 
 const { app, getServicePort } = createApp({
-	agentCwd: config.agentCwd,
+	agentCwd,
 	enableLogging: true,
-	sharedSecretHash: config.sharedSecretHash,
+	sharedSecretHash,
 });
 
 // Use Bun's native serve if available, otherwise fall back to Node
@@ -104,7 +107,7 @@ async function startServer() {
 				// Fall through to Hono for regular HTTP requests
 				return app.fetch(req);
 			},
-			port: config.port,
+			port: port,
 			// Disable idle timeout for HTTP connections (0 = no timeout)
 			// This is important for long-running SSE streams and proxied connections
 			idleTimeout: 0,
@@ -120,7 +123,7 @@ async function startServer() {
 		const server = serve(
 			{
 				fetch: app.fetch,
-				port: config.port,
+				port: port,
 				serverOptions: {
 					// Disable request timeout (important for SSE and long-running connections)
 					requestTimeout: 0,
@@ -142,44 +145,15 @@ async function startServer() {
 }
 
 async function main() {
-	console.log(`Starting agent service on port ${config.port}`);
-	console.log(`Agent cwd: ${config.agentCwd}`);
+	console.log(`Starting agent service on port ${port}`);
+	console.log(`Agent cwd: ${agentCwd}`);
 	console.log(
-		`Auth enforcement: ${config.sharedSecretHash ? "enabled" : "disabled"}`,
+		`Auth enforcement: ${sharedSecretHash ? "enabled" : "disabled"}`,
 	);
-
-	if (hasMetadata()) {
-		console.log(`VirtioFS metadata: ${METADATA_PATH}`);
-		if (config.sessionId) {
-			console.log(`Session ID: ${config.sessionId}`);
-		}
-	}
-
-	// Start vsock forwarder if configured
-	if (config.vsock) {
-		const hasSocat = await isSocatAvailable();
-		if (!hasSocat) {
-			console.error(
-				"ERROR: vsock forwarding configured but socat is not installed",
-			);
-			console.error("Install socat or remove vsock configuration");
-			process.exit(1);
-		}
-
-		try {
-			await startVsockForwarder(config.vsock, config.port);
-			console.log(
-				`Vsock forwarding: vsock:${config.vsock.port} → tcp:${config.port}`,
-			);
-		} catch (err) {
-			console.error("Failed to start vsock forwarder:", err);
-			process.exit(1);
-		}
-	}
 
 	// Start the HTTP server
 	await startServer();
-	console.log(`Agent server listening on port ${config.port}`);
+	console.log(`Agent server listening on port ${port}`);
 }
 
 main().catch((err) => {

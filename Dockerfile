@@ -252,7 +252,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     systemd-timesyncd \
     # Docker daemon and dependencies
     docker.io \
-    docker-buildx \
     iptables \
     # Minimal essential tools
     ca-certificates \
@@ -333,8 +332,6 @@ RUN set -ex \
 RUN set -ex \
     # Create essential mount points
     && mkdir -p /rootfs/proc /rootfs/sys /rootfs/dev /rootfs/run /rootfs/tmp \
-    # Create VirtioFS mount points for runtime data
-    && mkdir -p /rootfs/run/discobot/metadata \
     # Configure systemd-resolved: symlink resolv.conf to stub resolver
     # This routes DNS queries through resolved's stub listener at 127.0.0.53
     && rm -f /rootfs/etc/resolv.conf \
