@@ -12,13 +12,17 @@ import (
 )
 
 // vsockConn wraps vz.VirtioSocketConnection to implement net.Conn.
+// It also implements CloseWrite() for half-close support, which the Docker
+// client uses during exec streams to signal EOF on stdin while still
+// reading stdout/stderr.
 type vsockConn struct {
 	*vz.VirtioSocketConnection
-	localAddr  net.Addr
-	remoteAddr net.Addr
-	closeOnce  sync.Once
-	closed     bool
-	mu         sync.Mutex
+	localAddr   net.Addr
+	remoteAddr  net.Addr
+	closeOnce   sync.Once
+	closed      bool
+	writeClosed bool
+	mu          sync.Mutex
 }
 
 // LocalAddr returns the local network address.
@@ -48,6 +52,18 @@ func (c *vsockConn) SetReadDeadline(t time.Time) error {
 // SetWriteDeadline sets the write deadline.
 // Note: vz.VirtioSocketConnection doesn't support deadlines, so this is a no-op.
 func (c *vsockConn) SetWriteDeadline(t time.Time) error {
+	return nil
+}
+
+// CloseWrite signals that no more data will be written, but the connection
+// remains open for reading. VSOCK doesn't natively support half-close, so
+// this just marks the write side as closed without closing the underlying
+// connection. The Docker client calls this during exec to signal stdin EOF
+// while continuing to read stdout/stderr.
+func (c *vsockConn) CloseWrite() error {
+	c.mu.Lock()
+	c.writeClosed = true
+	c.mu.Unlock()
 	return nil
 }
 

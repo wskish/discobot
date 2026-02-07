@@ -8,7 +8,7 @@ Requires=docker.service
 Type=simple
 # -b131072 sets 128KB transfer block size for good throughput on bulk transfers
 # (socat still forwards immediately when data arrives, this just sets max read/write size)
-ExecStart=/usr/bin/socat -b131072 VSOCK-LISTEN:2375,reuseaddr,fork UNIX-CONNECT:/var/run/docker.sock
+ExecStart=/usr/bin/socat -b131072 VSOCK-LISTEN:2375,reuseaddr,fork,shut-down UNIX-CONNECT:/var/run/docker.sock,shut-down
 Restart=always
 RestartSec=5
 

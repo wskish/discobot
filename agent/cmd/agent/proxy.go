@@ -31,6 +31,7 @@ func runProxy() error {
 		client.WithHost("unix:///var/run/docker.sock"),
 		client.WithAPIVersionNegotiation(),
 	)
+
 	if err != nil {
 		return fmt.Errorf("failed to create docker client: %w", err)
 	}
@@ -160,8 +161,8 @@ func startSocatForContainer(mu *sync.Mutex, socatProcs map[string][]*exec.Cmd, c
 	for _, port := range ports {
 		cmd := exec.Command("socat",
 			"-b131072",
-			fmt.Sprintf("VSOCK-LISTEN:%d,reuseaddr,fork", port),
-			fmt.Sprintf("TCP:localhost:%d", port),
+			fmt.Sprintf("VSOCK-LISTEN:%d,reuseaddr,fork,shut-down", port),
+			fmt.Sprintf("TCP:localhost:%d,shut-down", port),
 		)
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
