@@ -91,6 +91,35 @@ func (m *Manager) ListProviders() []string {
 	return names
 }
 
+// GetProviderStatus returns the status of a specific provider.
+// If the provider implements StatusProvider, its Status() is called.
+// Otherwise, a default "ready" status is returned.
+func (m *Manager) GetProviderStatus(name string) (ProviderStatus, bool) {
+	provider, ok := m.providers[name]
+	if !ok {
+		return ProviderStatus{}, false
+	}
+
+	if sp, ok := provider.(StatusProvider); ok {
+		return sp.Status(), true
+	}
+
+	return ProviderStatus{
+		Available: true,
+		State:     "ready",
+	}, true
+}
+
+// ListProviderStatuses returns the status of all registered providers.
+func (m *Manager) ListProviderStatuses() map[string]ProviderStatus {
+	statuses := make(map[string]ProviderStatus, len(m.providers))
+	for name := range m.providers {
+		status, _ := m.GetProviderStatus(name)
+		statuses[name] = status
+	}
+	return statuses
+}
+
 // ProviderProxy implements the Provider interface and routes to the appropriate provider.
 // This is used when we need a single Provider interface but want to support multiple backends.
 type ProviderProxy struct {

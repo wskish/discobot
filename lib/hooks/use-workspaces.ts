@@ -52,11 +52,13 @@ export function useWorkspaces() {
 
 export function useSandboxProviders() {
 	const { data, error, isLoading } = useSWR(SANDBOX_PROVIDERS_KEY, () =>
-		api.getSandboxProviders(),
+		api.getProviders(),
 	);
 
 	return {
-		providers: data?.providers || [],
+		providers: data ? Object.keys(data.providers) : [],
+		providerStatuses: data?.providers || {},
+		defaultProvider: data?.default || "",
 		isLoading,
 		error,
 	};

@@ -1,13 +1,9 @@
 package vz
 
-// ProviderStatus represents the current status of the VZ provider.
-// This type is platform-independent.
-type ProviderStatus struct {
-	Available bool                `json:"available"`
-	State     string              `json:"state"` // "not_available", "downloading", "ready", "failed"
-	Message   string              `json:"message,omitempty"`
-	Progress  *DownloadProgress   `json:"progress,omitempty"`
-	Config    *ProviderConfigInfo `json:"config,omitempty"`
+// StatusDetails contains VZ-specific status details returned in ProviderStatus.Details.
+type StatusDetails struct {
+	Progress *DownloadProgress   `json:"progress,omitempty"`
+	Config   *ProviderConfigInfo `json:"config,omitempty"`
 }
 
 // ProviderConfigInfo contains VZ provider configuration information.

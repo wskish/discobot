@@ -33,6 +33,8 @@ import type {
 	OAuthAuthorizeResponse,
 	OAuthExchangeRequest,
 	OAuthExchangeResponse,
+	ProviderStatus,
+	ProvidersResponse,
 	ReadSessionFileResponse,
 	Session,
 	SessionDiffFilesResponse,
@@ -110,10 +112,16 @@ class ApiClient {
 		return this.fetchRoot<SystemStatusResponse>("/status");
 	}
 
-	// Workspaces
-	async getSandboxProviders(): Promise<{ providers: string[] }> {
-		return this.fetch<{ providers: string[] }>("/workspaces/providers");
+	// Providers
+	async getProviders(): Promise<ProvidersResponse> {
+		return this.fetch<ProvidersResponse>("/workspaces/providers");
 	}
+
+	async getProvider(name: string): Promise<ProviderStatus> {
+		return this.fetch<ProviderStatus>(`/workspaces/providers/${name}`);
+	}
+
+	// Workspaces
 
 	async getWorkspaces(): Promise<{ workspaces: Workspace[] }> {
 		return this.fetch<{ workspaces: Workspace[] }>("/workspaces");

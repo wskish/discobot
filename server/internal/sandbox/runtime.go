@@ -92,6 +92,21 @@ type DockerProxyProvider interface {
 	DockerTransport(projectID string) (http.RoundTripper, error)
 }
 
+// ProviderStatus represents the current status of a sandbox provider.
+type ProviderStatus struct {
+	Available bool   `json:"available"`
+	State     string `json:"state"` // "ready", "downloading", "failed", "not_available"
+	Message   string `json:"message,omitempty"`
+	// Details contains provider-specific status information (e.g., download progress, config).
+	Details any `json:"details,omitempty"`
+}
+
+// StatusProvider is an optional interface that sandbox providers can implement
+// to report their status. Providers that don't implement this are assumed ready.
+type StatusProvider interface {
+	Status() ProviderStatus
+}
+
 // RemoveOption configures sandbox removal behavior.
 type RemoveOption func(*RemoveConfig)
 

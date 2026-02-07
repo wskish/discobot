@@ -63,6 +63,18 @@ export interface Session {
 export type WorkspaceStatus =
 	(typeof WorkspaceStatusConstants)[keyof typeof WorkspaceStatusConstants];
 
+export interface ProviderStatus {
+	available: boolean;
+	state: "ready" | "downloading" | "failed" | "not_available";
+	message?: string;
+	details?: unknown;
+}
+
+export interface ProvidersResponse {
+	providers: Record<string, ProviderStatus>;
+	default: string;
+}
+
 export interface Workspace {
 	id: string;
 	path: string;

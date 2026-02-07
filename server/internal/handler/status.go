@@ -3,6 +3,7 @@ package handler
 import (
 	"net/http"
 	"os/exec"
+	"runtime"
 )
 
 // StatusMessageLevel represents the severity level of a status message
@@ -41,14 +42,16 @@ func (h *Handler) GetSystemStatus(w http.ResponseWriter, _ *http.Request) {
 		})
 	}
 
-	// Check for Docker
-	if _, err := exec.LookPath("docker"); err != nil {
-		messages = append(messages, StatusMessage{
-			ID:      "docker-not-found",
-			Level:   StatusLevelWarn,
-			Title:   "Docker not found",
-			Message: "Docker is required for running coding agents in isolated containers. Please install Docker to enable agent execution.",
-		})
+	// Check for Docker (only required on Linux and Windows; macOS uses VZ)
+	if runtime.GOOS != "darwin" {
+		if _, err := exec.LookPath("docker"); err != nil {
+			messages = append(messages, StatusMessage{
+				ID:      "docker-not-found",
+				Level:   StatusLevelWarn,
+				Title:   "Docker not found",
+				Message: "Docker is required for running coding agents in isolated containers. Please install Docker to enable agent execution.",
+			})
+		}
 	}
 
 	// Determine if system is OK (no error-level messages)

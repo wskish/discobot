@@ -20,11 +20,11 @@ import (
 	"github.com/obot-platform/discobot/server/internal/database"
 	"github.com/obot-platform/discobot/server/internal/dispatcher"
 	"github.com/obot-platform/discobot/server/internal/events"
-	"github.com/obot-platform/discobot/server/internal/model"
 	"github.com/obot-platform/discobot/server/internal/git"
 	"github.com/obot-platform/discobot/server/internal/handler"
 	"github.com/obot-platform/discobot/server/internal/jobs"
 	"github.com/obot-platform/discobot/server/internal/middleware"
+	"github.com/obot-platform/discobot/server/internal/model"
 	"github.com/obot-platform/discobot/server/internal/routes"
 	"github.com/obot-platform/discobot/server/internal/sandbox"
 	"github.com/obot-platform/discobot/server/internal/sandbox/docker"
@@ -632,28 +632,30 @@ func main() {
 				},
 			})
 
-			// VZ Provider Status
-			projReg.Register(r, routes.Route{
-				Method: "GET", Pattern: "/vz/status",
-				Handler: h.GetVZStatus,
-				Meta: routes.Meta{
-					Group:       "VZ",
-					Description: "Get VZ provider status and configuration",
-					Params:      []routes.Param{{Name: "projectId", Example: "local"}},
-				},
-			})
-
 			// Workspaces
 			r.Route("/workspaces", func(r chi.Router) {
 				wsReg := projReg.WithPrefix("/workspaces")
 
 				wsReg.Register(r, routes.Route{
 					Method: "GET", Pattern: "/providers",
-					Handler: h.GetSandboxProviders,
+					Handler: h.GetProviders,
 					Meta: routes.Meta{
-						Group:       "Workspaces",
-						Description: "List available sandbox providers",
+						Group:       "Providers",
+						Description: "List sandbox providers with status",
 						Params:      []routes.Param{{Name: "projectId", Example: "local"}},
+					},
+				})
+
+				wsReg.Register(r, routes.Route{
+					Method: "GET", Pattern: "/providers/{provider}",
+					Handler: h.GetProvider,
+					Meta: routes.Meta{
+						Group:       "Providers",
+						Description: "Get sandbox provider status",
+						Params: []routes.Param{
+							{Name: "projectId", Example: "local"},
+							{Name: "provider", Example: "vz"},
+						},
 					},
 				})
 

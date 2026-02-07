@@ -81,7 +81,7 @@ func NewDockerProvider(cfg *config.Config, vmConfig vm.Config, resolver SessionP
 		// Auto-download from registry
 		imageRef := vmConfig.ImageRef
 		if imageRef == "" {
-			imageRef = config.DefaultVZImage
+			imageRef = config.DefaultVZImage()
 		}
 
 		log.Printf("VZ kernel or base disk not configured, will download from %s", imageRef)
@@ -112,7 +112,7 @@ func NewDockerProvider(cfg *config.Config, vmConfig vm.Config, resolver SessionP
 			vmConfig.BaseDiskPath = baseDiskPath
 
 			// Create VM manager now that images are ready
-			vmManager, err := NewVzVMManager(vmConfig)
+			vmManager, err := NewVMManager(vmConfig)
 			if err != nil {
 				log.Printf("Failed to create VZ VM manager after download: %v", err)
 				return
@@ -130,7 +130,7 @@ func NewDockerProvider(cfg *config.Config, vmConfig vm.Config, resolver SessionP
 	}
 
 	// Manual configuration - initialize immediately
-	vmManager, err := NewVzVMManager(vmConfig)
+	vmManager, err := NewVMManager(vmConfig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create VZ VM manager: %w", err)
 	}
@@ -142,7 +142,7 @@ func NewDockerProvider(cfg *config.Config, vmConfig vm.Config, resolver SessionP
 
 // ImageExists checks if the Docker image exists.
 // Note: This checks the local Docker daemon, not the VM's Docker daemon.
-func (p *DockerProvider) ImageExists(ctx context.Context) bool {
+func (p *DockerProvider) ImageExists(_ context.Context) bool {
 	// TODO: This should check inside a VM once one exists
 	// For now, we assume the image will be available or pulled when needed
 	return true
@@ -419,20 +419,22 @@ func (p *DockerProvider) Close() error {
 }
 
 // Status returns the current status of the VZ provider.
-func (p *DockerProvider) Status() ProviderStatus {
+// Implements sandbox.StatusProvider.
+func (p *DockerProvider) Status() sandbox.ProviderStatus {
 	p.downloadMu.RLock()
 	vmManager := p.vmManager
 	downloader := p.imageDownloader
 	p.downloadMu.RUnlock()
 
-	status := ProviderStatus{
+	status := sandbox.ProviderStatus{
 		Available: true,
 	}
+	details := StatusDetails{}
 
 	// If downloader exists, we're in async download mode
 	if downloader != nil {
 		progress := downloader.Status()
-		status.Progress = &progress
+		details.Progress = &progress
 
 		switch progress.State {
 		case DownloadStateDownloading, DownloadStateExtracting:
@@ -441,7 +443,7 @@ func (p *DockerProvider) Status() ProviderStatus {
 		case DownloadStateReady:
 			status.State = "ready"
 			if kernelPath, baseDiskPath, ok := downloader.GetPaths(); ok {
-				status.Config = &ProviderConfigInfo{
+				details.Config = &ProviderConfigInfo{
 					KernelPath:   kernelPath,
 					BaseDiskPath: baseDiskPath,
 					MemoryMB:     2048, // Default values
@@ -458,11 +460,14 @@ func (p *DockerProvider) Status() ProviderStatus {
 	} else if vmManager != nil {
 		// Manual configuration - ready immediately
 		status.State = "ready"
-		// Config info would be available from vmManager if needed
 	} else {
 		// Shouldn't happen, but handle gracefully
 		status.State = "failed"
 		status.Message = "Provider not properly initialized"
+	}
+
+	if details.Progress != nil || details.Config != nil {
+		status.Details = details
 	}
 
 	return status
@@ -587,12 +592,12 @@ func (p *DockerProvider) ensureImageInVM(ctx context.Context, dockerProv *docker
 
 	// Check if image already exists in VM's Docker
 	vmClient := dockerProv.Client()
-	if inspect, err := vmClient.ImageInspect(ctx, image); err == nil {
+	inspect, err := vmClient.ImageInspect(ctx, image)
+	if err == nil {
 		log.Printf("Image %s already exists in VM Docker (ID: %s)", image[:19], inspect.ID[:19])
 		return nil
-	} else {
-		log.Printf("Image %s not found in VM Docker, will load from host: %v", image[:19], err)
 	}
+	log.Printf("Image %s not found in VM Docker, will load from host: %v", image[:19], err)
 
 	// Get host Docker client
 	hostClient, err := p.getHostDockerClient()
@@ -606,7 +611,7 @@ func (p *DockerProvider) ensureImageInVM(ctx context.Context, dockerProv *docker
 	}
 
 	// Get image size for progress reporting
-	inspectResult, _, err := hostClient.ImageInspectWithRaw(ctx, image)
+	inspectResult, err := hostClient.ImageInspect(ctx, image)
 	if err != nil {
 		return fmt.Errorf("failed to inspect image on host: %w", err)
 	}
@@ -764,12 +769,12 @@ func (p *DockerProvider) getDockerProviderForSession(ctx context.Context, sessio
 
 // progressReader wraps an io.Reader and logs transfer progress.
 type progressReader struct {
-	reader      io.Reader
-	total       int64 // Total expected bytes (0 if unknown)
-	read        int64 // Bytes read so far
-	lastLogged  int64 // Bytes read at last log
-	logEvery    int64 // Log every N bytes
-	label       string
+	reader     io.Reader
+	total      int64 // Total expected bytes (0 if unknown)
+	read       int64 // Bytes read so far
+	lastLogged int64 // Bytes read at last log
+	logEvery   int64 // Log every N bytes
+	label      string
 }
 
 func (pr *progressReader) Read(p []byte) (int, error) {
