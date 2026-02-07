@@ -88,7 +88,7 @@ func main() {
 
 	// Create VM manager
 	log.Printf("Creating VM manager...")
-	vmManager, err := vz.NewVzVMManager(vmConfig)
+	vmManager, err := vz.NewVMManager(vmConfig)
 	if err != nil {
 		log.Fatalf("Failed to create VM manager: %v", err)
 	}
@@ -222,12 +222,12 @@ func handleProxyConnection(clientConn net.Conn, pvm vm.ProjectVM) {
 	done := make(chan struct{}, 2)
 
 	go func() {
-		io.Copy(vmConn, clientConn)
+		_, _ = io.Copy(vmConn, clientConn)
 		done <- struct{}{}
 	}()
 
 	go func() {
-		io.Copy(clientConn, vmConn)
+		_, _ = io.Copy(clientConn, vmConn)
 		done <- struct{}{}
 	}()
 

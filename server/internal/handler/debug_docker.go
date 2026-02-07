@@ -47,7 +47,7 @@ func NewDebugDockerServer(sandboxManager *sandbox.Manager, projectID string, por
 			provider:  proxyProvider,
 			projectID: projectID,
 		},
-		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
+		ErrorHandler: func(w http.ResponseWriter, _ *http.Request, err error) {
 			log.Printf("Debug Docker proxy error: %v", err)
 			http.Error(w, err.Error(), http.StatusBadGateway)
 		},

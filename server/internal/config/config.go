@@ -10,15 +10,23 @@ import (
 	"time"
 
 	"github.com/adrg/xdg"
+
+	"github.com/obot-platform/discobot/server/internal/version"
 )
 
 const appName = "discobot"
 
-// DefaultSandboxImage is the default sandbox image for sessions.
-const DefaultSandboxImage = "ghcr.io/obot-platform/discobot:main"
+// DefaultSandboxImage returns the default sandbox image for sessions,
+// tagged with the current build version.
+func DefaultSandboxImage() string {
+	return "ghcr.io/obot-platform/discobot:" + version.Get()
+}
 
-// DefaultVZImage is the default VZ image containing kernel and rootfs for VMs.
-const DefaultVZImage = "ghcr.io/obot-platform/discobot-vz:main"
+// DefaultVZImage returns the default VZ image containing kernel and rootfs for VMs,
+// tagged with the current build version.
+func DefaultVZImage() string {
+	return "ghcr.io/obot-platform/discobot-vz:" + version.Get()
+}
 
 // Config holds all configuration for the server
 type Config struct {
@@ -79,8 +87,8 @@ type Config struct {
 	DispatcherJobTimeout         time.Duration // Max time for a single job (default: 5m)
 	DispatcherStaleJobTimeout    time.Duration // Time after which running jobs are considered stale (default: 10m)
 	DispatcherImmediateExecution bool          // Try to execute jobs immediately when enqueued (default: true)
-	JobRetryBackoff             time.Duration // Base backoff between job retries, multiplied by attempt number (default: 5s)
-	JobMaxAttempts              int           // Default max attempts for jobs (default: 3)
+	JobRetryBackoff              time.Duration // Base backoff between job retries, multiplied by attempt number (default: 5s)
+	JobMaxAttempts               int           // Default max attempts for jobs (default: 3)
 
 	// OAuth providers (for user login)
 	GitHubClientID     string
@@ -152,7 +160,7 @@ func Load() (*Config, error) {
 	cfg.WorkspaceDir = getEnv("WORKSPACE_DIR", filepath.Join(xdg.DataHome, appName, "workspaces"))
 
 	// Sandbox runtime settings
-	cfg.SandboxImage = getEnv("SANDBOX_IMAGE", DefaultSandboxImage)
+	cfg.SandboxImage = getEnv("SANDBOX_IMAGE", DefaultSandboxImage())
 	cfg.SandboxIdleTimeout = getEnvDuration("SANDBOX_IDLE_TIMEOUT", 30*time.Minute)
 
 	// Docker-specific settings
@@ -170,7 +178,7 @@ func Load() (*Config, error) {
 	cfg.VZKernelPath = getEnv("VZ_KERNEL_PATH", "")
 	cfg.VZInitrdPath = getEnv("VZ_INITRD_PATH", "")
 	cfg.VZBaseDiskPath = getEnv("VZ_BASE_DISK_PATH", "")
-	cfg.VZImageRef = getEnv("VZ_IMAGE_REF", DefaultVZImage)
+	cfg.VZImageRef = getEnv("VZ_IMAGE_REF", DefaultVZImage())
 	homeDir, _ := os.UserHomeDir()
 	cfg.VZHomeDir = getEnv("VZ_HOME_DIR", homeDir)
 

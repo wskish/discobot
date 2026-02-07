@@ -89,7 +89,7 @@ func (pvm *vzProjectVM) SessionCount() int {
 
 // DockerDialer returns a VSOCK dialer function for Docker client.
 func (pvm *vzProjectVM) DockerDialer() func(ctx context.Context, network, addr string) (net.Conn, error) {
-	return func(ctx context.Context, network, addr string) (net.Conn, error) {
+	return func(_ context.Context, _, _ string) (net.Conn, error) {
 		pvm.mu.RLock()
 		socketDevice := pvm.socketDevice
 		pvm.mu.RUnlock()
@@ -113,7 +113,7 @@ func (pvm *vzProjectVM) DockerDialer() func(ctx context.Context, network, addr s
 
 // PortDialer returns a VSOCK dialer function for an arbitrary port.
 func (pvm *vzProjectVM) PortDialer(port uint32) func(ctx context.Context, network, addr string) (net.Conn, error) {
-	return func(ctx context.Context, network, addr string) (net.Conn, error) {
+	return func(_ context.Context, _, _ string) (net.Conn, error) {
 		pvm.mu.RLock()
 		socketDevice := pvm.socketDevice
 		pvm.mu.RUnlock()
@@ -154,8 +154,8 @@ func (pvm *vzProjectVM) Shutdown() error {
 	return nil
 }
 
-// VzVMManager implements vm.ProjectVMManager for Apple Virtualization framework.
-type VzVMManager struct {
+// VMManager implements vm.ProjectVMManager for Apple Virtualization framework.
+type VMManager struct {
 	config vm.Config
 
 	// projectVMs maps projectID -> vzProjectVM
@@ -170,8 +170,8 @@ type VzVMManager struct {
 	wg     sync.WaitGroup
 }
 
-// NewVzVMManager creates a new VZ VM manager.
-func NewVzVMManager(config vm.Config) (*VzVMManager, error) {
+// NewVMManager creates a new VZ VM manager.
+func NewVMManager(config vm.Config) (*VMManager, error) {
 	// Parse idle timeout
 	idleTimeout := 30 * time.Minute // default
 	if config.IdleTimeout != "" {
@@ -182,7 +182,7 @@ func NewVzVMManager(config vm.Config) (*VzVMManager, error) {
 		idleTimeout = parsed
 	}
 
-	mgr := &VzVMManager{
+	mgr := &VMManager{
 		config:      config,
 		projectVMs:  make(map[string]*vzProjectVM),
 		idleTimeout: idleTimeout,
@@ -199,7 +199,7 @@ func NewVzVMManager(config vm.Config) (*VzVMManager, error) {
 }
 
 // GetOrCreateVM returns an existing VM for the project or creates a new one.
-func (m *VzVMManager) GetOrCreateVM(ctx context.Context, projectID, sessionID string) (vm.ProjectVM, error) {
+func (m *VMManager) GetOrCreateVM(ctx context.Context, projectID, sessionID string) (vm.ProjectVM, error) {
 	m.projectVMMu.Lock()
 	defer m.projectVMMu.Unlock()
 
@@ -226,7 +226,7 @@ func (m *VzVMManager) GetOrCreateVM(ctx context.Context, projectID, sessionID st
 }
 
 // GetVM returns the VM for the given project, if it exists.
-func (m *VzVMManager) GetVM(projectID string) (vm.ProjectVM, bool) {
+func (m *VMManager) GetVM(projectID string) (vm.ProjectVM, bool) {
 	m.projectVMMu.RLock()
 	defer m.projectVMMu.RUnlock()
 
@@ -239,7 +239,7 @@ func (m *VzVMManager) GetVM(projectID string) (vm.ProjectVM, bool) {
 
 // WarmVM creates a VM for the project without associating any sessions.
 // This is used at startup to pre-warm VMs so they're ready when sessions are created.
-func (m *VzVMManager) WarmVM(ctx context.Context, projectID string) (vm.ProjectVM, error) {
+func (m *VMManager) WarmVM(ctx context.Context, projectID string) (vm.ProjectVM, error) {
 	m.projectVMMu.Lock()
 	defer m.projectVMMu.Unlock()
 
@@ -260,7 +260,7 @@ func (m *VzVMManager) WarmVM(ctx context.Context, projectID string) (vm.ProjectV
 }
 
 // RemoveSession removes a session from the project VM.
-func (m *VzVMManager) RemoveSession(projectID, sessionID string) error {
+func (m *VMManager) RemoveSession(projectID, sessionID string) error {
 	m.projectVMMu.RLock()
 	pvm, exists := m.projectVMs[projectID]
 	m.projectVMMu.RUnlock()
@@ -282,7 +282,7 @@ func (m *VzVMManager) RemoveSession(projectID, sessionID string) error {
 }
 
 // Shutdown stops all project VMs and shuts down the manager.
-func (m *VzVMManager) Shutdown() {
+func (m *VMManager) Shutdown() {
 	close(m.stopCh)
 
 	// Stop all VMs
@@ -301,7 +301,7 @@ func (m *VzVMManager) Shutdown() {
 }
 
 // createProjectVM creates and starts a new VM for a project.
-func (m *VzVMManager) createProjectVM(ctx context.Context, projectID, sessionID string) (*vzProjectVM, error) {
+func (m *VMManager) createProjectVM(ctx context.Context, projectID, sessionID string) (*vzProjectVM, error) {
 	// Root disk (read-only)
 	diskPath := filepath.Join(m.config.DataDir, fmt.Sprintf("project-%s.img", projectID))
 
@@ -357,7 +357,7 @@ func (m *VzVMManager) createProjectVM(ctx context.Context, projectID, sessionID 
 			}
 			if n > 0 {
 				// Write to file
-				consoleLog.Write(buf[:n])
+				_, _ = consoleLog.Write(buf[:n])
 				// Also log to main logger (with prefix)
 				log.Printf("[VM %s] %s", projectID, string(buf[:n]))
 			}
@@ -368,7 +368,7 @@ func (m *VzVMManager) createProjectVM(ctx context.Context, projectID, sessionID 
 
 	// Wait for Docker daemon to be ready
 	if err := m.waitForDocker(ctx, socketDevice, projectID); err != nil {
-		vzVM.Stop()
+		_ = vzVM.Stop()
 		consoleRead.Close()
 		consoleWrite.Close()
 		consoleLog.Close()
@@ -399,7 +399,7 @@ func (m *VzVMManager) createProjectVM(ctx context.Context, projectID, sessionID 
 }
 
 // cloneDisk copies the base disk to a new location.
-func (m *VzVMManager) cloneDisk(baseDiskPath, diskPath string) error {
+func (m *VMManager) cloneDisk(baseDiskPath, diskPath string) error {
 	if baseDiskPath == "" {
 		// Create empty disk if no base disk
 		diskSize := int64(10 * 1024 * 1024 * 1024) // 10GB
@@ -428,7 +428,7 @@ func (m *VzVMManager) cloneDisk(baseDiskPath, diskPath string) error {
 
 // buildAndStartVM creates and starts a VM with the given disk images.
 // rootDiskPath is mounted read-only as /dev/vda, dataDiskPath is mounted read-write as /dev/vdb.
-func (m *VzVMManager) buildAndStartVM(rootDiskPath, dataDiskPath, projectID string) (*vz.VirtualMachine, *vz.VirtioSocketDevice, *os.File, *os.File, error) {
+func (m *VMManager) buildAndStartVM(rootDiskPath, dataDiskPath, _ string) (*vz.VirtualMachine, *vz.VirtioSocketDevice, *os.File, *os.File, error) {
 	// Build kernel command line
 	// Root disk is read-only, data disk (/dev/vdb) is where writable data goes
 	cmdLine := []string{
@@ -634,7 +634,7 @@ func (m *VzVMManager) buildAndStartVM(rootDiskPath, dataDiskPath, projectID stri
 }
 
 // waitForDocker waits for Docker daemon to be ready inside the VM.
-func (m *VzVMManager) waitForDocker(ctx context.Context, socketDevice *vz.VirtioSocketDevice, projectID string) error {
+func (m *VMManager) waitForDocker(ctx context.Context, socketDevice *vz.VirtioSocketDevice, projectID string) error {
 	deadline := time.Now().Add(60 * time.Second)
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
@@ -665,7 +665,7 @@ func (m *VzVMManager) waitForDocker(ctx context.Context, socketDevice *vz.Virtio
 			// Send Docker ping request
 			client := &http.Client{
 				Transport: &http.Transport{
-					DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+					DialContext: func(_ context.Context, _, _ string) (net.Conn, error) {
 						return vsockConn, nil
 					},
 				},
@@ -693,7 +693,7 @@ func (m *VzVMManager) waitForDocker(ctx context.Context, socketDevice *vz.Virtio
 }
 
 // cleanupIdleVMs periodically checks for idle VMs and shuts them down.
-func (m *VzVMManager) cleanupIdleVMs() {
+func (m *VMManager) cleanupIdleVMs() {
 	defer m.wg.Done()
 
 	ticker := time.NewTicker(1 * time.Minute)

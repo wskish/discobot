@@ -37,7 +37,7 @@ func (c *vsockConn) RemoteAddr() net.Addr {
 
 // SetDeadline sets the read and write deadlines.
 // Note: vz.VirtioSocketConnection doesn't support deadlines, so this is a no-op.
-func (c *vsockConn) SetDeadline(t time.Time) error {
+func (c *vsockConn) SetDeadline(_ time.Time) error {
 	// VirtioSocketConnection doesn't support deadlines
 	// Return nil to satisfy the interface - callers should use context cancellation
 	return nil
@@ -45,13 +45,13 @@ func (c *vsockConn) SetDeadline(t time.Time) error {
 
 // SetReadDeadline sets the read deadline.
 // Note: vz.VirtioSocketConnection doesn't support deadlines, so this is a no-op.
-func (c *vsockConn) SetReadDeadline(t time.Time) error {
+func (c *vsockConn) SetReadDeadline(_ time.Time) error {
 	return nil
 }
 
 // SetWriteDeadline sets the write deadline.
 // Note: vz.VirtioSocketConnection doesn't support deadlines, so this is a no-op.
-func (c *vsockConn) SetWriteDeadline(t time.Time) error {
+func (c *vsockConn) SetWriteDeadline(_ time.Time) error {
 	return nil
 }
 

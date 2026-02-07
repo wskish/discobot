@@ -534,12 +534,12 @@ func (d *ImageDownloader) decompressKernel(path string) error {
 
 		if absOffset > 0 && absEnd <= len(data) && payloadLength > 0 {
 			payload := data[absOffset:absEnd]
-			if result, err := d.tryDecompress(payload); err == nil {
+			result, err := d.tryDecompress(payload)
+			if err == nil {
 				log.Printf("Successfully extracted kernel (%d bytes) via boot protocol header", len(result))
 				return os.WriteFile(path, result, 0644)
-			} else {
-				log.Printf("Boot protocol payload decompression failed: %v, falling back to magic scan", err)
 			}
+			log.Printf("Boot protocol payload decompression failed: %v, falling back to magic scan", err)
 		} else {
 			log.Printf("Boot protocol header has invalid offsets, falling back to magic scan")
 		}

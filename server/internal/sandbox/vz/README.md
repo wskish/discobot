@@ -8,7 +8,7 @@ This package provides a **VZ implementation** of the `vm.ProjectVMManager` inter
 
 ### Components
 
-1. **VzVMManager** (`vz_vm_manager.go`): Implements `vm.ProjectVMManager` interface
+1. **VMManager** (`vz_vm_manager.go`): Implements `vm.ProjectVMManager` interface
    - Manages project-level VMs using Apple Virtualization framework
    - One VM per project, shared across sessions
    - Automatic lifecycle management with idle timeout
@@ -23,7 +23,7 @@ This package provides a **VZ implementation** of the `vm.ProjectVMManager` inter
 
 ```
 vm.ProjectVMManager (interface)
-├── VzVMManager    (Apple Virtualization - macOS)
+├── VMManager    (Apple Virtualization - macOS)
 ├── KvmVMManager   (KVM - Linux) [future]
 └── WslVMManager   (WSL2 - Windows) [future]
 

@@ -468,7 +468,7 @@ type VzDockerProvider struct {
 
 func NewProvider(cfg *config.Config, vmConfig *vm.Config) (*VzDockerProvider, error) {
     // Create VZ VM manager (implements vm.ProjectVMManager)
-    vmManager, err := vz.NewVzVMManager(*vmConfig)
+    vmManager, err := vz.NewVMManager(*vmConfig)
     if err != nil {
         return nil, err
     }
