@@ -17,7 +17,7 @@ import (
 )
 
 // Use the config constant for test consistency
-var testImage = config.DefaultSandboxImage
+var testImage = config.DefaultSandboxImage()
 
 // setupTestStore creates an in-memory SQLite database for testing
 func setupTestStore(t *testing.T) *store.Store {

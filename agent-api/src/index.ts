@@ -147,9 +147,7 @@ async function startServer() {
 async function main() {
 	console.log(`Starting agent service on port ${port}`);
 	console.log(`Agent cwd: ${agentCwd}`);
-	console.log(
-		`Auth enforcement: ${sharedSecretHash ? "enabled" : "disabled"}`,
-	);
+	console.log(`Auth enforcement: ${sharedSecretHash ? "enabled" : "disabled"}`);
 
 	// Start the HTTP server
 	await startServer();

@@ -7,7 +7,12 @@
  */
 
 import { spawn } from "node:child_process";
-import { type FSWatcher, watch } from "node:fs";
+import {
+	createReadStream,
+	createWriteStream,
+	type FSWatcher,
+	watch,
+} from "node:fs";
 import {
 	access,
 	constants,
@@ -18,9 +23,8 @@ import {
 	writeFile,
 } from "node:fs/promises";
 import { join } from "node:path";
-import { createGunzip } from "node:zlib";
-import { createReadStream, createWriteStream } from "node:fs";
 import { pipeline } from "node:stream/promises";
+import { createGunzip } from "node:zlib";
 
 export interface VzWatcherConfig {
 	/** Project root directory (where Dockerfile lives) */
@@ -102,15 +106,11 @@ export function createDefaultLogger(): Logger {
 		},
 		error: (message: string) => {
 			const timestamp = new Date().toISOString().slice(11, 19);
-			console.error(
-				`\x1b[31m[vz-watcher ${timestamp}]\x1b[0m ${message}`,
-			);
+			console.error(`\x1b[31m[vz-watcher ${timestamp}]\x1b[0m ${message}`);
 		},
 		success: (message: string) => {
 			const timestamp = new Date().toISOString().slice(11, 19);
-			console.log(
-				`\x1b[32m[vz-watcher ${timestamp}]\x1b[0m ${message}`,
-			);
+			console.log(`\x1b[32m[vz-watcher ${timestamp}]\x1b[0m ${message}`);
 		},
 	};
 }
@@ -129,11 +129,7 @@ async function isGzipped(filePath: string): Promise<boolean> {
  */
 async function gunzipFile(src: string, dest: string): Promise<void> {
 	const tmp = dest + ".tmp";
-	await pipeline(
-		createReadStream(src),
-		createGunzip(),
-		createWriteStream(tmp),
-	);
+	await pipeline(createReadStream(src), createGunzip(), createWriteStream(tmp));
 	await rename(tmp, dest);
 }
 
@@ -283,10 +279,7 @@ export class VzWatcher {
 	/**
 	 * Updates server/.env with the paths to extracted VZ files.
 	 */
-	async updateEnv(
-		kernelPath: string,
-		baseDiskPath: string,
-	): Promise<boolean> {
+	async updateEnv(kernelPath: string, baseDiskPath: string): Promise<boolean> {
 		const success = await updateEnvFile(this.config.envFilePath, {
 			VZ_KERNEL_PATH: kernelPath,
 			VZ_BASE_DISK_PATH: baseDiskPath,
@@ -332,9 +325,7 @@ export class VzWatcher {
 			try {
 				await access(baseDiskPath, constants.F_OK);
 			} catch {
-				this.logger.error(
-					`SquashFS rootfs not found at ${baseDiskPath}`,
-				);
+				this.logger.error(`SquashFS rootfs not found at ${baseDiskPath}`);
 				this.onBuildComplete?.(false);
 				return;
 			}
@@ -388,17 +379,11 @@ export class VzWatcher {
 
 			this.logger.log(`Watching ${dir} for changes`);
 
-			const watcher = watch(
-				dir,
-				{ recursive: true },
-				(eventType, filename) => {
-					if (shouldIgnorePath(filename)) return;
-					this.logger.log(
-						`Change detected: ${filename} (${eventType})`,
-					);
-					this.scheduleBuild();
-				},
-			);
+			const watcher = watch(dir, { recursive: true }, (eventType, filename) => {
+				if (shouldIgnorePath(filename)) return;
+				this.logger.log(`Change detected: ${filename} (${eventType})`);
+				this.scheduleBuild();
+			});
 
 			watcher.on("error", (err) => {
 				this.logger.error(`Watcher error for ${dir}: ${err}`);

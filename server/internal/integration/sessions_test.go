@@ -143,7 +143,7 @@ func TestCreateSession_NameFromLongPrompt(t *testing.T) {
 	agent := ts.CreateTestAgent(project, "Test Agent", "claude-code")
 	client := ts.AuthenticatedClient(user)
 
-	// Session name is derived from prompt, truncated to 50 chars
+	// Session name is derived from the full prompt text (no truncation)
 	longPrompt := "This is a very long prompt that should be truncated to fit within the 50 character limit for session names"
 	sessionID := "test-session-id-3"
 	resp := client.Post("/api/projects/"+project.ID+"/chat", map[string]interface{}{
@@ -164,7 +164,7 @@ func TestCreateSession_NameFromLongPrompt(t *testing.T) {
 
 	AssertStatus(t, resp, http.StatusOK)
 
-	// Verify session name was truncated
+	// Verify session name matches the full prompt
 	listResp := client.Get("/api/projects/" + project.ID + "/workspaces/" + workspace.ID + "/sessions")
 	defer listResp.Body.Close()
 
@@ -179,8 +179,8 @@ func TestCreateSession_NameFromLongPrompt(t *testing.T) {
 	}
 
 	name := result.Sessions[0]["name"].(string)
-	if len(name) > 53 { // 50 chars + "..."
-		t.Errorf("Expected name to be truncated, got length %d", len(name))
+	if name != longPrompt {
+		t.Errorf("Expected name to match prompt, got %q", name)
 	}
 }
 
