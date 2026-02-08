@@ -13,4 +13,5 @@ type ProviderConfigInfo struct {
 	DataDir      string `json:"data_dir,omitempty"`
 	MemoryMB     int    `json:"memory_mb"`
 	CPUCount     int    `json:"cpu_count"`
+	DataDiskGB   int    `json:"data_disk_gb"`
 }

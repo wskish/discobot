@@ -93,6 +93,9 @@ type Config struct {
 	// MemoryMB is the memory per VM in megabytes (0 = default).
 	MemoryMB int
 
+	// DataDiskGB is the size of the writable data disk per VM in gigabytes (0 = default).
+	DataDiskGB int
+
 	// HomeDir is the host directory to share with the VM via VirtioFS (read-only).
 	// If set, the directory is mounted at /host-home inside the guest.
 	HomeDir string

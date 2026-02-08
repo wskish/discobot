@@ -444,11 +444,24 @@ func (p *DockerProvider) Status() sandbox.ProviderStatus {
 		case DownloadStateReady:
 			status.State = "ready"
 			if kernelPath, baseDiskPath, ok := downloader.GetPaths(); ok {
+				memoryMB := defaultMemoryBytes / (1024 * 1024)
+				if p.cfg.VZMemoryMB > 0 {
+					memoryMB = p.cfg.VZMemoryMB
+				}
+				cpuCount := runtime.NumCPU()
+				if p.cfg.VZCPUCount > 0 {
+					cpuCount = p.cfg.VZCPUCount
+				}
+				dataDiskGB := defaultDataDiskGB
+				if p.cfg.VZDataDiskGB > 0 {
+					dataDiskGB = p.cfg.VZDataDiskGB
+				}
 				details.Config = &ProviderConfigInfo{
 					KernelPath:   kernelPath,
 					BaseDiskPath: baseDiskPath,
-					MemoryMB:     defaultMemoryBytes / (1024 * 1024),
-					CPUCount:     runtime.NumCPU(),
+					MemoryMB:     memoryMB,
+					CPUCount:     cpuCount,
+					DataDiskGB:   dataDiskGB,
 				}
 			}
 		case DownloadStateFailed:

@@ -36,6 +36,7 @@ func main() {
 		projectID     = flag.String("project", "test-project", "Project ID for the VM")
 		cpuCount      = flag.Int("cpus", 2, "Number of CPUs")
 		memoryMB      = flag.Int("memory", 2048, "Memory in MB")
+		dataDiskGB    = flag.Int("data-disk-gb", 100, "Data disk size in GB")
 	)
 
 	flag.Parse()
@@ -84,6 +85,7 @@ func main() {
 		IdleTimeout:   "0", // Never timeout for testing
 		CPUCount:      *cpuCount,
 		MemoryMB:      *memoryMB,
+		DataDiskGB:    *dataDiskGB,
 	}
 
 	// Create VM manager

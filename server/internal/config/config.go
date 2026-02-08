@@ -69,6 +69,9 @@ type Config struct {
 	VZBaseDiskPath  string // Path to base disk image to clone (optional)
 	VZImageRef      string // Docker registry image ref for auto-downloading kernel and rootfs
 	VZHomeDir       string // Host directory to share with VMs via VirtioFS (default: user home dir)
+	VZCPUCount      int    // Number of CPUs per VM (0 = all host CPUs)
+	VZMemoryMB      int    // Memory per VM in MB (0 = 8GB default)
+	VZDataDiskGB    int    // Data disk size per VM in GB (0 = 100GB default)
 
 	// Local provider settings
 	LocalProviderEnabled bool   // Enable local sandbox provider (default: false)
@@ -181,6 +184,9 @@ func Load() (*Config, error) {
 	cfg.VZImageRef = getEnv("VZ_IMAGE_REF", DefaultVZImage())
 	homeDir, _ := os.UserHomeDir()
 	cfg.VZHomeDir = getEnv("VZ_HOME_DIR", homeDir)
+	cfg.VZCPUCount = getEnvInt("VZ_CPU_COUNT", 0)
+	cfg.VZMemoryMB = getEnvInt("VZ_MEMORY_MB", 0)
+	cfg.VZDataDiskGB = getEnvInt("VZ_DATA_DISK_GB", 0)
 
 	// Local provider settings
 	cfg.LocalProviderEnabled = getEnvBool("LOCAL_PROVIDER_ENABLED", false)
