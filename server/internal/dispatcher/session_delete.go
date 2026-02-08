@@ -1,10 +1,11 @@
-package jobs
+package dispatcher
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
 
+	"github.com/obot-platform/discobot/server/internal/jobs"
 	"github.com/obot-platform/discobot/server/internal/model"
 	"github.com/obot-platform/discobot/server/internal/service"
 )
@@ -20,8 +21,8 @@ func NewSessionDeleteExecutor(sessionSvc *service.SessionService) *SessionDelete
 }
 
 // Type returns the job type this executor handles.
-func (e *SessionDeleteExecutor) Type() JobType {
-	return JobTypeSessionDelete
+func (e *SessionDeleteExecutor) Type() jobs.JobType {
+	return jobs.JobTypeSessionDelete
 }
 
 // Execute processes the job.
@@ -30,7 +31,7 @@ func (e *SessionDeleteExecutor) Execute(ctx context.Context, job *model.Job) err
 		return fmt.Errorf("session service not available")
 	}
 
-	var payload SessionDeletePayload
+	var payload jobs.SessionDeletePayload
 	if err := json.Unmarshal(job.Payload, &payload); err != nil {
 		return fmt.Errorf("invalid payload: %w", err)
 	}

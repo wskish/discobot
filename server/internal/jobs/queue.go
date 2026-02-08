@@ -44,11 +44,14 @@ const (
 // ErrJobAlreadyExists is returned when a job for the resource already exists.
 var ErrJobAlreadyExists = errors.New("job already exists for resource")
 
-// EnqueueSessionInit enqueues a session_init job.
-// Returns ErrJobAlreadyExists if a pending/running job for this session already exists.
-func (q *Queue) EnqueueSessionInit(ctx context.Context, projectID, sessionID, workspaceID, agentID string) error {
-	// Check for existing pending/running job for this session
-	exists, err := q.store.HasActiveJobForResource(ctx, ResourceTypeSession, sessionID)
+// Enqueue enqueues a job from the given payload.
+// The payload determines the job type, resource key for deduplication,
+// and optionally the priority and max attempts.
+// Returns ErrJobAlreadyExists if a pending/running job for this resource already exists.
+func (q *Queue) Enqueue(ctx context.Context, payload JobPayload) error {
+	resType, resID := payload.ResourceKey()
+
+	exists, err := q.store.HasActiveJobForResource(ctx, resType, resID)
 	if err != nil {
 		return err
 	}
@@ -56,139 +59,29 @@ func (q *Queue) EnqueueSessionInit(ctx context.Context, projectID, sessionID, wo
 		return ErrJobAlreadyExists
 	}
 
-	payload, err := json.Marshal(SessionInitPayload{
-		ProjectID:   projectID,
-		SessionID:   sessionID,
-		WorkspaceID: workspaceID,
-		AgentID:     agentID,
-	})
+	data, err := json.Marshal(payload)
 	if err != nil {
 		return err
 	}
 
-	resourceType := ResourceTypeSession
+	priority := 10 // default
+	if p, ok := payload.(Prioritized); ok {
+		priority = p.Priority()
+	}
+
+	maxAttempts := q.cfg.JobMaxAttempts
+	if m, ok := payload.(MaxAttempter); ok {
+		maxAttempts = m.MaxAttempts()
+	}
+
 	job := &model.Job{
-		Type:         string(JobTypeSessionInit),
-		Payload:      payload,
+		Type:         string(payload.JobType()),
+		Payload:      data,
 		Status:       string(model.JobStatusPending),
-		MaxAttempts:  q.cfg.JobMaxAttempts,
-		Priority:     10, // Higher priority for session init
-		ResourceType: &resourceType,
-		ResourceID:   &sessionID,
-	}
-
-	if err := q.store.CreateJob(ctx, job); err != nil {
-		return err
-	}
-	q.notify()
-	return nil
-}
-
-// EnqueueWorkspaceInit enqueues a workspace_init job.
-// Returns ErrJobAlreadyExists if a pending/running job for this workspace already exists.
-func (q *Queue) EnqueueWorkspaceInit(ctx context.Context, projectID, workspaceID string) error {
-	// Check for existing pending/running job for this workspace
-	exists, err := q.store.HasActiveJobForResource(ctx, ResourceTypeWorkspace, workspaceID)
-	if err != nil {
-		return err
-	}
-	if exists {
-		return ErrJobAlreadyExists
-	}
-
-	payload, err := json.Marshal(WorkspaceInitPayload{
-		ProjectID:   projectID,
-		WorkspaceID: workspaceID,
-	})
-	if err != nil {
-		return err
-	}
-
-	resourceType := ResourceTypeWorkspace
-	job := &model.Job{
-		Type:         string(JobTypeWorkspaceInit),
-		Payload:      payload,
-		Status:       string(model.JobStatusPending),
-		MaxAttempts:  q.cfg.JobMaxAttempts,
-		Priority:     10, // Higher priority for workspace init
-		ResourceType: &resourceType,
-		ResourceID:   &workspaceID,
-	}
-
-	if err := q.store.CreateJob(ctx, job); err != nil {
-		return err
-	}
-	q.notify()
-	return nil
-}
-
-// EnqueueSessionDelete enqueues a session_delete job.
-// Returns ErrJobAlreadyExists if a pending/running job for this session already exists.
-func (q *Queue) EnqueueSessionDelete(ctx context.Context, projectID, sessionID string) error {
-	// Check for existing pending/running job for this session
-	exists, err := q.store.HasActiveJobForResource(ctx, ResourceTypeSession, sessionID)
-	if err != nil {
-		return err
-	}
-	if exists {
-		return ErrJobAlreadyExists
-	}
-
-	payload, err := json.Marshal(SessionDeletePayload{
-		ProjectID: projectID,
-		SessionID: sessionID,
-	})
-	if err != nil {
-		return err
-	}
-
-	resourceType := ResourceTypeSession
-	job := &model.Job{
-		Type:         string(JobTypeSessionDelete),
-		Payload:      payload,
-		Status:       string(model.JobStatusPending),
-		MaxAttempts:  q.cfg.JobMaxAttempts,
-		Priority:     5, // Lower priority than init - deletion can wait
-		ResourceType: &resourceType,
-		ResourceID:   &sessionID,
-	}
-
-	if err := q.store.CreateJob(ctx, job); err != nil {
-		return err
-	}
-	q.notify()
-	return nil
-}
-
-// EnqueueSessionCommit enqueues a session_commit job.
-// Returns ErrJobAlreadyExists if a pending/running job for this session already exists.
-func (q *Queue) EnqueueSessionCommit(ctx context.Context, projectID, sessionID string) error {
-	// Check for existing pending/running job for this session
-	exists, err := q.store.HasActiveJobForResource(ctx, ResourceTypeSession, sessionID)
-	if err != nil {
-		return err
-	}
-	if exists {
-		return ErrJobAlreadyExists
-	}
-
-	payload, err := json.Marshal(SessionCommitPayload{
-		ProjectID: projectID,
-		SessionID: sessionID,
-	})
-	if err != nil {
-		return err
-	}
-
-	resourceType := ResourceTypeSession
-	job := &model.Job{
-		Type:         string(JobTypeSessionCommit),
-		Payload:      payload,
-		Status:       string(model.JobStatusPending),
-		MaxAttempts:  1,  // Only one attempt for commit jobs
-		Priority:     10, // Higher priority - user is waiting
-		ResourceType: &resourceType,
-		ResourceID:   &sessionID,
+		MaxAttempts:  maxAttempts,
+		Priority:     priority,
+		ResourceType: &resType,
+		ResourceID:   &resID,
 	}
 
 	if err := q.store.CreateJob(ctx, job); err != nil {
