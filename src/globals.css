@@ -36,6 +36,55 @@ body {
 	display: none;
 }
 
+/* macOS-style scrollbars */
+* {
+	/* Firefox */
+	scrollbar-width: thin;
+	scrollbar-color: oklch(0.5 0 0 / 0.3) transparent;
+}
+
+.dark * {
+	scrollbar-color: oklch(0.6 0 0 / 0.3) transparent;
+}
+
+/* Webkit browsers (Chrome, Safari, Edge) */
+*::-webkit-scrollbar {
+	width: 10px;
+	height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+	background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+	background: oklch(0.5 0 0 / 0.3);
+	border-radius: 5px;
+	border: 2px solid transparent;
+	background-clip: padding-box;
+	transition: background-color 0.2s ease;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+	background: oklch(0.4 0 0 / 0.5);
+	background-clip: padding-box;
+}
+
+.dark *::-webkit-scrollbar-thumb {
+	background: oklch(0.6 0 0 / 0.3);
+	background-clip: padding-box;
+}
+
+.dark *::-webkit-scrollbar-thumb:hover {
+	background: oklch(0.7 0 0 / 0.5);
+	background-clip: padding-box;
+}
+
+/* Scrollbar corner (where horizontal and vertical meet) */
+*::-webkit-scrollbar-corner {
+	background: transparent;
+}
+
 /* IDE-inspired dark theme with neutral grays */
 :root {
 	--background: oklch(0.98 0 0);
