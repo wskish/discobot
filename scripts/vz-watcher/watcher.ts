@@ -128,7 +128,7 @@ async function isGzipped(filePath: string): Promise<boolean> {
  * Uses a temp file + atomic rename to avoid partial writes.
  */
 async function gunzipFile(src: string, dest: string): Promise<void> {
-	const tmp = dest + ".tmp";
+	const tmp = `${dest}.tmp`;
 	await pipeline(createReadStream(src), createGunzip(), createWriteStream(tmp));
 	await rename(tmp, dest);
 }

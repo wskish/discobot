@@ -205,5 +205,5 @@ body {
 
 /* Terminal padding - adds space around terminal content */
 .xterm-screen {
-	padding: 8px !important;
+	padding: 8px;
 }
