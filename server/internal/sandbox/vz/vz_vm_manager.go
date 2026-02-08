@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -24,11 +25,8 @@ const (
 	// dockerSockPort is the VSOCK port for accessing Docker socket inside the VM.
 	dockerSockPort = 2375
 
-	// defaultCPUCount is the default number of CPUs for VMs.
-	defaultCPUCount = 2
-
-	// defaultMemoryBytes is the default memory for VMs (2GB).
-	defaultMemoryBytes = 2 * 1024 * 1024 * 1024
+	// defaultMemoryBytes is the default memory for VMs (8GB).
+	defaultMemoryBytes = 8 * 1024 * 1024 * 1024
 )
 
 // vzProjectVM implements vm.ProjectVM for Apple Virtualization framework.
@@ -456,8 +454,8 @@ func (m *VMManager) buildAndStartVM(rootDiskPath, dataDiskPath, _ string) (*vz.V
 		return nil, nil, nil, nil, fmt.Errorf("failed to create boot loader: %w", err)
 	}
 
-	// Determine CPU and memory
-	cpuCount := uint(defaultCPUCount)
+	// Determine CPU and memory (default to all host CPUs)
+	cpuCount := uint(runtime.NumCPU())
 	if m.config.CPUCount > 0 {
 		cpuCount = uint(m.config.CPUCount)
 	}

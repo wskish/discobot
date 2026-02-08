@@ -8,6 +8,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -446,8 +447,8 @@ func (p *DockerProvider) Status() sandbox.ProviderStatus {
 				details.Config = &ProviderConfigInfo{
 					KernelPath:   kernelPath,
 					BaseDiskPath: baseDiskPath,
-					MemoryMB:     2048, // Default values
-					CPUCount:     2,
+					MemoryMB:     defaultMemoryBytes / (1024 * 1024),
+					CPUCount:     runtime.NumCPU(),
 				}
 			}
 		case DownloadStateFailed:
