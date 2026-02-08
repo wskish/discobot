@@ -27,6 +27,9 @@ const (
 
 	// defaultMemoryBytes is the default memory for VMs (8GB).
 	defaultMemoryBytes = 8 * 1024 * 1024 * 1024
+
+	// defaultDataDiskGB is the default data disk size for VMs (100GB).
+	defaultDataDiskGB = 100
 )
 
 // vzProjectVM implements vm.ProjectVM for Apple Virtualization framework.
@@ -315,7 +318,11 @@ func (m *VMManager) createProjectVM(ctx context.Context, projectID, sessionID st
 
 	// Create data disk if it doesn't exist
 	if _, err := os.Stat(dataDiskPath); os.IsNotExist(err) {
-		dataDiskSize := int64(20 * 1024 * 1024 * 1024) // 20GB data disk
+		diskGB := defaultDataDiskGB
+		if m.config.DataDiskGB > 0 {
+			diskGB = m.config.DataDiskGB
+		}
+		dataDiskSize := int64(diskGB) * 1024 * 1024 * 1024
 		if err := vz.CreateDiskImage(dataDiskPath, dataDiskSize); err != nil {
 			os.Remove(diskPath)
 			return nil, fmt.Errorf("failed to create data disk: %w", err)

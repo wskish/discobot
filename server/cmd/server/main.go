@@ -132,6 +132,9 @@ func main() {
 			BaseDiskPath:  cfg.VZBaseDiskPath,
 			ImageRef:      cfg.VZImageRef,
 			HomeDir:       cfg.VZHomeDir,
+			CPUCount:      cfg.VZCPUCount,
+			MemoryMB:      cfg.VZMemoryMB,
+			DataDiskGB:    cfg.VZDataDiskGB,
 		}
 		if vzProvider, vzErr := vz.NewProvider(cfg, vzCfg, sessionProjectResolver); vzErr != nil {
 			log.Printf("Warning: Failed to initialize VZ sandbox provider: %v", vzErr)
