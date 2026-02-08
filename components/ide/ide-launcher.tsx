@@ -30,9 +30,10 @@ interface IDEConfig {
  */
 const IDE_CONFIGS: IDEConfig[] = [
 	{
-		id: "vscode",
-		name: "VS Code",
-		urlTemplate: "vscode://vscode-remote/ssh-remote+{user}@{host}:{port}{path}",
+		id: "zed",
+		name: "Zed",
+		// Zed supports full SSH connection string with optional port
+		urlTemplate: "zed://ssh/{user}@{host}:{port}{path}",
 	},
 	{
 		id: "cursor",
@@ -40,17 +41,9 @@ const IDE_CONFIGS: IDEConfig[] = [
 		urlTemplate: "cursor://vscode-remote/ssh-remote+{user}@{host}:{port}{path}",
 	},
 	{
-		id: "jetbrains",
-		name: "JetBrains",
-		// JetBrains Gateway uses separate parameters for host, user, port, and path
-		urlTemplate:
-			"jetbrains-gateway://connect#projectPath={path}&host={host}&port={port}&user={user}&type=ssh",
-	},
-	{
-		id: "zed",
-		name: "Zed",
-		// Zed supports full SSH connection string with optional port
-		urlTemplate: "zed://ssh/{user}@{host}:{port}{path}",
+		id: "vscode",
+		name: "VS Code",
+		urlTemplate: "vscode://vscode-remote/ssh-remote+{user}@{host}:{port}{path}",
 	},
 ];
 
@@ -101,12 +94,12 @@ export function IDELauncher({ sessionId, className }: IDELauncherProps) {
 	// Use the preferences hook for IDE selection persistence
 	const { getPreference, setPreference } = usePreferences();
 
-	// Get selected IDE from preferences, default to vscode
+	// Get selected IDE from preferences, default to zed
 	const storedIDE = getPreference(PREFERENCE_KEY);
 	const selectedIDE =
 		storedIDE && IDE_CONFIGS.some((c) => c.id === storedIDE)
 			? storedIDE
-			: "vscode";
+			: "zed";
 
 	// Save preference when changed
 	const handleIDEChange = React.useCallback(
