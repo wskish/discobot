@@ -5,6 +5,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/obot-platform/discobot/server/internal/jobs"
 	"github.com/obot-platform/discobot/server/internal/middleware"
 )
 
@@ -75,7 +76,7 @@ func (h *Handler) CreateWorkspace(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Enqueue workspace initialization job
-	if err := h.jobQueue.EnqueueWorkspaceInit(r.Context(), projectID, workspace.ID); err != nil {
+	if err := h.jobQueue.Enqueue(r.Context(), jobs.WorkspaceInitPayload{ProjectID: projectID, WorkspaceID: workspace.ID}); err != nil {
 		h.Error(w, http.StatusInternalServerError, "Failed to enqueue workspace initialization")
 		return
 	}

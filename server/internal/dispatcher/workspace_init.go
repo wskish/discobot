@@ -1,10 +1,11 @@
-package jobs
+package dispatcher
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
 
+	"github.com/obot-platform/discobot/server/internal/jobs"
 	"github.com/obot-platform/discobot/server/internal/model"
 	"github.com/obot-platform/discobot/server/internal/service"
 )
@@ -20,8 +21,8 @@ func NewWorkspaceInitExecutor(workspaceSvc *service.WorkspaceService) *Workspace
 }
 
 // Type returns the job type this executor handles.
-func (e *WorkspaceInitExecutor) Type() JobType {
-	return JobTypeWorkspaceInit
+func (e *WorkspaceInitExecutor) Type() jobs.JobType {
+	return jobs.JobTypeWorkspaceInit
 }
 
 // Execute processes the job.
@@ -30,7 +31,7 @@ func (e *WorkspaceInitExecutor) Execute(ctx context.Context, job *model.Job) err
 		return fmt.Errorf("workspace service not available")
 	}
 
-	var payload WorkspaceInitPayload
+	var payload jobs.WorkspaceInitPayload
 	if err := json.Unmarshal(job.Payload, &payload); err != nil {
 		return fmt.Errorf("invalid payload: %w", err)
 	}

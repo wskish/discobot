@@ -1,10 +1,11 @@
-package jobs
+package dispatcher
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
 
+	"github.com/obot-platform/discobot/server/internal/jobs"
 	"github.com/obot-platform/discobot/server/internal/model"
 	"github.com/obot-platform/discobot/server/internal/service"
 )
@@ -20,8 +21,8 @@ func NewSessionInitExecutor(sessionSvc *service.SessionService) *SessionInitExec
 }
 
 // Type returns the job type this executor handles.
-func (e *SessionInitExecutor) Type() JobType {
-	return JobTypeSessionInit
+func (e *SessionInitExecutor) Type() jobs.JobType {
+	return jobs.JobTypeSessionInit
 }
 
 // Execute processes the job.
@@ -30,7 +31,7 @@ func (e *SessionInitExecutor) Execute(ctx context.Context, job *model.Job) error
 		return fmt.Errorf("session service not available")
 	}
 
-	var payload SessionInitPayload
+	var payload jobs.SessionInitPayload
 	if err := json.Unmarshal(job.Payload, &payload); err != nil {
 		return fmt.Errorf("invalid payload: %w", err)
 	}
