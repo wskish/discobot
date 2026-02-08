@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/obot-platform/discobot/server/internal/config"
+	"github.com/obot-platform/discobot/server/internal/events"
+	"github.com/obot-platform/discobot/server/internal/jobs"
 	"github.com/obot-platform/discobot/server/internal/model"
 	"github.com/obot-platform/discobot/server/internal/sandbox"
 	"github.com/obot-platform/discobot/server/internal/store"
@@ -16,18 +18,204 @@ import (
 
 // SandboxService manages sandbox lifecycle for sessions.
 type SandboxService struct {
-	store    *store.Store
-	provider sandbox.Provider
-	cfg      *config.Config
+	store              *store.Store
+	provider           sandbox.Provider
+	cfg                *config.Config
+	credentialFetcher  CredentialFetcher
+	eventBroker        *events.Broker
+	jobEnqueuer        JobEnqueuer
+	sessionInitializer SessionInitializer
 }
 
 // NewSandboxService creates a new sandbox service.
-func NewSandboxService(s *store.Store, p sandbox.Provider, cfg *config.Config) *SandboxService {
+func NewSandboxService(s *store.Store, p sandbox.Provider, cfg *config.Config, credFetcher CredentialFetcher, eventBroker *events.Broker, jobEnqueuer JobEnqueuer) *SandboxService {
 	return &SandboxService{
-		store:    s,
-		provider: p,
-		cfg:      cfg,
+		store:             s,
+		provider:          p,
+		cfg:               cfg,
+		credentialFetcher: credFetcher,
+		eventBroker:       eventBroker,
+		jobEnqueuer:       jobEnqueuer,
 	}
+}
+
+// SetSessionInitializer sets the session initializer (post-construction to break circular dependency).
+func (s *SandboxService) SetSessionInitializer(init SessionInitializer) {
+	s.sessionInitializer = init
+}
+
+// GetClient ensures the sandbox is ready and returns a session-bound client.
+func (s *SandboxService) GetClient(ctx context.Context, sessionID string) (*SessionClient, error) {
+	if err := s.ensureSandboxReady(ctx, sessionID); err != nil {
+		return nil, err
+	}
+
+	inner := NewSandboxChatClient(s.provider, s.credentialFetcher)
+	return &SessionClient{
+		sessionID:  sessionID,
+		inner:      inner,
+		sandboxSvc: s,
+	}, nil
+}
+
+// ensureSandboxReady checks the session state from the database and ensures
+// the sandbox is ready. For states like "stopped" or "error", it triggers reconciliation.
+// For "initializing" states, it waits briefly then reconciles if still not ready.
+func (s *SandboxService) ensureSandboxReady(ctx context.Context, sessionID string) error {
+	sess, err := s.store.GetSessionByID(ctx, sessionID)
+	if err != nil {
+		return fmt.Errorf("session not found: %w", err)
+	}
+
+	switch sess.Status {
+	case model.SessionStatusReady, model.SessionStatusRunning:
+		// Session status looks good — verify the container is actually running.
+		if err := s.ensureContainerRunning(ctx, sessionID); err != nil {
+			log.Printf("Session %s status is %s but container not running (%v), reconciling", sessionID, sess.Status, err)
+			return s.ReconcileSandbox(ctx, sessionID)
+		}
+		return nil
+	case model.SessionStatusStopped, model.SessionStatusError:
+		return s.ReconcileSandbox(ctx, sessionID)
+	case model.SessionStatusInitializing, model.SessionStatusReinitializing,
+		model.SessionStatusCloning, model.SessionStatusPullingImage, model.SessionStatusCreatingSandbox:
+		if err := s.waitForSessionReady(ctx, sessionID); err != nil {
+			log.Printf("Session %s wait failed (%v), attempting reconciliation", sessionID, err)
+			return s.ReconcileSandbox(ctx, sessionID)
+		}
+		return nil
+	default:
+		return s.ReconcileSandbox(ctx, sessionID)
+	}
+}
+
+// ensureContainerRunning checks the sandbox provider and starts/creates the container if needed.
+// Returns an error only if the container cannot be brought to a running state.
+func (s *SandboxService) ensureContainerRunning(ctx context.Context, sessionID string) error {
+	sb, err := s.provider.Get(ctx, sessionID)
+	if err == sandbox.ErrNotFound {
+		return s.CreateForSession(ctx, sessionID)
+	}
+	if err != nil {
+		return fmt.Errorf("failed to get sandbox status: %w", err)
+	}
+
+	switch sb.Status {
+	case sandbox.StatusRunning:
+		return nil
+	case sandbox.StatusCreated, sandbox.StatusStopped:
+		return s.provider.Start(ctx, sessionID)
+	case sandbox.StatusFailed:
+		_ = s.provider.Remove(ctx, sessionID)
+		return s.CreateForSession(ctx, sessionID)
+	default:
+		return fmt.Errorf("unknown sandbox status: %s", sb.Status)
+	}
+}
+
+// waitForSessionReady polls the session status until it reaches a terminal state.
+func (s *SandboxService) waitForSessionReady(ctx context.Context, sessionID string) error {
+	const (
+		pollInterval = 500 * time.Millisecond
+		maxWait      = 30 * time.Second
+	)
+
+	deadline := time.Now().Add(maxWait)
+	ticker := time.NewTicker(pollInterval)
+	defer ticker.Stop()
+
+	for {
+		sess, err := s.store.GetSessionByID(ctx, sessionID)
+		if err != nil {
+			return fmt.Errorf("session not found: %w", err)
+		}
+
+		switch sess.Status {
+		case model.SessionStatusReady:
+			return nil
+		case model.SessionStatusError, model.SessionStatusStopped:
+			return fmt.Errorf("session in %s state", sess.Status)
+		}
+
+		if time.Now().After(deadline) {
+			return fmt.Errorf("timeout waiting for session to be ready (status: %s)", sess.Status)
+		}
+
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ticker.C:
+		}
+	}
+}
+
+// ReconcileSandbox reinitializes the sandbox by enqueuing a job and waiting for completion.
+func (s *SandboxService) ReconcileSandbox(ctx context.Context, sessionID string) error {
+	log.Printf("Reconciling sandbox for session %s", sessionID)
+
+	// Look up projectID from session
+	sess, err := s.store.GetSessionByID(ctx, sessionID)
+	if err != nil {
+		return fmt.Errorf("failed to get session: %w", err)
+	}
+	projectID := sess.ProjectID
+
+	// Update status to reinitializing
+	if err := s.store.UpdateSessionStatus(ctx, sessionID, model.SessionStatusReinitializing, nil); err != nil {
+		log.Printf("Warning: failed to update session status for %s: %v", sessionID, err)
+	}
+
+	// Emit SSE event for status change
+	if s.eventBroker != nil {
+		if err := s.eventBroker.PublishSessionUpdated(ctx, projectID, sessionID, model.SessionStatusReinitializing, ""); err != nil {
+			log.Printf("Warning: failed to publish session update event: %v", err)
+		}
+	}
+
+	// If job enqueuer is not available (e.g., in tests), fall back to direct initialization
+	if s.jobEnqueuer == nil {
+		log.Printf("Job enqueuer not available, falling back to direct initialization for session %s", sessionID)
+		if s.sessionInitializer == nil {
+			return fmt.Errorf("no session initializer available for session %s", sessionID)
+		}
+		if err := s.sessionInitializer.Initialize(ctx, sessionID); err != nil {
+			return fmt.Errorf("failed to reinitialize sandbox: %w", err)
+		}
+		return nil
+	}
+
+	// Determine agent ID for job
+	agentID := ""
+	if sess.AgentID != nil {
+		agentID = *sess.AgentID
+	}
+
+	// Enqueue initialization job
+	err = s.jobEnqueuer.Enqueue(ctx, jobs.SessionInitPayload{
+		ProjectID:   projectID,
+		SessionID:   sessionID,
+		WorkspaceID: sess.WorkspaceID,
+		AgentID:     agentID,
+	})
+	if err != nil {
+		log.Printf("Note: session init job may already exist for %s: %v", sessionID, err)
+	}
+
+	// Wait for job to complete
+	waitCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	defer cancel()
+
+	status, errorMsg, err := events.WaitForJobCompletion(waitCtx, s.eventBroker, s.store, projectID, "session", sessionID)
+	if err != nil {
+		return fmt.Errorf("failed to wait for job completion: %w", err)
+	}
+
+	if status == "failed" {
+		return fmt.Errorf("session initialization failed: %s", errorMsg)
+	}
+
+	log.Printf("Session %s initialized successfully via job", sessionID)
+	return nil
 }
 
 // GetProviderForSession returns the provider name for the given session based on its workspace.
@@ -134,34 +322,6 @@ func (s *SandboxService) GetForSession(ctx context.Context, sessionID string) (*
 	return s.provider.Get(ctx, sessionID)
 }
 
-// EnsureRunning ensures a sandbox is running for the session.
-// If the sandbox doesn't exist or is stopped, it will be created/started.
-func (s *SandboxService) EnsureRunning(ctx context.Context, sessionID string) error {
-	sb, err := s.provider.Get(ctx, sessionID)
-	if err == sandbox.ErrNotFound {
-		// Sandbox doesn't exist, create it
-		return s.CreateForSession(ctx, sessionID)
-	}
-	if err != nil {
-		return fmt.Errorf("failed to get sandbox status: %w", err)
-	}
-
-	switch sb.Status {
-	case sandbox.StatusRunning:
-		// Already running
-		return nil
-	case sandbox.StatusCreated, sandbox.StatusStopped:
-		// Start it
-		return s.provider.Start(ctx, sessionID)
-	case sandbox.StatusFailed:
-		// Remove and recreate (preserve volumes for potential data recovery)
-		_ = s.provider.Remove(ctx, sessionID)
-		return s.CreateForSession(ctx, sessionID)
-	default:
-		return fmt.Errorf("unknown sandbox status: %s", sb.Status)
-	}
-}
-
 // Exec runs a non-interactive command in the session's sandbox.
 func (s *SandboxService) Exec(ctx context.Context, sessionID string, cmd []string, opts sandbox.ExecOptions) (*sandbox.ExecResult, error) {
 	return s.provider.Exec(ctx, sessionID, cmd, opts)
@@ -176,18 +336,6 @@ func (s *SandboxService) Attach(ctx context.Context, sessionID string, rows, col
 		User: user,
 	}
 	return s.provider.Attach(ctx, sessionID, opts)
-}
-
-// GetUserInfo retrieves the default user info from the sandbox.
-// Returns username, UID, and GID for terminal sessions.
-func (s *SandboxService) GetUserInfo(ctx context.Context, sessionID string) (username string, uid, gid int, err error) {
-	// Create ad-hoc client without credential fetcher - user info doesn't need credentials
-	client := NewSandboxChatClient(s.provider, nil)
-	userInfo, err := client.GetUserInfo(ctx, sessionID)
-	if err != nil {
-		return "", 0, 0, err
-	}
-	return userInfo.Username, userInfo.UID, userInfo.GID, nil
 }
 
 // StopForSession stops the sandbox for a session.

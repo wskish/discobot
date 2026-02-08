@@ -31,9 +31,9 @@ const (
 // It looks up the session to get the project ID, then fetches decrypted credentials.
 type CredentialFetcher func(ctx context.Context, sessionID string) ([]CredentialEnvVar, error)
 
-// makeCredentialFetcher creates a CredentialFetcher that looks up credentials for a session.
+// MakeCredentialFetcher creates a CredentialFetcher that looks up credentials for a session.
 // Returns nil if credSvc is nil (credentials will not be fetched).
-func makeCredentialFetcher(s *store.Store, credSvc *CredentialService) CredentialFetcher {
+func MakeCredentialFetcher(s *store.Store, credSvc *CredentialService) CredentialFetcher {
 	if credSvc == nil {
 		return nil
 	}

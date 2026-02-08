@@ -13,9 +13,9 @@ import (
 
 	"github.com/obot-platform/discobot/server/internal/events"
 	"github.com/obot-platform/discobot/server/internal/git"
+	"github.com/obot-platform/discobot/server/internal/jobs"
 	"github.com/obot-platform/discobot/server/internal/model"
 	"github.com/obot-platform/discobot/server/internal/sandbox"
-	"github.com/obot-platform/discobot/server/internal/sandbox/sandboxapi"
 	"github.com/obot-platform/discobot/server/internal/store"
 )
 
@@ -75,30 +75,21 @@ type FileNode struct {
 
 // SessionService handles session operations
 type SessionService struct {
-	store             *store.Store
-	gitService        *GitService
-	credentialService *CredentialService
-	sandboxProvider   sandbox.Provider
-	sandboxClient     *SandboxChatClient
-	eventBroker       *events.Broker
-	jobEnqueuer       SessionInitEnqueuer
+	store           *store.Store
+	gitService      *GitService
+	sandboxProvider sandbox.Provider
+	sandboxService  *SandboxService
+	eventBroker     *events.Broker
 }
 
 // NewSessionService creates a new session service
-func NewSessionService(s *store.Store, gitSvc *GitService, credSvc *CredentialService, sandboxProv sandbox.Provider, eventBroker *events.Broker, jobEnqueuer SessionInitEnqueuer) *SessionService {
-	var client *SandboxChatClient
-	if sandboxProv != nil {
-		fetcher := makeCredentialFetcher(s, credSvc)
-		client = NewSandboxChatClient(sandboxProv, fetcher)
-	}
+func NewSessionService(s *store.Store, gitSvc *GitService, sandboxProv sandbox.Provider, sandboxService *SandboxService, eventBroker *events.Broker) *SessionService {
 	return &SessionService{
-		store:             s,
-		gitService:        gitSvc,
-		credentialService: credSvc,
-		sandboxProvider:   sandboxProv,
-		sandboxClient:     client,
-		jobEnqueuer:       jobEnqueuer,
-		eventBroker:       eventBroker,
+		store:           s,
+		gitService:      gitSvc,
+		sandboxProvider: sandboxProv,
+		sandboxService:  sandboxService,
+		eventBroker:     eventBroker,
 	}
 }
 
@@ -230,12 +221,6 @@ func (s *SessionService) UpdateSession(ctx context.Context, sessionID, name stri
 	return s.mapSession(sess), nil
 }
 
-// JobEnqueuer is an interface for enqueueing session jobs.
-type JobEnqueuer interface {
-	EnqueueSessionDelete(ctx context.Context, projectID, sessionID string) error
-	EnqueueSessionCommit(ctx context.Context, projectID, sessionID string) error
-}
-
 // DeleteSession initiates async deletion of a session.
 // It sets the session status to "removing", emits an SSE event, and enqueues a deletion job.
 func (s *SessionService) DeleteSession(ctx context.Context, projectID, sessionID string, jobQueue JobEnqueuer) error {
@@ -264,7 +249,7 @@ func (s *SessionService) DeleteSession(ctx context.Context, projectID, sessionID
 	}
 
 	// Enqueue deletion job
-	if err := jobQueue.EnqueueSessionDelete(ctx, projectID, sessionID); err != nil {
+	if err := jobQueue.Enqueue(ctx, jobs.SessionDeletePayload{ProjectID: projectID, SessionID: sessionID}); err != nil {
 		// If job enqueueing fails, log but don't fail - the session is marked as removing
 		// and can be cleaned up later by reconciliation
 		log.Printf("Failed to enqueue session delete job for %s: %v", sessionID, err)
@@ -310,7 +295,7 @@ func (s *SessionService) CommitSession(ctx context.Context, projectID, sessionID
 	s.publishCommitStatusChanged(ctx, projectID, sessionID, model.CommitStatusPending)
 
 	// Enqueue commit job
-	if err := jobQueue.EnqueueSessionCommit(ctx, projectID, sessionID); err != nil {
+	if err := jobQueue.Enqueue(ctx, jobs.SessionCommitPayload{ProjectID: projectID, SessionID: sessionID}); err != nil {
 		// If job enqueueing fails, revert commit status
 		log.Printf("Failed to enqueue session commit job for %s: %v", sessionID, err)
 		sess.CommitStatus = model.CommitStatusNone
@@ -803,17 +788,19 @@ func (s *SessionService) syncBaseCommit(ctx context.Context, projectID string, s
 // tryApplyExistingPatches checks if the agent already has patches ready and applies them.
 // This is called optimistically before sending /discobot-commit in case patches are already available.
 func (s *SessionService) tryApplyExistingPatches(ctx context.Context, projectID string, sess *model.Session) error {
-	if s.sandboxClient == nil {
+	if s.sandboxService == nil {
 		return nil
 	}
 
 	log.Printf("Session %s: checking if agent has existing patches for commit %s", sess.ID, *sess.BaseCommit)
 
-	// Wrap the GetCommits call with sandbox reconciliation
-	commitsResp, err := withSessionSandboxReconciliation(ctx, s, projectID, sess.ID, func() (*sandboxapi.CommitsResponse, error) {
-		return s.sandboxClient.GetCommits(ctx, sess.ID, *sess.BaseCommit)
-	})
+	client, err := s.sandboxService.GetClient(ctx, sess.ID)
+	if err != nil {
+		log.Printf("Session %s: no existing patches available (error: %v), continuing with prompt", sess.ID, err)
+		return nil
+	}
 
+	commitsResp, err := client.GetCommits(ctx, *sess.BaseCommit)
 	if err != nil {
 		log.Printf("Session %s: no existing patches available (error: %v), continuing with prompt", sess.ID, err)
 		return nil
@@ -830,8 +817,8 @@ func (s *SessionService) tryApplyExistingPatches(ctx context.Context, projectID 
 
 // sendCommitPrompt sends the /discobot-commit command to the agent.
 func (s *SessionService) sendCommitPrompt(ctx context.Context, projectID string, sess *model.Session) error {
-	if s.sandboxClient == nil {
-		s.setCommitFailed(ctx, projectID, sess, "Sandbox client not available")
+	if s.sandboxService == nil {
+		s.setCommitFailed(ctx, projectID, sess, "Sandbox service not available")
 		return nil
 	}
 
@@ -847,16 +834,18 @@ func (s *SessionService) sendCommitPrompt(ctx context.Context, projectID string,
 	// Get git user config from the server
 	gitUserName, gitUserEmail := s.gitService.GetUserConfig(ctx)
 
-	// Send with git config in request options - wrapped with sandbox reconciliation
 	opts := &RequestOptions{
 		GitUserName:  gitUserName,
 		GitUserEmail: gitUserEmail,
 	}
 
-	streamCh, err := withSessionSandboxReconciliation(ctx, s, projectID, sess.ID, func() (<-chan SSELine, error) {
-		return s.sandboxClient.SendMessages(ctx, sess.ID, messages, opts)
-	})
+	client, err := s.sandboxService.GetClient(ctx, sess.ID)
+	if err != nil {
+		s.setCommitFailed(ctx, projectID, sess, fmt.Sprintf("Failed to get sandbox client: %v", err))
+		return nil
+	}
 
+	streamCh, err := client.SendMessages(ctx, messages, opts)
 	if err != nil {
 		s.setCommitFailed(ctx, projectID, sess, fmt.Sprintf("Failed to send commit message to agent: %v", err))
 		return nil
@@ -881,18 +870,20 @@ func (s *SessionService) sendCommitPrompt(ctx context.Context, projectID string,
 
 // fetchAndApplyPatches fetches patches from the agent and applies them to the workspace.
 func (s *SessionService) fetchAndApplyPatches(ctx context.Context, projectID string, sess *model.Session) error {
-	if s.sandboxClient == nil {
-		s.setCommitFailed(ctx, projectID, sess, "Sandbox client not available")
+	if s.sandboxService == nil {
+		s.setCommitFailed(ctx, projectID, sess, "Sandbox service not available")
 		return nil
 	}
 
 	log.Printf("Session %s: fetching commits from agent-api (parent=%s)", sess.ID, *sess.BaseCommit)
 
-	// Wrap the GetCommits call with sandbox reconciliation
-	commitsResp, err := withSessionSandboxReconciliation(ctx, s, projectID, sess.ID, func() (*sandboxapi.CommitsResponse, error) {
-		return s.sandboxClient.GetCommits(ctx, sess.ID, *sess.BaseCommit)
-	})
+	client, err := s.sandboxService.GetClient(ctx, sess.ID)
+	if err != nil {
+		s.setCommitFailed(ctx, projectID, sess, fmt.Sprintf("Failed to get sandbox client: %v", err))
+		return nil
+	}
 
+	commitsResp, err := client.GetCommits(ctx, *sess.BaseCommit)
 	if err != nil {
 		s.setCommitFailed(ctx, projectID, sess, fmt.Sprintf("Failed to get commits from agent: %v", err))
 		return nil
@@ -943,99 +934,6 @@ func (s *SessionService) setCommitFailed(ctx context.Context, projectID string, 
 		return
 	}
 	s.publishCommitStatusChanged(ctx, projectID, sess.ID, model.CommitStatusFailed)
-}
-
-// reconcileSandbox reinitializes the sandbox by enqueuing a job and waiting for completion.
-// This ensures the job queue is the single source of truth for initialization.
-func (s *SessionService) reconcileSandbox(ctx context.Context, projectID, sessionID string) error {
-	log.Printf("Reconciling sandbox for session %s during commit", sessionID)
-
-	// Update status to reinitializing
-	if _, err := s.UpdateStatus(ctx, sessionID, model.SessionStatusReinitializing, nil); err != nil {
-		log.Printf("Warning: failed to update session status for %s: %v", sessionID, err)
-	}
-
-	// Emit SSE event for status change
-	if s.eventBroker != nil {
-		if err := s.eventBroker.PublishSessionUpdated(ctx, projectID, sessionID, model.SessionStatusReinitializing, ""); err != nil {
-			log.Printf("Warning: failed to publish session update event: %v", err)
-		}
-	}
-
-	// Get session to retrieve workspace and agent IDs
-	session, err := s.store.GetSessionByID(ctx, sessionID)
-	if err != nil {
-		return fmt.Errorf("failed to get session: %w", err)
-	}
-
-	// Check if session has an agent assigned
-	if session.AgentID == nil {
-		return fmt.Errorf("session %s does not have an agent assigned", sessionID)
-	}
-
-	// If job enqueuer is not available (e.g., in tests), fall back to direct initialization
-	if s.jobEnqueuer == nil {
-		log.Printf("Job enqueuer not available, falling back to direct initialization for session %s", sessionID)
-		if err := s.Initialize(ctx, sessionID); err != nil {
-			return fmt.Errorf("failed to reinitialize sandbox: %w", err)
-		}
-		return nil
-	}
-
-	// Enqueue initialization job (ignore error if job already exists - we'll wait for it anyway)
-	err = s.jobEnqueuer.EnqueueSessionInit(ctx, projectID, sessionID, session.WorkspaceID, *session.AgentID)
-	if err != nil {
-		// Job might already exist from a concurrent request - that's fine, we'll wait for it
-		log.Printf("Note: session init job may already exist for %s: %v", sessionID, err)
-	}
-
-	// Wait for job to complete using event-based notification
-	// This gives us near-instant notification when the job finishes
-	waitCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
-	defer cancel()
-
-	status, errorMsg, err := events.WaitForJobCompletion(waitCtx, s.eventBroker, s.store, projectID, "session", sessionID)
-	if err != nil {
-		return fmt.Errorf("failed to wait for job completion: %w", err)
-	}
-
-	if status == "failed" {
-		return fmt.Errorf("session initialization failed: %s", errorMsg)
-	}
-
-	log.Printf("Session %s initialized successfully via job", sessionID)
-	return nil
-}
-
-// withSessionSandboxReconciliation wraps a sandbox operation with error handling
-// that triggers reconciliation on sandbox unavailable errors, then retries.
-// This is the SessionService equivalent of withSandboxReconciliation in chat.go.
-func withSessionSandboxReconciliation[T any](
-	ctx context.Context,
-	s *SessionService,
-	projectID, sessionID string,
-	operation func() (T, error),
-) (T, error) {
-	result, err := operation()
-	if err == nil {
-		return result, nil
-	}
-
-	// Check if sandbox is unavailable - reconcile and retry
-	if errors.Is(err, sandbox.ErrNotFound) || errors.Is(err, sandbox.ErrNotRunning) || isSandboxUnavailableError(err) {
-		log.Printf("Sandbox unavailable for session %s during commit, reconciling: %v", sessionID, err)
-
-		if reconcileErr := s.reconcileSandbox(ctx, projectID, sessionID); reconcileErr != nil {
-			var zero T
-			return zero, fmt.Errorf("sandbox unavailable and failed to reconcile: %w", reconcileErr)
-		}
-
-		// Retry operation after successful reconciliation
-		return operation()
-	}
-
-	var zero T
-	return zero, err
 }
 
 // buildCommitMessage creates a UIMessage array for the /discobot-commit command.

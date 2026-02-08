@@ -76,7 +76,7 @@ func TestSandboxService_CreateForSession(t *testing.T) {
 	cfg := &config.Config{
 		SandboxIdleTimeout: 30 * time.Minute,
 	}
-	svc := NewSandboxService(testStore, mockProvider, cfg)
+	svc := NewSandboxService(testStore, mockProvider, cfg, nil, nil, nil)
 
 	ctx := context.Background()
 	sessionID := "test-session-1"
@@ -109,7 +109,7 @@ func TestSandboxService_CreateForSession_AlreadyExists(t *testing.T) {
 	mockProvider := mock.NewProvider()
 	testStore := setupTestStore(t)
 	cfg := &config.Config{}
-	svc := NewSandboxService(testStore, mockProvider, cfg)
+	svc := NewSandboxService(testStore, mockProvider, cfg, nil, nil, nil)
 
 	ctx := context.Background()
 	sessionID := "test-session-1"
@@ -135,7 +135,7 @@ func TestSandboxService_GetForSession(t *testing.T) {
 	mockProvider := mock.NewProvider()
 	testStore := setupTestStore(t)
 	cfg := &config.Config{}
-	svc := NewSandboxService(testStore, mockProvider, cfg)
+	svc := NewSandboxService(testStore, mockProvider, cfg, nil, nil, nil)
 
 	ctx := context.Background()
 	sessionID := "test-session-1"
@@ -165,7 +165,7 @@ func TestSandboxService_GetForSession_NotFound(t *testing.T) {
 	mockProvider := mock.NewProvider()
 	testStore := setupTestStore(t)
 	cfg := &config.Config{}
-	svc := NewSandboxService(testStore, mockProvider, cfg)
+	svc := NewSandboxService(testStore, mockProvider, cfg, nil, nil, nil)
 
 	ctx := context.Background()
 
@@ -175,11 +175,11 @@ func TestSandboxService_GetForSession_NotFound(t *testing.T) {
 	}
 }
 
-func TestSandboxService_EnsureRunning_CreatesNew(t *testing.T) {
+func TestSandboxService_EnsureSandboxReady_CreatesNew(t *testing.T) {
 	mockProvider := mock.NewProvider()
 	testStore := setupTestStore(t)
 	cfg := &config.Config{}
-	svc := NewSandboxService(testStore, mockProvider, cfg)
+	svc := NewSandboxService(testStore, mockProvider, cfg, nil, nil, nil)
 
 	ctx := context.Background()
 	sessionID := "test-session-1"
@@ -188,10 +188,10 @@ func TestSandboxService_EnsureRunning_CreatesNew(t *testing.T) {
 	// Create test session
 	createTestSession(t, testStore, sessionID, workspacePath)
 
-	// EnsureRunning should create if not exists
-	err := svc.EnsureRunning(ctx, sessionID)
+	// GetClient should create sandbox if not exists (session is "ready")
+	_, err := svc.GetClient(ctx, sessionID)
 	if err != nil {
-		t.Fatalf("EnsureRunning failed: %v", err)
+		t.Fatalf("GetClient failed: %v", err)
 	}
 
 	sb, err := mockProvider.Get(ctx, sessionID)
@@ -204,11 +204,11 @@ func TestSandboxService_EnsureRunning_CreatesNew(t *testing.T) {
 	}
 }
 
-func TestSandboxService_EnsureRunning_AlreadyRunning(t *testing.T) {
+func TestSandboxService_EnsureSandboxReady_AlreadyRunning(t *testing.T) {
 	mockProvider := mock.NewProvider()
 	testStore := setupTestStore(t)
 	cfg := &config.Config{}
-	svc := NewSandboxService(testStore, mockProvider, cfg)
+	svc := NewSandboxService(testStore, mockProvider, cfg, nil, nil, nil)
 
 	ctx := context.Background()
 	sessionID := "test-session-1"
@@ -223,18 +223,18 @@ func TestSandboxService_EnsureRunning_AlreadyRunning(t *testing.T) {
 		t.Fatalf("CreateForSession failed: %v", err)
 	}
 
-	// EnsureRunning on already running sandbox should succeed
-	err = svc.EnsureRunning(ctx, sessionID)
+	// GetClient on already running sandbox should succeed
+	_, err = svc.GetClient(ctx, sessionID)
 	if err != nil {
-		t.Fatalf("EnsureRunning failed: %v", err)
+		t.Fatalf("GetClient failed: %v", err)
 	}
 }
 
-func TestSandboxService_EnsureRunning_StartsStopped(t *testing.T) {
+func TestSandboxService_EnsureSandboxReady_StartsStopped(t *testing.T) {
 	mockProvider := mock.NewProvider()
 	testStore := setupTestStore(t)
 	cfg := &config.Config{}
-	svc := NewSandboxService(testStore, mockProvider, cfg)
+	svc := NewSandboxService(testStore, mockProvider, cfg, nil, nil, nil)
 
 	ctx := context.Background()
 	sessionID := "test-session-1"
@@ -255,10 +255,10 @@ func TestSandboxService_EnsureRunning_StartsStopped(t *testing.T) {
 		t.Fatalf("StopForSession failed: %v", err)
 	}
 
-	// EnsureRunning should restart it
-	err = svc.EnsureRunning(ctx, sessionID)
+	// GetClient should restart the stopped sandbox
+	_, err = svc.GetClient(ctx, sessionID)
 	if err != nil {
-		t.Fatalf("EnsureRunning failed: %v", err)
+		t.Fatalf("GetClient failed: %v", err)
 	}
 
 	sb, err := mockProvider.Get(ctx, sessionID)
@@ -275,7 +275,7 @@ func TestSandboxService_DestroyForSession(t *testing.T) {
 	mockProvider := mock.NewProvider()
 	testStore := setupTestStore(t)
 	cfg := &config.Config{}
-	svc := NewSandboxService(testStore, mockProvider, cfg)
+	svc := NewSandboxService(testStore, mockProvider, cfg, nil, nil, nil)
 
 	ctx := context.Background()
 	sessionID := "test-session-1"
@@ -307,7 +307,7 @@ func TestSandboxService_DestroyForSession_NotFound(t *testing.T) {
 	mockProvider := mock.NewProvider()
 	testStore := setupTestStore(t)
 	cfg := &config.Config{}
-	svc := NewSandboxService(testStore, mockProvider, cfg)
+	svc := NewSandboxService(testStore, mockProvider, cfg, nil, nil, nil)
 
 	ctx := context.Background()
 
@@ -322,7 +322,7 @@ func TestSandboxService_Exec(t *testing.T) {
 	mockProvider := mock.NewProvider()
 	testStore := setupTestStore(t)
 	cfg := &config.Config{}
-	svc := NewSandboxService(testStore, mockProvider, cfg)
+	svc := NewSandboxService(testStore, mockProvider, cfg, nil, nil, nil)
 
 	ctx := context.Background()
 	sessionID := "test-session-1"
@@ -352,7 +352,7 @@ func TestSandboxService_Attach(t *testing.T) {
 	mockProvider := mock.NewProvider()
 	testStore := setupTestStore(t)
 	cfg := &config.Config{}
-	svc := NewSandboxService(testStore, mockProvider, cfg)
+	svc := NewSandboxService(testStore, mockProvider, cfg, nil, nil, nil)
 
 	ctx := context.Background()
 	sessionID := "test-session-1"
@@ -395,7 +395,7 @@ func TestSandboxService_CreateForSession_NoWorkspacePath(t *testing.T) {
 	mockProvider := mock.NewProvider()
 	testStore := setupTestStore(t)
 	cfg := &config.Config{}
-	svc := NewSandboxService(testStore, mockProvider, cfg)
+	svc := NewSandboxService(testStore, mockProvider, cfg, nil, nil, nil)
 
 	ctx := context.Background()
 	sessionID := "test-session-no-path"

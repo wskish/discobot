@@ -230,7 +230,7 @@ func main() {
 		log.Printf("Sandbox provider proxy initialized with %d providers", len(sandboxManager.ListProviders()))
 
 		// Start sandbox reconciliation in background to not block server startup
-		sandboxSvc := service.NewSandboxService(s, sandboxProvider, cfg)
+		sandboxSvc := service.NewSandboxService(s, sandboxProvider, cfg, nil, nil, nil)
 		go func() {
 			log.Println("Starting sandbox reconciliation in background...")
 
@@ -283,12 +283,12 @@ func main() {
 	var sshServer *ssh.Server
 	if sandboxProvider != nil && cfg.SSHEnabled {
 		// Create sandbox service for UserInfoFetcher
-		sshSandboxSvc := service.NewSandboxService(s, sandboxProvider, cfg)
+		sshSandboxSvc := service.NewSandboxService(s, sandboxProvider, cfg, nil, nil, nil)
 		sshServer, err = ssh.New(&ssh.Config{
 			Address:         fmt.Sprintf(":%d", cfg.SSHPort),
 			HostKeyPath:     cfg.SSHHostKeyPath,
 			SandboxProvider: sandboxProvider,
-			UserInfoFetcher: sshSandboxSvc,
+			UserInfoFetcher: &sshUserInfoAdapter{svc: sshSandboxSvc},
 		})
 		if err != nil {
 			log.Printf("Warning: Failed to create SSH server: %v", err)
@@ -309,7 +309,7 @@ func main() {
 
 		// Register workspace init executor
 		workspaceSvc := service.NewWorkspaceService(s, gitProvider, eventBroker)
-		disp.RegisterExecutor(jobs.NewWorkspaceInitExecutor(workspaceSvc))
+		disp.RegisterExecutor(dispatcher.NewWorkspaceInitExecutor(workspaceSvc))
 
 		// Register session init, delete, and commit executors if sandbox provider is available
 		if sandboxProvider != nil {
@@ -318,10 +318,13 @@ func main() {
 			if err != nil {
 				log.Fatalf("Failed to create credential service for dispatcher: %v", err)
 			}
-			sessionSvc := service.NewSessionService(s, gitSvc, credSvc, sandboxProvider, eventBroker, jobQueue)
-			disp.RegisterExecutor(jobs.NewSessionInitExecutor(sessionSvc))
-			disp.RegisterExecutor(jobs.NewSessionDeleteExecutor(sessionSvc))
-			disp.RegisterExecutor(jobs.NewSessionCommitExecutor(sessionSvc))
+			credFetcher := service.MakeCredentialFetcher(s, credSvc)
+			dispSandboxSvc := service.NewSandboxService(s, sandboxProvider, cfg, credFetcher, eventBroker, jobQueue)
+			sessionSvc := service.NewSessionService(s, gitSvc, sandboxProvider, dispSandboxSvc, eventBroker)
+			dispSandboxSvc.SetSessionInitializer(sessionSvc)
+			disp.RegisterExecutor(dispatcher.NewSessionInitExecutor(sessionSvc))
+			disp.RegisterExecutor(dispatcher.NewSessionDeleteExecutor(sessionSvc))
+			disp.RegisterExecutor(dispatcher.NewSessionCommitExecutor(sessionSvc))
 		}
 
 		disp.Start(context.Background())
@@ -1378,4 +1381,21 @@ func main() {
 	}
 
 	log.Println("Server stopped")
+}
+
+// sshUserInfoAdapter adapts SandboxService.GetClient to the ssh.UserInfoFetcher interface.
+type sshUserInfoAdapter struct {
+	svc *service.SandboxService
+}
+
+func (a *sshUserInfoAdapter) GetUserInfo(ctx context.Context, sessionID string) (string, int, int, error) {
+	client, err := a.svc.GetClient(ctx, sessionID)
+	if err != nil {
+		return "", 0, 0, err
+	}
+	userInfo, err := client.GetUserInfo(ctx)
+	if err != nil {
+		return "", 0, 0, err
+	}
+	return userInfo.Username, userInfo.UID, userInfo.GID, nil
 }

@@ -160,12 +160,14 @@ func NewTestServer(t *testing.T) *TestServer {
 	workspaceSvc := service.NewWorkspaceService(s, gitProvider, eventBroker)
 
 	gitSvc := service.NewGitService(s, gitProvider)
-	sessionSvc := service.NewSessionService(s, gitSvc, nil, mockSandbox, eventBroker, jobQueue)
+	sandboxSvc := service.NewSandboxService(s, mockSandbox, cfg, nil, eventBroker, jobQueue)
+	sessionSvc := service.NewSessionService(s, gitSvc, mockSandbox, sandboxSvc, eventBroker)
+	sandboxSvc.SetSessionInitializer(sessionSvc)
 
 	disp := dispatcher.NewService(s, cfg, eventBroker)
-	disp.RegisterExecutor(jobs.NewWorkspaceInitExecutor(workspaceSvc))
-	disp.RegisterExecutor(jobs.NewSessionInitExecutor(sessionSvc))
-	disp.RegisterExecutor(jobs.NewSessionCommitExecutor(sessionSvc))
+	disp.RegisterExecutor(dispatcher.NewWorkspaceInitExecutor(workspaceSvc))
+	disp.RegisterExecutor(dispatcher.NewSessionInitExecutor(sessionSvc))
+	disp.RegisterExecutor(dispatcher.NewSessionCommitExecutor(sessionSvc))
 	disp.Start(context.Background())
 
 	// Wire up job queue notification for immediate execution
@@ -420,12 +422,14 @@ func NewTestServerNoAuth(t *testing.T) *TestServer {
 	workspaceSvc := service.NewWorkspaceService(s, gitProvider, eventBroker)
 
 	gitSvc := service.NewGitService(s, gitProvider)
-	sessionSvc := service.NewSessionService(s, gitSvc, nil, mockSandbox, eventBroker, jobQueue)
+	sandboxSvc := service.NewSandboxService(s, mockSandbox, cfg, nil, eventBroker, jobQueue)
+	sessionSvc := service.NewSessionService(s, gitSvc, mockSandbox, sandboxSvc, eventBroker)
+	sandboxSvc.SetSessionInitializer(sessionSvc)
 
 	disp := dispatcher.NewService(s, cfg, eventBroker)
-	disp.RegisterExecutor(jobs.NewWorkspaceInitExecutor(workspaceSvc))
-	disp.RegisterExecutor(jobs.NewSessionInitExecutor(sessionSvc))
-	disp.RegisterExecutor(jobs.NewSessionCommitExecutor(sessionSvc))
+	disp.RegisterExecutor(dispatcher.NewWorkspaceInitExecutor(workspaceSvc))
+	disp.RegisterExecutor(dispatcher.NewSessionInitExecutor(sessionSvc))
+	disp.RegisterExecutor(dispatcher.NewSessionCommitExecutor(sessionSvc))
 	disp.Start(context.Background())
 
 	// Wire up job queue notification for immediate execution

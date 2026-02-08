@@ -176,8 +176,8 @@ func (s *WorkspaceService) GetWorkspaceWithSessions(ctx context.Context, workspa
 	}
 
 	// Create session service to fetch sessions
-	// Note: git service, credential service, and sandbox provider are nil since ListSessionsByWorkspace doesn't need them
-	sessionSvc := NewSessionService(s.store, nil, nil, nil, s.eventBroker, nil)
+	// Note: git service, sandbox provider, and sandbox service are nil since ListSessionsByWorkspace doesn't need them
+	sessionSvc := NewSessionService(s.store, nil, nil, nil, s.eventBroker)
 	// Include all sessions (including closed) when fetching a full workspace
 	sessions, err := sessionSvc.ListSessionsByWorkspace(ctx, workspaceID, true)
 	if err != nil {

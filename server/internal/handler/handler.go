@@ -53,16 +53,28 @@ func New(s *store.Store, cfg *config.Config, gitProvider git.Provider, sandboxPr
 		gitSvc = service.NewGitService(s, gitProvider)
 	}
 
-	var sandboxSvc *service.SandboxService
-	if sandboxProvider != nil {
-		sandboxSvc = service.NewSandboxService(s, sandboxProvider, cfg)
+	// Create credential fetcher for sandbox client
+	var credFetcher service.CredentialFetcher
+	if credSvc != nil {
+		credFetcher = service.MakeCredentialFetcher(s, credSvc)
 	}
 
-	// Create session service (shared between chat and session handlers)
-	sessionSvc := service.NewSessionService(s, gitSvc, credSvc, sandboxProvider, eventBroker, jobQueue)
+	// Create sandbox service with all dependencies
+	var sandboxSvc *service.SandboxService
+	if sandboxProvider != nil {
+		sandboxSvc = service.NewSandboxService(s, sandboxProvider, cfg, credFetcher, eventBroker, jobQueue)
+	}
 
-	// Create chat service (uses session service for session creation)
-	chatSvc := service.NewChatService(s, sessionSvc, credSvc, jobQueue, eventBroker, sandboxProvider, gitSvc)
+	// Create session service
+	sessionSvc := service.NewSessionService(s, gitSvc, sandboxProvider, sandboxSvc, eventBroker)
+
+	// Break circular dependency: SandboxService needs SessionInitializer (which is SessionService)
+	if sandboxSvc != nil {
+		sandboxSvc.SetSessionInitializer(sessionSvc)
+	}
+
+	// Create chat service
+	chatSvc := service.NewChatService(s, sessionSvc, jobQueue, eventBroker, sandboxSvc, gitSvc)
 
 	// Create remaining services
 	agentSvc := service.NewAgentService(s)

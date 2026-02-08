@@ -65,10 +65,10 @@ func (h *Handler) TerminalWebSocket(w http.ResponseWriter, r *http.Request) {
 
 	ctx := r.Context()
 
-	// Ensure sandbox is running
-	// EnsureRunning will retrieve workspace path from the session
-	if err := h.sandboxService.EnsureRunning(ctx, sessionID); err != nil {
-		log.Printf("failed to ensure sandbox running for session %s: %v", sessionID, err)
+	// Get sandbox client (ensures sandbox is ready and container is running)
+	client, err := h.sandboxService.GetClient(ctx, sessionID)
+	if err != nil {
+		log.Printf("failed to ensure sandbox ready for session %s: %v", sessionID, err)
 		h.Error(w, http.StatusInternalServerError, "failed to start sandbox")
 		return
 	}
@@ -79,12 +79,12 @@ func (h *Handler) TerminalWebSocket(w http.ResponseWriter, r *http.Request) {
 		user = "root"
 	} else {
 		// Get default user from sandbox (uses UID:GID format for compatibility)
-		_, uid, gid, err := h.sandboxService.GetUserInfo(ctx, sessionID)
+		userInfo, err := client.GetUserInfo(ctx)
 		if err != nil {
 			log.Printf("failed to get user info, falling back to root: %v", err)
 			user = "root"
 		} else {
-			user = strconv.Itoa(uid) + ":" + strconv.Itoa(gid)
+			user = strconv.Itoa(userInfo.UID) + ":" + strconv.Itoa(userInfo.GID)
 		}
 	}
 
