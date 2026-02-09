@@ -290,6 +290,7 @@ RUN set -ex \
         systemd-networkd \
         systemd-resolved \
         systemd-timesyncd \
+        fstrim.timer \
     # Enable /var initialization and home mount services
     && systemctl enable init-var.service \
     && systemctl enable mount-home.service \
