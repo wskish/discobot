@@ -74,7 +74,9 @@ describe("Claude SDK Integration Tests", { skip: shouldSkip }, () => {
 				};
 
 				// Send prompt
-				for await (const _ of client.prompt(userMessage, sessionId)) { /* drain */ }
+				for await (const _ of client.prompt(userMessage, sessionId)) {
+					/* drain */
+				}
 
 				// Get messages
 				const messages = client.getSession(sessionId)?.getMessages() ?? [];
@@ -128,7 +130,9 @@ describe("Claude SDK Integration Tests", { skip: shouldSkip }, () => {
 					],
 				};
 
-				for await (const _ of client.prompt(userMessage, sessionId)) { /* drain */ }
+				for await (const _ of client.prompt(userMessage, sessionId)) {
+					/* drain */
+				}
 
 				// Get messages
 				const messages = client.getSession(sessionId)?.getMessages() ?? [];
@@ -178,7 +182,9 @@ describe("Claude SDK Integration Tests", { skip: shouldSkip }, () => {
 					],
 				};
 
-				for await (const _ of client.prompt(userMessage, sessionId)) { /* drain */ }
+				for await (const _ of client.prompt(userMessage, sessionId)) {
+					/* drain */
+				}
 
 				const messages = client.getSession(sessionId)?.getMessages() ?? [];
 				const assistantMsg = messages.find((m) => m.role === "assistant");
@@ -222,7 +228,9 @@ describe("Claude SDK Integration Tests", { skip: shouldSkip }, () => {
 					],
 				};
 
-				for await (const _ of client.prompt(msg1, sessionId)) { /* drain */ }
+				for await (const _ of client.prompt(msg1, sessionId)) {
+					/* drain */
+				}
 
 				// Second turn: Ask about the value
 				const msg2: UIMessage = {
@@ -236,7 +244,9 @@ describe("Claude SDK Integration Tests", { skip: shouldSkip }, () => {
 					],
 				};
 
-				for await (const _ of client.prompt(msg2, sessionId)) { /* drain */ }
+				for await (const _ of client.prompt(msg2, sessionId)) {
+					/* drain */
+				}
 
 				// Get all messages
 				const messages = client.getSession(sessionId)?.getMessages() ?? [];
@@ -282,7 +292,9 @@ describe("Claude SDK Integration Tests", { skip: shouldSkip }, () => {
 					],
 				};
 
-				for await (const _ of client.prompt(msg1, sessionId)) { /* drain */ }
+				for await (const _ of client.prompt(msg1, sessionId)) {
+					/* drain */
+				}
 
 				// Get the Claude session ID that was assigned
 				const session = client.getSession(sessionId);
@@ -313,7 +325,9 @@ describe("Claude SDK Integration Tests", { skip: shouldSkip }, () => {
 					],
 				};
 
-				for await (const _ of newClient.prompt(msg2, sessionId)) { /* drain */ }
+				for await (const _ of newClient.prompt(msg2, sessionId)) {
+					/* drain */
+				}
 
 				// Check if context was preserved
 				const messages = newClient.getSession(sessionId)?.getMessages() ?? [];
@@ -378,7 +392,9 @@ describe("Claude SDK Integration Tests", { skip: shouldSkip }, () => {
 					],
 				};
 
-				for await (const _ of client.prompt(userMessage, sessionId)) { /* drain */ }
+				for await (const _ of client.prompt(userMessage, sessionId)) {
+					/* drain */
+				}
 
 				// Now try to discover sessions
 				const sessions = await client.discoverAvailableSessions();
@@ -473,7 +489,9 @@ describe("Claude SDK Integration Tests", { skip: shouldSkip }, () => {
 
 				// This might throw or handle gracefully
 				try {
-					for await (const _ of client.prompt(emptyMessage, sessionId)) { /* drain */ }
+					for await (const _ of client.prompt(emptyMessage, sessionId)) {
+						/* drain */
+					}
 					// If it doesn't throw, that's fine - just verify state
 					assert.ok(true, "Client handled empty message");
 				} catch (error) {

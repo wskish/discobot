@@ -1,5 +1,13 @@
 import * as Diff from "diff";
-import { AlertTriangle, Loader2, Pencil, RotateCcw, Save } from "lucide-react";
+import {
+	AlertTriangle,
+	Download,
+	FileText,
+	Loader2,
+	Pencil,
+	RotateCcw,
+	Save,
+} from "lucide-react";
 import { useTheme } from "next-themes";
 import * as React from "react";
 import { lazy, Suspense } from "react";
@@ -43,6 +51,10 @@ import {
 } from "@/lib/hooks/use-session-files";
 
 type ViewMode = "diff" | "edit";
+
+// Diff size thresholds (in lines)
+const DIFF_WARNING_THRESHOLD = 10000; // Show warning but allow loading
+const DIFF_HARD_LIMIT = 20000; // Never render, show fallback only
 
 // Hoisted to module level to avoid recreation on every call
 const LANGUAGE_MAP: Record<string, string> = {
@@ -153,6 +165,117 @@ function reconstructOriginalFromPatch(
 	}
 }
 
+/**
+ * Count the total number of lines in a unified diff patch.
+ * This includes context lines, additions, and deletions.
+ */
+function countDiffLines(patch: string): number {
+	try {
+		const parsedPatches = Diff.parsePatch(patch);
+		if (parsedPatches.length === 0) {
+			return 0;
+		}
+
+		let totalLines = 0;
+		for (const parsedPatch of parsedPatches) {
+			for (const hunk of parsedPatch.hunks) {
+				totalLines += hunk.lines.length;
+			}
+		}
+
+		return totalLines;
+	} catch (error) {
+		console.error("Failed to count diff lines:", error);
+		return 0;
+	}
+}
+
+interface LargeDiffFallbackProps {
+	lineCount: number;
+	filePath: string;
+	patch: string;
+	onViewCurrent: () => void;
+	canLoadAnyway: boolean;
+	onLoadAnyway?: () => void;
+}
+
+function LargeDiffFallback({
+	lineCount,
+	filePath,
+	patch,
+	onViewCurrent,
+	canLoadAnyway,
+	onLoadAnyway,
+}: LargeDiffFallbackProps) {
+	const handleDownloadPatch = () => {
+		const blob = new Blob([patch], { type: "text/plain" });
+		const url = URL.createObjectURL(blob);
+		const a = document.createElement("a");
+		a.href = url;
+		a.download = `${filePath.split("/").pop()}.patch`;
+		document.body.appendChild(a);
+		a.click();
+		document.body.removeChild(a);
+		URL.revokeObjectURL(url);
+	};
+
+	return (
+		<div className="flex-1 flex items-center justify-center p-8">
+			<div className="max-w-md text-center space-y-4">
+				<div className="flex justify-center">
+					<div className="rounded-full bg-yellow-500/10 p-3">
+						<AlertTriangle className="h-8 w-8 text-yellow-500" />
+					</div>
+				</div>
+				<div>
+					<h3 className="text-lg font-semibold mb-2">
+						Diff Too Large to Display
+					</h3>
+					<p className="text-sm text-muted-foreground">
+						This diff contains{" "}
+						<span className="font-medium text-foreground">
+							{lineCount.toLocaleString()} lines
+						</span>
+						, which exceeds the rendering limit. Choose an option below to view
+						the changes.
+					</p>
+				</div>
+				<div className="flex flex-col gap-2 pt-2">
+					{canLoadAnyway && onLoadAnyway && (
+						<Button
+							variant="default"
+							className="w-full justify-start"
+							onClick={onLoadAnyway}
+						>
+							<AlertTriangle className="h-4 w-4 mr-2" />
+							Load Anyway (May Be Slow)
+						</Button>
+					)}
+					<Button
+						variant="outline"
+						className="w-full justify-start"
+						onClick={onViewCurrent}
+					>
+						<FileText className="h-4 w-4 mr-2" />
+						View Current File
+					</Button>
+					<Button
+						variant="outline"
+						className="w-full justify-start"
+						onClick={handleDownloadPatch}
+					>
+						<Download className="h-4 w-4 mr-2" />
+						Download as .patch File
+					</Button>
+				</div>
+				<p className="text-xs text-muted-foreground pt-2">
+					Consider using an external diff tool for very large changes.
+				</p>
+			</div>
+		</div>
+	);
+}
+
 interface DiffContentProps {
 	file: FileNode;
 }
@@ -230,6 +353,20 @@ export function DiffContent({ file }: DiffContentProps) {
 		return reconstructOriginalFromPatch(currentContent, diff.patch);
 	}, [currentContent, diff?.patch, file.status, isDeleted]);
 
+	// Count diff lines to determine if it's too large to render
+	const diffLineCount = React.useMemo(() => {
+		if (!diff?.patch) return 0;
+		return countDiffLines(diff.patch);
+	}, [diff?.patch]);
+
+	// Track whether user wants to force load a large diff
+	const [forceLoadLargeDiff, setForceLoadLargeDiff] = React.useState(false);
+
+	// Reset force load when file changes
+	React.useEffect(() => {
+		setForceLoadLargeDiff(false);
+	}, []);
+
 	const language = getLanguageFromPath(file.id);
 
 	if (isLoading) {
@@ -293,11 +430,40 @@ export function DiffContent({ file }: DiffContentProps) {
 		);
 	}
 
+	// Check if diff is too large to render
+	const isOverHardLimit = diffLineCount > DIFF_HARD_LIMIT;
+	const isOverWarningThreshold =
+		diffLineCount > DIFF_WARNING_THRESHOLD && diffLineCount <= DIFF_HARD_LIMIT;
+	const shouldShowFallback =
+		(isOverWarningThreshold && !forceLoadLargeDiff) || isOverHardLimit;
+
+	if (shouldShowFallback) {
+		return (
+			<LargeDiffFallback
+				lineCount={diffLineCount}
+				filePath={file.id}
+				patch={diff.patch}
+				onViewCurrent={() => setViewMode("edit")}
+				canLoadAnyway={isOverWarningThreshold && !isOverHardLimit}
+				onLoadAnyway={
+					isOverWarningThreshold ? () => setForceLoadLargeDiff(true) : undefined
+				}
+			/>
+		);
+	}
+
 	return (
 		<div className="flex-1 flex flex-col overflow-hidden">
 			{/* Diff header toolbar */}
 			<div className="h-8 flex items-center justify-between px-2 border-b border-border bg-muted/20 shrink-0">
 				<div className="flex items-center gap-3">
+					{/* Show large diff warning if force loaded */}
+					{forceLoadLargeDiff && (
+						<span className="text-xs text-yellow-500 font-medium flex items-center gap-1">
+							<AlertTriangle className="h-3 w-3" />
+							Large diff ({diffLineCount.toLocaleString()} lines)
+						</span>
+					)}
 					{/* Show status badge */}
 					{file.status === "added" && (
 						<span className="text-xs text-green-500 font-medium">New File</span>
