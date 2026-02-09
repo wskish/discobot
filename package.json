@@ -9,6 +9,7 @@
 		"dev:vite": "vite",
 		"dev:server": "cd server && cross-env SUGGESTIONS_ENABLED=true go run github.com/air-verse/air@latest",
 		"dev:agent": "tsx --watch scripts/agent-watcher/index.ts",
+		"dev:macos": "concurrently -n dev,vz -c cyan,yellow \"pnpm dev\" \"pnpm dev:vz\"",
 		"dev:vz": "tsx --watch scripts/vz-watcher/index.ts",
 		"dev:tauri": "vite --port 5173",
 		"build:vite": "vite build",
