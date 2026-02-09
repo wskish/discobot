@@ -166,10 +166,42 @@ function reconstructOriginalFromPatch(
 }
 
 /**
+ * Fast count of diff lines without parsing the entire patch.
+ * Counts lines that start with ' ', '+', or '-' (diff content lines).
+ * This is much faster than parsing for large diffs.
+ */
+function countDiffLinesFast(patch: string): number {
+	let count = 0;
+	let inHunk = false;
+
+	for (const line of patch.split("\n")) {
+		// Start of a hunk
+		if (line.startsWith("@@")) {
+			inHunk = true;
+			continue;
+		}
+
+		// Count actual diff content lines (context, additions, deletions)
+		if (
+			inHunk &&
+			(line.startsWith(" ") || line.startsWith("+") || line.startsWith("-"))
+		) {
+			count++;
+		}
+	}
+
+	return count;
+}
+
+/**
  * Count the total number of lines in a unified diff patch.
  * This includes context lines, additions, and deletions.
+ * WARNING: This parses the entire patch and is expensive for large diffs.
+ * Use countDiffLinesFast() for threshold checks.
+ *
+ * Note: This function is currently unused but kept for reference and potential future use.
  */
-function countDiffLines(patch: string): number {
+function _countDiffLines(patch: string): number {
 	try {
 		const parsedPatches = Diff.parsePatch(patch);
 		if (parsedPatches.length === 0) {
@@ -336,9 +368,42 @@ export function DiffContent({ file }: DiffContentProps) {
 		(noDiffAvailable && isContentLoading) ||
 		(viewMode === "edit" && isContentLoading);
 
-	// Reconstruct original content from current content and patch
-	// This must be called unconditionally at the top level (React hooks rules)
+	// Fast count of diff lines to determine if it's too large to render
+	// This uses a simple string scan without parsing, so it's fast even for huge diffs
+	const diffLineCount = React.useMemo(() => {
+		if (!diff?.patch) return 0;
+		return countDiffLinesFast(diff.patch);
+	}, [diff?.patch]);
+
+	// Track whether user wants to force load a large diff
+	const [forceLoadLargeDiff, setForceLoadLargeDiff] = React.useState(false);
+
+	// Track previous file ID to detect changes
+	const prevFileIdRef = React.useRef(file.id);
+
+	// Reset force load when file changes
+	React.useEffect(() => {
+		if (prevFileIdRef.current !== file.id) {
+			setForceLoadLargeDiff(false);
+			prevFileIdRef.current = file.id;
+		}
+	});
+
+	// Check if diff is too large BEFORE expensive operations
+	const isOverHardLimit = diffLineCount > DIFF_HARD_LIMIT;
+	const isOverWarningThreshold =
+		diffLineCount > DIFF_WARNING_THRESHOLD && diffLineCount <= DIFF_HARD_LIMIT;
+	const shouldShowFallback =
+		(isOverWarningThreshold && !forceLoadLargeDiff) || isOverHardLimit;
+
+	// Only reconstruct original content if we're actually going to render Monaco
+	// This is expensive for large diffs, so skip it when showing fallback
 	const originalContent = React.useMemo(() => {
+		// Skip expensive computation if we're showing fallback
+		if (shouldShowFallback) {
+			return "";
+		}
+
 		if (!currentContent || !diff?.patch) {
 			return "";
 		}
@@ -351,21 +416,7 @@ export function DiffContent({ file }: DiffContentProps) {
 			return currentContent;
 		}
 		return reconstructOriginalFromPatch(currentContent, diff.patch);
-	}, [currentContent, diff?.patch, file.status, isDeleted]);
-
-	// Count diff lines to determine if it's too large to render
-	const diffLineCount = React.useMemo(() => {
-		if (!diff?.patch) return 0;
-		return countDiffLines(diff.patch);
-	}, [diff?.patch]);
-
-	// Track whether user wants to force load a large diff
-	const [forceLoadLargeDiff, setForceLoadLargeDiff] = React.useState(false);
-
-	// Reset force load when file changes
-	React.useEffect(() => {
-		setForceLoadLargeDiff(false);
-	}, []);
+	}, [currentContent, diff?.patch, file.status, isDeleted, shouldShowFallback]);
 
 	const language = getLanguageFromPath(file.id);
 
@@ -430,13 +481,7 @@ export function DiffContent({ file }: DiffContentProps) {
 		);
 	}
 
-	// Check if diff is too large to render
-	const isOverHardLimit = diffLineCount > DIFF_HARD_LIMIT;
-	const isOverWarningThreshold =
-		diffLineCount > DIFF_WARNING_THRESHOLD && diffLineCount <= DIFF_HARD_LIMIT;
-	const shouldShowFallback =
-		(isOverWarningThreshold && !forceLoadLargeDiff) || isOverHardLimit;
-
+	// Show fallback if diff is too large (computed earlier to avoid expensive operations)
 	if (shouldShowFallback) {
 		return (
 			<LargeDiffFallback
@@ -446,7 +491,15 @@ export function DiffContent({ file }: DiffContentProps) {
 				onViewCurrent={() => setViewMode("edit")}
 				canLoadAnyway={isOverWarningThreshold && !isOverHardLimit}
 				onLoadAnyway={
-					isOverWarningThreshold ? () => setForceLoadLargeDiff(true) : undefined
+					isOverWarningThreshold
+						? () => {
+								// Use startTransition to prevent blocking the UI
+								// while React prepares the expensive Monaco render
+								React.startTransition(() => {
+									setForceLoadLargeDiff(true);
+								});
+							}
+						: undefined
 				}
 			/>
 		);

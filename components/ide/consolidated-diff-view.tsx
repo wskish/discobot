@@ -25,6 +25,38 @@ import { cn } from "@/lib/utils";
 
 type DiffStyle = "split" | "unified";
 
+// Diff size thresholds (in lines) - same as diff-content.tsx
+const DIFF_WARNING_THRESHOLD = 10000; // Show warning but allow loading
+const DIFF_HARD_LIMIT = 20000; // Never render, show fallback only
+
+/**
+ * Fast count of diff lines without parsing the entire patch.
+ * Counts lines that start with ' ', '+', or '-' (diff content lines).
+ * This is much faster than parsing for large diffs.
+ */
+function countDiffLinesFast(patch: string): number {
+	let count = 0;
+	let inHunk = false;
+
+	for (const line of patch.split("\n")) {
+		// Start of a hunk
+		if (line.startsWith("@@")) {
+			inHunk = true;
+			continue;
+		}
+
+		// Count actual diff content lines (context, additions, deletions)
+		if (
+			inHunk &&
+			(line.startsWith(" ") || line.startsWith("+") || line.startsWith("-"))
+		) {
+			count++;
+		}
+	}
+
+	return count;
+}
+
 /**
  * Generate a simple hash from a string for comparison purposes
  */
@@ -91,6 +123,32 @@ function FileDiffSection({
 			}
 		}
 	};
+
+	// Check if diff is too large to render (using fast counting)
+	const diffLineCount = React.useMemo(() => {
+		if (!diff?.patch) return 0;
+		return countDiffLinesFast(diff.patch);
+	}, [diff?.patch]);
+
+	// Track whether user wants to force load a large diff
+	const [forceLoadLargeDiff, setForceLoadLargeDiff] = React.useState(false);
+
+	// Track previous file path to detect changes
+	const prevFilePathRef = React.useRef(filePath);
+
+	// Reset force load when file changes
+	React.useEffect(() => {
+		if (prevFilePathRef.current !== filePath) {
+			setForceLoadLargeDiff(false);
+			prevFilePathRef.current = filePath;
+		}
+	});
+
+	const isOverHardLimit = diffLineCount > DIFF_HARD_LIMIT;
+	const isOverWarningThreshold =
+		diffLineCount > DIFF_WARNING_THRESHOLD && diffLineCount <= DIFF_HARD_LIMIT;
+	const shouldShowFallback =
+		(isOverWarningThreshold && !forceLoadLargeDiff) || isOverHardLimit;
 
 	return (
 		<div className="border-b border-border">
@@ -205,6 +263,36 @@ function FileDiffSection({
 					) : diff.binary ? (
 						<div className="flex items-center justify-center py-8 text-muted-foreground">
 							Binary file - cannot display diff
+						</div>
+					) : shouldShowFallback ? (
+						<div className="flex items-center justify-center py-8 px-4">
+							<div className="max-w-md text-center space-y-3">
+								<div className="text-yellow-500 text-sm font-medium">
+									⚠️ Large Diff ({diffLineCount.toLocaleString()} lines)
+								</div>
+								<p className="text-xs text-muted-foreground">
+									This diff is too large to display in the consolidated view.
+								</p>
+								<div className="flex flex-col gap-2 pt-2">
+									{isOverWarningThreshold && !isOverHardLimit && (
+										<Button
+											size="sm"
+											variant="outline"
+											onClick={() => {
+												React.startTransition(() => {
+													setForceLoadLargeDiff(true);
+												});
+											}}
+										>
+											Load Anyway (May Be Slow)
+										</Button>
+									)}
+									<Button size="sm" variant="outline" onClick={onEdit}>
+										<Edit className="h-3 w-3 mr-1" />
+										View in Tab
+									</Button>
+								</div>
+							</div>
 						</div>
 					) : (
 						<PatchDiff
