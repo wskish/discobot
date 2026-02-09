@@ -10,7 +10,16 @@ on:
 
 jobs:
   ci:
-    runs-on: depot-ubuntu-latest
+    strategy:
+      matrix:
+        os:
+          - runner: depot-ubuntu-latest
+            name: Linux
+          - runner: macos-14
+            name: macOS ARM
+
+    runs-on: ${{ matrix.os.runner }}
+    name: CI (${{ matrix.os.name }})
 
     steps:
       - name: Checkout
