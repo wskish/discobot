@@ -104,7 +104,7 @@ func main() {
 	}
 
 	// Initialize Docker provider (default)
-	if dockerProvider, dockerErr := docker.NewProvider(cfg, docker.WithSessionProjectResolver(sessionProjectResolver)); dockerErr != nil {
+	if dockerProvider, dockerErr := docker.NewProvider(cfg, sessionProjectResolver); dockerErr != nil {
 		log.Printf("Warning: Failed to initialize Docker sandbox provider: %v", dockerErr)
 	} else {
 		sandboxManager.RegisterProvider("docker", dockerProvider)

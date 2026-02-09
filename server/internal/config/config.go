@@ -58,9 +58,6 @@ type Config struct {
 	DockerHost    string // Docker socket/host (default: unix:///var/run/docker.sock)
 	DockerNetwork string // Docker network to attach containers to
 
-	// Cache settings
-	CacheEnabled bool // Enable project-scoped cache volumes (default: true)
-
 	// VZ-specific settings (macOS Virtualization.framework)
 	VZDataDir       string // Directory for VM data (default: ./vz)
 	VZConsoleLogDir string // Directory for VM console logs (default: same as VZDataDir)
@@ -170,9 +167,6 @@ func Load() (*Config, error) {
 	// Empty default lets the Docker SDK auto-detect (works on Linux, macOS, and Windows)
 	cfg.DockerHost = getEnv("DOCKER_HOST", "")
 	cfg.DockerNetwork = getEnv("DOCKER_NETWORK", "")
-
-	// Cache settings
-	cfg.CacheEnabled = getEnvBool("CACHE_ENABLED", true)
 
 	// VZ-specific settings (macOS Virtualization.framework)
 	// VZ state defaults to XDG_STATE_HOME/discobot/vz
