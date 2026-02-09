@@ -109,7 +109,16 @@ func newTestSandboxSetup(t *testing.T) *testSandboxSetup {
 
 	s := store.New(db.DB)
 
-	provider, err := docker.NewProvider(cfg)
+	// Create session project resolver for cache volumes
+	sessionProjectResolver := func(ctx context.Context, sessionID string) (string, error) {
+		session, err := s.GetSessionByID(ctx, sessionID)
+		if err != nil {
+			return "", err
+		}
+		return session.ProjectID, nil
+	}
+
+	provider, err := docker.NewProvider(cfg, sessionProjectResolver)
 	if err != nil {
 		db.Close()
 		t.Fatalf("Failed to create Docker provider: %v", err)
@@ -209,7 +218,15 @@ func (s *testSandboxSetup) createSandboxWithImage(t *testing.T, sessionID, image
 	tempCfg := &config.Config{
 		SandboxImage: image,
 	}
-	tempProvider, err := docker.NewProvider(tempCfg)
+	// Use the same session project resolver from the main setup
+	tempResolver := func(ctx context.Context, sessionID string) (string, error) {
+		session, err := s.store.GetSessionByID(ctx, sessionID)
+		if err != nil {
+			return "", err
+		}
+		return session.ProjectID, nil
+	}
+	tempProvider, err := docker.NewProvider(tempCfg, tempResolver)
 	if err != nil {
 		t.Fatalf("Failed to create temp provider: %v", err)
 	}
@@ -728,7 +745,15 @@ func TestProvider_GetSecretReturnsNotFoundAfterExternalContainerDeletion(t *test
 	tempCfg := &config.Config{
 		SandboxImage: testImageNew,
 	}
-	tempProvider, err := docker.NewProvider(tempCfg)
+	// Use the same session project resolver from the main setup
+	tempResolver := func(ctx context.Context, sessionID string) (string, error) {
+		session, err := setup.store.GetSessionByID(ctx, sessionID)
+		if err != nil {
+			return "", err
+		}
+		return session.ProjectID, nil
+	}
+	tempProvider, err := docker.NewProvider(tempCfg, tempResolver)
 	if err != nil {
 		t.Fatalf("Failed to create temp provider: %v", err)
 	}

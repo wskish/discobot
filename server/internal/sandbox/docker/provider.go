@@ -97,21 +97,18 @@ func WithVsockDialer(dialer func(ctx context.Context, network, addr string) (net
 	}
 }
 
-// WithSessionProjectResolver configures a function to look up the project ID
-// for a session from the database. Used for project-level cache volumes.
-func WithSessionProjectResolver(resolver SessionProjectResolver) Option {
-	return func(p *Provider) {
-		p.sessionProjectResolver = resolver
-	}
-}
-
 // NewProvider creates a new Docker sandbox provider.
-// By default, it connects to the local Docker daemon. Use WithVsockDialer option
-// to connect to Docker daemon inside a VM via VSOCK.
-func NewProvider(cfg *config.Config, opts ...Option) (*Provider, error) {
+// The sessionProjectResolver is required for mapping sessions to projects for cache volumes.
+// Use WithVsockDialer option to connect to Docker daemon inside a VM via VSOCK.
+func NewProvider(cfg *config.Config, sessionProjectResolver SessionProjectResolver, opts ...Option) (*Provider, error) {
+	if sessionProjectResolver == nil {
+		return nil, fmt.Errorf("sessionProjectResolver is required")
+	}
+
 	p := &Provider{
-		cfg:          cfg,
-		containerIDs: make(map[string]string),
+		cfg:                    cfg,
+		containerIDs:           make(map[string]string),
+		sessionProjectResolver: sessionProjectResolver,
 	}
 
 	// Apply options
@@ -345,28 +342,29 @@ func (p *Provider) Create(ctx context.Context, sessionID string, opts sandbox.Cr
 		})
 	}
 
-	// Add project cache volume mount if enabled and project resolver is available
-	if p.cfg.CacheEnabled && p.sessionProjectResolver != nil {
-		projectID, resolveErr := p.sessionProjectResolver(ctx, sessionID)
-		if resolveErr != nil {
-			log.Printf("Warning: failed to resolve project for session %s: %v", sessionID, resolveErr)
-		} else if projectID != "" {
-			// Ensure the cache volume exists
-			cacheVolName, err := p.ensureCacheVolume(ctx, projectID)
-			if err != nil {
-				log.Printf("Warning: failed to create cache volume for project %s: %v", projectID, err)
-			} else {
-				// Mount the entire cache volume at /.data/cache
-				// The agent will bind-mount individual directories from here
-				hostConfig.Mounts = append(hostConfig.Mounts, mount.Mount{
-					Type:   mount.TypeVolume,
-					Source: cacheVolName,
-					Target: "/.data/cache",
-				})
-				log.Printf("Mounted cache volume %s at /.data/cache for session %s", cacheVolName, sessionID)
-			}
-		}
+	// Add project cache volume mount (always enabled)
+	projectID, err := p.sessionProjectResolver(ctx, sessionID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve project for session %s: %w", sessionID, err)
 	}
+	if projectID == "" {
+		return nil, fmt.Errorf("session %s has no associated project", sessionID)
+	}
+
+	// Ensure the cache volume exists
+	cacheVolName, err := p.ensureCacheVolume(ctx, projectID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create cache volume for project %s: %w", projectID, err)
+	}
+
+	// Mount the entire cache volume at /.data/cache
+	// The agent will bind-mount individual directories from here
+	hostConfig.Mounts = append(hostConfig.Mounts, mount.Mount{
+		Type:   mount.TypeVolume,
+		Source: cacheVolName,
+		Target: "/.data/cache",
+	})
+	log.Printf("Mounted cache volume %s at /.data/cache for session %s", cacheVolName, sessionID)
 
 	// Configure network
 	if p.cfg.DockerNetwork != "" {
