@@ -208,13 +208,29 @@ export class AgentWatcher {
 
 		this.logger.success("Docker build succeeded");
 
-		// Create a unique timestamped tag with discobot-local/ prefix
-		// This allows the image to be recognized as a local build and ensures
-		// each build has a unique reference that's preserved across docker save/load
-		const timestamp = Math.floor(Date.now() / 1000);
-		const localImageRef = `discobot-local/${this.config.imageName}:${timestamp}`;
+		// Get the image ID to use as a stable tag
+		const inspectResult = await this.runCommand(
+			"docker",
+			["inspect", "--format={{.Id}}", this.imageRef],
+			this.config.projectRoot,
+		);
 
-		// Tag the image with the timestamped reference
+		if (inspectResult.exitCode !== 0) {
+			this.logger.error("Failed to inspect image:");
+			this.logger.error(inspectResult.stderr || inspectResult.stdout);
+			return null;
+		}
+
+		// Extract the first 8 characters of the image ID (after "sha256:")
+		const imageId = inspectResult.stdout.trim();
+		const shortId = imageId.replace(/^sha256:/, "").slice(0, 8);
+
+		// Create a tag with discobot-local/ prefix using the short image ID
+		// This allows the image to be recognized as a local build and ensures
+		// the tag is stable for the same image content
+		const localImageRef = `discobot-local/${this.config.imageName}:${shortId}`;
+
+		// Tag the image with the ID-based reference
 		const tagResult = await this.runCommand(
 			"docker",
 			["tag", this.imageRef, localImageRef],
