@@ -142,11 +142,35 @@ func NewDockerProvider(cfg *config.Config, vmConfig vm.Config, resolver SessionP
 }
 
 // ImageExists checks if the Docker image exists.
-// Note: This checks the local Docker daemon, not the VM's Docker daemon.
-func (p *DockerProvider) ImageExists(_ context.Context) bool {
-	// TODO: This should check inside a VM once one exists
-	// For now, we assume the image will be available or pulled when needed
-	return true
+// Checks VM Docker daemons first (if any VMs are running), then falls back to host Docker.
+func (p *DockerProvider) ImageExists(ctx context.Context) bool {
+	image := p.cfg.SandboxImage
+
+	// First, check if image exists in any running VM's Docker daemon
+	p.dockerProvidersMu.RLock()
+	providers := make([]*docker.Provider, 0, len(p.dockerProviders))
+	for _, prov := range p.dockerProviders {
+		providers = append(providers, prov)
+	}
+	p.dockerProvidersMu.RUnlock()
+
+	// If we have VMs running, check their Docker daemons
+	for _, dockerProv := range providers {
+		vmClient := dockerProv.Client()
+		if _, err := vmClient.ImageInspect(ctx, image); err == nil {
+			return true
+		}
+	}
+
+	// Fall back to checking host Docker daemon (image can be loaded into VM from host)
+	hostClient, err := p.getHostDockerClient()
+	if err != nil {
+		// Can't check host Docker, assume image will be pulled when needed
+		return false
+	}
+
+	_, err = hostClient.ImageInspect(ctx, image)
+	return err == nil
 }
 
 // Image returns the configured sandbox image name.
