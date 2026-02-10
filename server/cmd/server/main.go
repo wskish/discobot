@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -282,6 +283,17 @@ func main() {
 		}()
 	}
 
+	// Start session status poller to verify running sessions actually have active completions
+	// This catches sessions that are marked "running" but the agent has no active completion
+	var sessionStatusPoller *service.SessionStatusPoller
+	if sandboxProvider != nil {
+		// Create a temporary sandbox service for the poller (will be replaced later)
+		pollerSandboxSvc := service.NewSandboxService(s, sandboxProvider, cfg, nil, nil, nil)
+		sessionStatusPoller = service.NewSessionStatusPoller(s, pollerSandboxSvc, eventBroker, slog.Default())
+		sessionStatusPoller.Start(context.Background())
+		log.Println("Session status poller started")
+	}
+
 	// Start SSH server for VS Code Remote SSH and other SSH-based workflows
 	var sshServer *ssh.Server
 	if sandboxProvider != nil && cfg.SSHEnabled {
@@ -371,7 +383,7 @@ func main() {
 	r.Use(middleware.TauriAuth(cfg))
 
 	// Initialize handlers
-	h := handler.New(s, cfg, gitProvider, sandboxProvider, sandboxManager, eventBroker, jobQueue)
+	h := handler.New(s, cfg, gitProvider, sandboxProvider, sandboxManager, eventBroker, jobQueue, sessionStatusPoller)
 
 	// Wire up job queue notification to dispatcher for immediate execution
 	if disp != nil {
@@ -1355,6 +1367,15 @@ func main() {
 	// Stop sandbox watcher
 	if sandboxWatcherCancel != nil {
 		sandboxWatcherCancel()
+	}
+
+	// Stop session status poller
+	if sessionStatusPoller != nil {
+		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
+		if err := sessionStatusPoller.Shutdown(shutdownCtx); err != nil {
+			log.Printf("Warning: failed to stop session status poller: %v", err)
+		}
+		shutdownCancel()
 	}
 
 	// Stop SSH server

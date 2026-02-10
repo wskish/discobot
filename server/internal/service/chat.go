@@ -23,23 +23,25 @@ type JobEnqueuer interface {
 
 // ChatService handles chat operations including session creation and message streaming.
 type ChatService struct {
-	store          *store.Store
-	sessionService *SessionService
-	jobEnqueuer    JobEnqueuer
-	eventBroker    *events.Broker
-	sandboxService *SandboxService
-	gitService     *GitService
+	store               *store.Store
+	sessionService      *SessionService
+	jobEnqueuer         JobEnqueuer
+	eventBroker         *events.Broker
+	sandboxService      *SandboxService
+	gitService          *GitService
+	sessionStatusPoller *SessionStatusPoller
 }
 
 // NewChatService creates a new chat service.
-func NewChatService(s *store.Store, sessionService *SessionService, jobEnqueuer JobEnqueuer, eventBroker *events.Broker, sandboxService *SandboxService, gitService *GitService) *ChatService {
+func NewChatService(s *store.Store, sessionService *SessionService, jobEnqueuer JobEnqueuer, eventBroker *events.Broker, sandboxService *SandboxService, gitService *GitService, sessionStatusPoller *SessionStatusPoller) *ChatService {
 	return &ChatService{
-		store:          s,
-		sessionService: sessionService,
-		jobEnqueuer:    jobEnqueuer,
-		eventBroker:    eventBroker,
-		sandboxService: sandboxService,
-		gitService:     gitService,
+		store:               s,
+		sessionService:      sessionService,
+		jobEnqueuer:         jobEnqueuer,
+		eventBroker:         eventBroker,
+		sandboxService:      sandboxService,
+		gitService:          gitService,
+		sessionStatusPoller: sessionStatusPoller,
 	}
 }
 
@@ -185,6 +187,11 @@ func (c *ChatService) SendToSandbox(ctx context.Context, projectID, sessionID st
 		if err := c.eventBroker.PublishSessionUpdated(ctx, projectID, sessionID, model.SessionStatusRunning, ""); err != nil {
 			log.Printf("Warning: failed to publish session update event: %v", err)
 		}
+	}
+
+	// Kick the session status poller to start monitoring running sessions
+	if c.sessionStatusPoller != nil {
+		c.sessionStatusPoller.Kick()
 	}
 
 	return client.SendMessages(ctx, messages, nil)

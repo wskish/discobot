@@ -310,6 +310,13 @@ func (s *Store) ListSessionsByStatuses(ctx context.Context, statuses []string) (
 	return sessions, err
 }
 
+// GetSessionsByStatus returns all sessions with the given status.
+func (s *Store) GetSessionsByStatus(ctx context.Context, status string) ([]model.Session, error) {
+	var sessions []model.Session
+	err := s.db.WithContext(ctx).Where("status = ?", status).Find(&sessions).Error
+	return sessions, err
+}
+
 // UpdateSessionStatus updates only the status and error message fields for a session.
 func (s *Store) UpdateSessionStatus(ctx context.Context, id, status string, errorMessage *string) error {
 	updates := map[string]interface{}{
