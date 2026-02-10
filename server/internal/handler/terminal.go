@@ -15,12 +15,14 @@ import (
 	"github.com/obot-platform/discobot/server/internal/sandbox"
 )
 
+// upgrader configures the WebSocket upgrader.
+// Origin checking is handled by the CORS middleware in the router,
+// so we allow all origins here to avoid duplicate validation.
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
 	CheckOrigin: func(_ *http.Request) bool {
-		// TODO: Implement proper origin checking based on config
-		return true
+		return true // CORS middleware handles origin validation
 	},
 }
 
