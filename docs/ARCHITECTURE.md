@@ -95,7 +95,10 @@ One agent per project can be marked as `isDefault`.
 Encrypted storage for AI provider authentication:
 
 - API keys (e.g., `ANTHROPIC_API_KEY`)
-- OAuth tokens (Anthropic Console, GitHub Copilot, OpenAI Codex)
+- OAuth tokens:
+  - Anthropic OAuth: `CLAUDE_CODE_OAUTH_TOKEN`
+  - GitHub Copilot: `GITHUB_TOKEN`
+  - OpenAI Codex: `CODEX_API_KEY`
 
 Credentials are encrypted with AES-256-GCM before storage.
 

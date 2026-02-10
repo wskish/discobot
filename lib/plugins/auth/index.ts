@@ -80,15 +80,6 @@ export function getOAuthFlowComponent(
 ):
 	| React.ComponentType<{ onComplete: () => void; onCancel: () => void }>
 	| undefined {
-	// Map provider IDs to their OAuth flow components
-	switch (providerId) {
-		case "anthropic":
-			return require("./anthropic").AnthropicOAuthFlow;
-		case "codex":
-			return require("./codex").CodexOAuthFlow;
-		case "github-copilot":
-			return require("./github-copilot").GitHubCopilotOAuthFlow;
-		default:
-			return undefined;
-	}
+	const plugin = getAuthPlugin(providerId);
+	return plugin?.oauthFlow;
 }

@@ -58,17 +58,6 @@ async function completeOAuth(
 }
 
 /**
- * Codex auth plugin implementation
- */
-export const codexAuthPlugin: AuthPlugin = {
-	providerId: "codex",
-	label: "ChatGPT Login",
-	oauthOptions: OAUTH_OPTIONS,
-	startOAuth,
-	completeOAuth,
-};
-
-/**
  * Provider logo component
  */
 function ProviderLogo({ className }: { className?: string }) {
@@ -317,5 +306,17 @@ export function CodexOAuthFlow({ onComplete, onCancel }: CodexOAuthFlowProps) {
 		</div>
 	);
 }
+
+/**
+ * Codex auth plugin implementation
+ */
+export const codexAuthPlugin: AuthPlugin = {
+	providerId: "codex",
+	label: "ChatGPT Login",
+	oauthOptions: OAUTH_OPTIONS,
+	oauthFlow: CodexOAuthFlow,
+	startOAuth,
+	completeOAuth,
+};
 
 export default codexAuthPlugin;

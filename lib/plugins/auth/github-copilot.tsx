@@ -90,17 +90,6 @@ async function completeOAuth(
 }
 
 /**
- * GitHub Copilot auth plugin implementation
- */
-export const githubCopilotAuthPlugin: AuthPlugin = {
-	providerId: "github-copilot",
-	label: "GitHub Copilot",
-	oauthOptions: OAUTH_OPTIONS,
-	startOAuth,
-	completeOAuth,
-};
-
-/**
  * Provider logo component
  */
 function ProviderLogo({ className }: { className?: string }) {
@@ -516,5 +505,17 @@ export function GitHubCopilotOAuthFlow({
 
 	return null;
 }
+
+/**
+ * GitHub Copilot auth plugin implementation
+ */
+export const githubCopilotAuthPlugin: AuthPlugin = {
+	providerId: "github-copilot",
+	label: "GitHub Copilot",
+	oauthOptions: OAUTH_OPTIONS,
+	oauthFlow: GitHubCopilotOAuthFlow,
+	startOAuth,
+	completeOAuth,
+};
 
 export default githubCopilotAuthPlugin;
