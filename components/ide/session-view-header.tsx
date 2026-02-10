@@ -181,7 +181,12 @@ export function SessionViewHeader() {
 						variant={activeView === "chat" ? "secondary" : "ghost"}
 						size="sm"
 						className="h-6 text-xs mx-2 shrink-0"
-						onClick={() => setActiveView("chat")}
+						onClick={() => {
+							setActiveView("chat");
+							if (rightSidebarOpen && onToggleRightSidebar) {
+								onToggleRightSidebar();
+							}
+						}}
 					>
 						Chat
 					</Button>
