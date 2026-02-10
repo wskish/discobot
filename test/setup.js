@@ -112,6 +112,13 @@ defineGlobal("matchMedia", (query) => ({
 defineGlobal("scrollTo", () => {});
 dom.window.scrollTo = () => {};
 
+// Mock scrollTo on HTMLElement prototype
+if (dom.window.HTMLElement?.prototype) {
+	dom.window.HTMLElement.prototype.scrollTo = (_x, _y) => {
+		// Mock implementation - do nothing
+	};
+}
+
 // Mock URL methods if needed
 if (!globalThis.URL.createObjectURL) {
 	globalThis.URL.createObjectURL = () => "blob:mock";

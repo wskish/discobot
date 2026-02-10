@@ -6,7 +6,14 @@
  * in JSONL (newline-delimited JSON) format for easy streaming and replay.
  */
 
-import { appendFile, mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import {
+	appendFile,
+	mkdir,
+	open,
+	readFile,
+	stat,
+	writeFile,
+} from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { ServiceOutputEvent } from "../api/types.js";
@@ -71,11 +78,22 @@ export async function readEvents(
 
 /**
  * Clear a service's output file (for fresh start)
+ * Uses explicit file descriptor operations to ensure the clear is synced to disk
+ * before continuing, preventing race conditions with readers.
  */
 export async function clearOutput(serviceId: string): Promise<void> {
 	await ensureOutputDir();
 	const filePath = getOutputPath(serviceId);
-	await writeFile(filePath, "", "utf-8");
+
+	// Open file, truncate to 0 bytes, sync to disk, then close
+	// This ensures the clear operation is flushed before we return
+	const fd = await open(filePath, "w");
+	try {
+		await fd.truncate(0);
+		await fd.sync(); // Explicitly flush to disk
+	} finally {
+		await fd.close();
+	}
 }
 
 /**

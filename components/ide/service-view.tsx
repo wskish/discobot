@@ -56,6 +56,7 @@ export function ServiceView({
 			<ServiceOutput
 				sessionId={sessionId}
 				serviceId={service.id}
+				status={service.status}
 				className={className}
 			/>
 		);
@@ -132,6 +133,7 @@ export function ServiceView({
 					<ServiceOutput
 						sessionId={sessionId}
 						serviceId={service.id}
+						status={service.status}
 						className="h-full"
 					/>
 				</div>

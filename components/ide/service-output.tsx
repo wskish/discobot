@@ -7,12 +7,15 @@ interface ServiceOutputProps {
 	sessionId: string;
 	serviceId: string;
 	className?: string;
+	/** Service status - triggers reconnection when status changes to track restarts */
+	status?: string;
 }
 
 export function ServiceOutput({
 	sessionId,
 	serviceId,
 	className,
+	status,
 }: ServiceOutputProps) {
 	const [events, setEvents] = React.useState<ServiceOutputEvent[]>([]);
 	const [isConnected, setIsConnected] = React.useState(false);
@@ -20,6 +23,7 @@ export function ServiceOutput({
 	const eventSourceRef = React.useRef<EventSource | null>(null);
 
 	// Connect to SSE stream
+	// biome-ignore lint/correctness/useExhaustiveDependencies: status is intentionally included to trigger reconnection on service restart
 	React.useEffect(() => {
 		// Clear events when service changes
 		setEvents([]);
@@ -55,7 +59,7 @@ export function ServiceOutput({
 			eventSource.close();
 			eventSourceRef.current = null;
 		};
-	}, [sessionId, serviceId]);
+	}, [sessionId, serviceId, status]);
 
 	// Auto-scroll to bottom when events change
 	// biome-ignore lint/correctness/useExhaustiveDependencies: intentionally scroll when events array length changes
