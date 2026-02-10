@@ -27,6 +27,15 @@ const (
 	AuthTypeOAuth  = "oauth"
 )
 
+// oauthEnvVars maps provider IDs to their OAuth-specific environment variable names.
+// If a provider has an OAuth-specific env var, it will be used instead of the provider's
+// default env var when the credential type is OAuth.
+var oauthEnvVars = map[string]string{
+	ProviderAnthropic: "CLAUDE_CODE_OAUTH_TOKEN",
+	// Add more OAuth-specific env vars here as needed
+	// e.g., ProviderOpenAI: "OPENAI_OAUTH_TOKEN",
+}
+
 var (
 	ErrCredentialNotFound = errors.New("credential not found")
 	ErrInvalidProvider    = errors.New("invalid provider")
@@ -301,10 +310,14 @@ func (s *CredentialService) GetAllDecrypted(ctx context.Context, projectID strin
 				// Skip credentials that fail to decrypt
 				continue
 			}
-			// Use the first env var for the access token
+			// Use OAuth-specific env var if defined, otherwise fall back to provider's first env var
 			if tokens.AccessToken != "" {
+				envVar := envVars[0] // Default to provider's first env var
+				if oauthEnvVar, exists := oauthEnvVars[c.Provider]; exists {
+					envVar = oauthEnvVar // Use OAuth-specific env var if defined
+				}
 				result = append(result, CredentialEnvVar{
-					EnvVar: envVars[0],
+					EnvVar: envVar,
 					Value:  tokens.AccessToken,
 				})
 			}

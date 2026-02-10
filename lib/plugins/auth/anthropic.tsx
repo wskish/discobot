@@ -51,17 +51,6 @@ async function completeOAuth(
 }
 
 /**
- * Anthropic auth plugin implementation
- */
-export const anthropicAuthPlugin: AuthPlugin = {
-	providerId: "anthropic",
-	label: "Claude Login",
-	oauthOptions: OAUTH_OPTIONS,
-	startOAuth,
-	completeOAuth,
-};
-
-/**
  * Provider logo component helper
  */
 function ProviderLogo({ className }: { className?: string }) {
@@ -275,5 +264,17 @@ export function AnthropicOAuthFlow({
 		</div>
 	);
 }
+
+/**
+ * Anthropic auth plugin implementation
+ */
+export const anthropicAuthPlugin: AuthPlugin = {
+	providerId: "anthropic",
+	label: "Claude Login",
+	oauthOptions: OAUTH_OPTIONS,
+	oauthFlow: AnthropicOAuthFlow,
+	startOAuth,
+	completeOAuth,
+};
 
 export default anthropicAuthPlugin;

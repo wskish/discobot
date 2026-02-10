@@ -42,6 +42,12 @@ export interface AuthPlugin {
 	/** Available OAuth options for this provider */
 	oauthOptions: OAuthOption[];
 
+	/** React component for the OAuth flow UI */
+	oauthFlow: React.ComponentType<{
+		onComplete: () => void;
+		onCancel: () => void;
+	}>;
+
 	/**
 	 * Start the OAuth flow
 	 * @param optionId - The selected OAuth option ID
