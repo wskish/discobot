@@ -166,6 +166,25 @@ func NewProvider(cfg *config.Config, sessionProjectResolver SessionProjectResolv
 		return nil, fmt.Errorf("failed to connect to docker daemon: %w", err)
 	}
 
+	// Pull the sandbox image if it's a remote tag (not a digest)
+	// Use a longer timeout for pulling images
+	pullCtx, pullCancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer pullCancel()
+
+	if err := p.pullSandboxImage(pullCtx, cfg.SandboxImage); err != nil {
+		log.Printf("Warning: Failed to pull sandbox image on startup: %v", err)
+		// Don't fail initialization if pull fails - the image might already exist locally
+	}
+
+	// Clean up old sandbox images with the discobot label
+	cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cleanupCancel()
+
+	if err := p.cleanupOldSandboxImages(cleanupCtx, cfg.SandboxImage); err != nil {
+		log.Printf("Warning: Failed to clean up old sandbox images: %v", err)
+		// Don't fail initialization if cleanup fails - it's not critical
+	}
+
 	return p, nil
 }
 
@@ -465,6 +484,84 @@ func (p *Provider) ensureImage(ctx context.Context, image string) error {
 	_, err = io.Copy(io.Discard, reader)
 	if err != nil {
 		return fmt.Errorf("failed to complete image pull for %s: %w", image, err)
+	}
+
+	return nil
+}
+
+// isDigestReference checks if an image reference is a digest (e.g., image@sha256:...)
+// Digest references should not be pulled as they refer to a specific immutable image.
+func isDigestReference(image string) bool {
+	return strings.Contains(image, "@sha256:")
+}
+
+// pullSandboxImage pulls the sandbox image if it's a remote tag reference (not a digest).
+func (p *Provider) pullSandboxImage(ctx context.Context, image string) error {
+	// Skip pulling if it's a digest reference
+	if isDigestReference(image) {
+		log.Printf("Sandbox image is a digest reference, skipping pull: %s", image)
+		return nil
+	}
+
+	log.Printf("Pulling sandbox image: %s", image)
+	reader, err := p.client.ImagePull(ctx, image, imageTypes.PullOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to pull sandbox image %s: %w", image, err)
+	}
+	defer func() { _ = reader.Close() }()
+
+	// Drain the reader to complete the pull (progress is discarded)
+	_, err = io.Copy(io.Discard, reader)
+	if err != nil {
+		return fmt.Errorf("failed to complete sandbox image pull for %s: %w", image, err)
+	}
+
+	log.Printf("Successfully pulled sandbox image: %s", image)
+	return nil
+}
+
+// cleanupOldSandboxImages removes old sandbox images with the discobot label.
+// This helps clean up images from previous versions when the sandbox image is updated.
+func (p *Provider) cleanupOldSandboxImages(ctx context.Context, currentImage string) error {
+	// List all images with the discobot sandbox label
+	images, err := p.client.ImageList(ctx, imageTypes.ListOptions{
+		Filters: filters.NewArgs(
+			filters.Arg("label", "io.discobot.sandbox-image=true"),
+		),
+	})
+	if err != nil {
+		return fmt.Errorf("failed to list sandbox images: %w", err)
+	}
+
+	// Get the current image ID to avoid deleting it
+	currentImageInfo, err := p.client.ImageInspect(ctx, currentImage)
+	if err != nil {
+		log.Printf("Warning: Failed to inspect current sandbox image %s: %v", currentImage, err)
+		// Continue cleanup anyway, just be more careful
+	}
+
+	deletedCount := 0
+	for _, img := range images {
+		// Skip the current image
+		if currentImageInfo.ID != "" && img.ID == currentImageInfo.ID {
+			continue
+		}
+
+		// Delete the old image
+		log.Printf("Removing old sandbox image: %s (ID: %s)", img.RepoTags, img.ID)
+		_, err := p.client.ImageRemove(ctx, img.ID, imageTypes.RemoveOptions{
+			Force:         false, // Don't force, let it fail if image is in use
+			PruneChildren: true,
+		})
+		if err != nil {
+			log.Printf("Warning: Failed to remove old sandbox image %s: %v", img.ID, err)
+			continue
+		}
+		deletedCount++
+	}
+
+	if deletedCount > 0 {
+		log.Printf("Cleaned up %d old sandbox image(s)", deletedCount)
 	}
 
 	return nil
