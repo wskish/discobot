@@ -217,7 +217,7 @@ export function SessionListTable() {
 						</Button>
 					</div>
 				) : (
-					<Table>
+					<Table className="table-fixed">
 						<TableHeader>
 							<TableRow>
 								<TableHead className="w-[140px]">
@@ -409,7 +409,7 @@ function SessionRow({
 			</TableCell>
 
 			{/* Session Name and Description */}
-			<TableCell>
+			<TableCell className="max-w-0">
 				{isRenaming ? (
 					<div className="flex items-center gap-2">
 						<input
@@ -439,11 +439,11 @@ function SessionRow({
 						</button>
 					</div>
 				) : (
-					<div>
+					<div className="min-w-0 overflow-hidden">
 						<button
 							type="button"
 							onClick={() => onSessionSelect(session)}
-							className="font-medium hover:underline text-left"
+							className="font-medium hover:underline text-left truncate block"
 						>
 							{displayName}
 						</button>
