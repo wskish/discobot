@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"log"
 	"time"
@@ -70,10 +71,16 @@ func (s *SandboxService) ensureSandboxReady(ctx context.Context, sessionID strin
 	switch sess.Status {
 	case model.SessionStatusReady, model.SessionStatusRunning:
 		// Session status looks good — verify the container is actually running.
-		if err := s.ensureContainerRunning(ctx, sessionID); err != nil {
-			log.Printf("Session %s status is %s but container not running (%v), reconciling", sessionID, sess.Status, err)
+		// This fast-path check avoids expensive reconciliation when everything is healthy.
+		sb, err := s.provider.Get(ctx, sessionID)
+		if errors.Is(err, sandbox.ErrNotFound) || (err == nil && sb.Status != sandbox.StatusRunning) {
+			log.Printf("Session %s status is %s but container not running, reconciling", sessionID, sess.Status)
 			return s.ReconcileSandbox(ctx, sessionID)
 		}
+		if err != nil {
+			return fmt.Errorf("failed to check sandbox status: %w", err)
+		}
+		// Container is running - all good
 		return nil
 	case model.SessionStatusStopped, model.SessionStatusError:
 		return s.ReconcileSandbox(ctx, sessionID)
@@ -86,30 +93,6 @@ func (s *SandboxService) ensureSandboxReady(ctx context.Context, sessionID strin
 		return nil
 	default:
 		return s.ReconcileSandbox(ctx, sessionID)
-	}
-}
-
-// ensureContainerRunning checks the sandbox provider and starts/creates the container if needed.
-// Returns an error only if the container cannot be brought to a running state.
-func (s *SandboxService) ensureContainerRunning(ctx context.Context, sessionID string) error {
-	sb, err := s.provider.Get(ctx, sessionID)
-	if err == sandbox.ErrNotFound {
-		return s.CreateForSession(ctx, sessionID)
-	}
-	if err != nil {
-		return fmt.Errorf("failed to get sandbox status: %w", err)
-	}
-
-	switch sb.Status {
-	case sandbox.StatusRunning:
-		return nil
-	case sandbox.StatusCreated, sandbox.StatusStopped:
-		return s.provider.Start(ctx, sessionID)
-	case sandbox.StatusFailed:
-		_ = s.provider.Remove(ctx, sessionID)
-		return s.CreateForSession(ctx, sessionID)
-	default:
-		return fmt.Errorf("unknown sandbox status: %s", sb.Status)
 	}
 }
 
@@ -402,9 +385,9 @@ func (s *SandboxService) ReconcileSandboxes(ctx context.Context) error {
 			continue
 		}
 
-		// Create a new sandbox with the correct image
-		// CreateForSession will retrieve workspace path and commit from the session
-		if err := s.CreateForSession(ctx, sb.SessionID); err != nil {
+		// Recreate the sandbox with the correct image via job system
+		// This ensures proper serialization with any concurrent user operations
+		if err := s.ReconcileSandbox(ctx, sb.SessionID); err != nil {
 			log.Printf("Failed to recreate sandbox for session %s: %v", sb.SessionID, err)
 			continue
 		}

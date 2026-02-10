@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -18,6 +19,43 @@ import (
 
 // Use the config constant for test consistency
 var testImage = config.DefaultSandboxImage()
+
+// sandboxCreatingInitializer provides a SessionInitializer for tests
+// that actually creates sandboxes (unlike the no-op testSessionInitializer in perform_commit_test.go)
+type sandboxCreatingInitializer struct {
+	sandboxSvc *SandboxService
+}
+
+func (t *sandboxCreatingInitializer) Initialize(ctx context.Context, sessionID string) error {
+	// Check if sandbox already exists (mimics SessionService.Initialize behavior)
+	existingSandbox, err := t.sandboxSvc.provider.Get(ctx, sessionID)
+	if err != nil && !errors.Is(err, sandbox.ErrNotFound) {
+		return err
+	}
+
+	if existingSandbox != nil {
+		// Sandbox exists - handle based on status
+		switch existingSandbox.Status {
+		case sandbox.StatusRunning:
+			return nil // Already running
+		case sandbox.StatusCreated, sandbox.StatusStopped:
+			// Try to start it
+			if err := t.sandboxSvc.provider.Start(ctx, sessionID); err != nil {
+				// Start failed - remove and recreate
+				_ = t.sandboxSvc.provider.Remove(ctx, sessionID)
+				return t.sandboxSvc.CreateForSession(ctx, sessionID)
+			}
+			return nil
+		default:
+			// Failed state - remove and recreate
+			_ = t.sandboxSvc.provider.Remove(ctx, sessionID)
+			return t.sandboxSvc.CreateForSession(ctx, sessionID)
+		}
+	}
+
+	// No existing sandbox - create new one
+	return t.sandboxSvc.CreateForSession(ctx, sessionID)
+}
 
 // setupTestStore creates an in-memory SQLite database for testing
 func setupTestStore(t *testing.T) *store.Store {
@@ -180,6 +218,8 @@ func TestSandboxService_EnsureSandboxReady_CreatesNew(t *testing.T) {
 	testStore := setupTestStore(t)
 	cfg := &config.Config{}
 	svc := NewSandboxService(testStore, mockProvider, cfg, nil, nil, nil)
+	// Provide a session initializer for the test fallback path
+	svc.SetSessionInitializer(&sandboxCreatingInitializer{sandboxSvc: svc})
 
 	ctx := context.Background()
 	sessionID := "test-session-1"
@@ -235,6 +275,8 @@ func TestSandboxService_EnsureSandboxReady_StartsStopped(t *testing.T) {
 	testStore := setupTestStore(t)
 	cfg := &config.Config{}
 	svc := NewSandboxService(testStore, mockProvider, cfg, nil, nil, nil)
+	// Provide a session initializer for the test fallback path
+	svc.SetSessionInitializer(&sandboxCreatingInitializer{sandboxSvc: svc})
 
 	ctx := context.Background()
 	sessionID := "test-session-1"
