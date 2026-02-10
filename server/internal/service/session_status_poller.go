@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sync"
@@ -16,6 +17,10 @@ const (
 	pollInterval = 5 * time.Second // Check running sessions every 5 seconds
 	pollTimeout  = 3 * time.Second // Timeout for individual status checks
 )
+
+// errSessionNotRunning is returned by checkSession when it successfully determines
+// that a session is not actually running and updates its status.
+var errSessionNotRunning = errors.New("session not running")
 
 // SessionStatusPoller monitors running sessions and verifies they're actually running
 // by checking the agent-api completion status. Starts polling when kicked and stops
@@ -124,10 +129,8 @@ func (p *SessionStatusPoller) pollLoop(ctx context.Context) {
 			if !polling {
 				p.logger.Debug("starting active polling")
 				polling = true
-				// Do immediate check
-				if _, err := p.checkRunningSessions(ctx); err != nil {
-					p.logger.Error("error checking running sessions", "error", err)
-				}
+				// Don't check immediately - wait for first poll interval
+				// This gives the completion time to actually start before we verify it
 			}
 		case <-ticker.C:
 			if polling {
@@ -162,15 +165,20 @@ func (p *SessionStatusPoller) checkRunningSessions(ctx context.Context) (bool, e
 
 	stillRunning := 0
 	for _, session := range sessions {
-		if err := p.checkSession(ctx, &session); err != nil {
+		err := p.checkSession(ctx, &session)
+		if err == nil {
+			// Session is still running
+			stillRunning++
+		} else if !errors.Is(err, errSessionNotRunning) {
+			// Actual error checking the session (not the expected "not running" case)
 			p.logger.Error("error checking session",
 				"session_id", session.ID,
 				"project_id", session.ProjectID,
 				"error", err)
 			// Continue checking other sessions
-		} else {
-			stillRunning++
 		}
+		// If err is errSessionNotRunning, the session was successfully marked
+		// as not running - don't count it or log an error
 	}
 
 	return stillRunning > 0, nil
@@ -189,7 +197,10 @@ func (p *SessionStatusPoller) checkSession(ctx context.Context, session *model.S
 	if err != nil {
 		// If we can't get a client (sandbox might be stopped), mark session as stopped
 		logger.Warn("failed to get sandbox client, marking session as stopped", "error", err)
-		return p.updateSessionStatus(ctx, session, model.SessionStatusStopped, err.Error())
+		if updateErr := p.updateSessionStatus(ctx, session, model.SessionStatusStopped, err.Error()); updateErr != nil {
+			return updateErr
+		}
+		return errSessionNotRunning
 	}
 
 	// Check the chat status
@@ -204,7 +215,10 @@ func (p *SessionStatusPoller) checkSession(ctx context.Context, session *model.S
 	if !status.IsRunning {
 		logger.Info("session marked running but completion not active, updating to ready",
 			"completion_id", status.CompletionID)
-		return p.updateSessionStatus(ctx, session, model.SessionStatusReady, "")
+		if err := p.updateSessionStatus(ctx, session, model.SessionStatusReady, ""); err != nil {
+			return err
+		}
+		return errSessionNotRunning
 	}
 
 	logger.Debug("session completion still running", "completion_id", status.CompletionID)

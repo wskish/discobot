@@ -189,10 +189,9 @@ func (c *ChatService) SendToSandbox(ctx context.Context, projectID, sessionID st
 		}
 	}
 
-	// Kick the session status poller to start monitoring running sessions
-	if c.sessionStatusPoller != nil {
-		c.sessionStatusPoller.Kick()
-	}
+	// Note: The session status poller is kicked AFTER SendMessages returns
+	// (in the handler) to ensure the agent API has received the request
+	// before we start polling for status.
 
 	return client.SendMessages(ctx, messages, nil)
 }

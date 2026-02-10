@@ -124,6 +124,11 @@ func (h *Handler) Chat(w http.ResponseWriter, r *http.Request) {
 		if err := h.eventBroker.PublishSessionUpdated(ctx, projectID, sessionID, model.SessionStatusReady, ""); err != nil {
 			log.Printf("[Chat] Warning: failed to publish session update event: %v", err)
 		}
+		// Kick the poller after chat completes to check for any stale running sessions
+		// We don't poll during active streams since they're clearly running
+		if h.sessionStatusPoller != nil {
+			h.sessionStatusPoller.Kick()
+		}
 	}()
 
 	flusher, ok := w.(http.Flusher)
