@@ -126,6 +126,9 @@ RUN bun build ./src/index.ts \
 # Stage 4: Minimal Ubuntu runtime
 FROM ubuntu:24.04 AS runtime
 
+# Label for image identification and cleanup
+LABEL io.discobot.sandbox-image=true
+
 # Install all apt packages first for better layer caching
 # (apt-get changes infrequently; binary copies change with each code change)
 # git is needed for workspace cloning
