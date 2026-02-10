@@ -217,11 +217,9 @@ RUN chmod +x /opt/discobot/bin/*
 
 # Add discobot binaries and npm global bin to PATH
 # Also set NPM_CONFIG_PREFIX for non-login shell contexts
-# Set PNPM_HOME to use persistent storage for pnpm cache/store
 # Add Rust cargo bin for rustc and cargo
 # Claude CLI is installed to /usr/local/bin (already in default PATH)
 ENV NPM_CONFIG_PREFIX="/home/discobot/.npm-global"
-ENV PNPM_HOME="/.data/pnpm"
 ENV PATH="/home/discobot/.cargo/bin:/usr/local/go/bin:/home/discobot/.npm-global/bin:/opt/discobot/bin:${PATH}"
 
 WORKDIR /workspace
