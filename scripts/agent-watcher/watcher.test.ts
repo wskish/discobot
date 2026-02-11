@@ -182,11 +182,14 @@ describe("AgentWatcher", () => {
 	});
 
 	describe("with mock command runner", () => {
-		it("calls docker build and tag with correct arguments", async () => {
+		it("calls docker build, inspect, and tag with correct arguments", async () => {
 			const calls: Array<{ command: string; args: string[]; cwd: string }> = [];
 
 			const mockRunner: CommandRunner = async (command, args, cwd) => {
 				calls.push({ command, args, cwd });
+				if (args.includes("inspect")) {
+					return { stdout: "sha256:abcdef1234567890\n", stderr: "", exitCode: 0 };
+				}
 				return { stdout: "", stderr: "", exitCode: 0 };
 			};
 
@@ -203,22 +206,27 @@ describe("AgentWatcher", () => {
 
 			const result = await watcher.buildImage();
 
-			assert.equal(calls.length, 2);
+			assert.equal(calls.length, 3);
+			// First call: docker build
 			assert.equal(calls[0].command, "docker");
 			assert.deepEqual(calls[0].args, ["build", "-t", "my-image:dev", "."]);
 			assert.equal(calls[0].cwd, tempDir);
+			// Second call: docker inspect
 			assert.equal(calls[1].command, "docker");
-			assert.equal(calls[1].args[0], "tag");
-			assert.equal(calls[1].args[1], "my-image:dev");
-			// args[2] is the timestamped tag: discobot-local/my-image:<timestamp>
+			assert.equal(calls[1].args[0], "inspect");
+			// Third call: docker tag
+			assert.equal(calls[2].command, "docker");
+			assert.equal(calls[2].args[0], "tag");
+			assert.equal(calls[2].args[1], "my-image:dev");
+			// args[2] is the local tag: discobot-local/my-image:<shortId>
 			assert.ok(
-				calls[1].args[2].startsWith("discobot-local/my-image:"),
-				"Should create timestamped local tag",
+				calls[2].args[2].startsWith("discobot-local/my-image:"),
+				"Should create local tag with image ID",
 			);
-			// Result should be the timestamped tag reference
+			// Result should be the local tag reference
 			assert.ok(
 				result?.startsWith("discobot-local/my-image:"),
-				"Should return timestamped tag reference",
+				"Should return local tag reference",
 			);
 		});
 
@@ -249,6 +257,9 @@ describe("AgentWatcher", () => {
 				if (args.includes("build")) {
 					buildCalls++;
 					return { stdout: "", stderr: "", exitCode: 0 };
+				}
+				if (args.includes("inspect")) {
+					return { stdout: "sha256:abc12345deadbeef\n", stderr: "", exitCode: 0 };
 				}
 				if (args.includes("tag")) {
 					return { stdout: "", stderr: "", exitCode: 0 };
