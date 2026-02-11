@@ -278,7 +278,7 @@ export class ClaudeSDKClient implements Agent {
 			includePartialMessages: true,
 			tools: { type: "preset", preset: "claude_code" },
 			systemPrompt: { type: "preset", preset: "claude_code" },
-			settingSources: ["project"], // Load CLAUDE.md files
+			settingSources: ["user", "project"], // Load user settings from ~/.claude and CLAUDE.md files
 			maxThinkingTokens: 10000, // Enable extended thinking with reasonable token limit
 			// Use the discovered Claude CLI path from connect()
 			pathToClaudeCodeExecutable: this.claudeCliPath!,
