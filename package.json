@@ -37,6 +37,7 @@
 		"format": "biome format . --write",
 		"check": "biome check . && npm run lint:go && npm run typecheck",
 		"check:fix": "biome check . --write && npm run lint:go && npm run typecheck",
+		"check:skills": ".claude/scripts/validate-skills.sh",
 		"typecheck": "tsc --noEmit",
 		"refresh-models": "./scripts/refresh-models-data.sh",
 		"release": "node scripts/release.mjs"
