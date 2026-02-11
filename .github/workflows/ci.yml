@@ -15,7 +15,7 @@ jobs:
         os:
           - runner: depot-ubuntu-latest
             name: Linux
-          - runner: macos-14
+          - runner: depot-macos-latest
             name: macOS ARM
 
     runs-on: ${{ matrix.os.runner }}
