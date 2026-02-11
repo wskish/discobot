@@ -17,7 +17,6 @@ import {
 import * as React from "react";
 import { Button } from "@/components/ui/button";
 import type { FileStatus, SessionDiffFileEntry } from "@/lib/api-types";
-import { useSessionViewContext } from "@/lib/contexts/session-view-context";
 import {
 	type LazyFileNode,
 	useSessionFiles,
@@ -49,14 +48,20 @@ function getFolderStatus(
 }
 
 interface FilePanelProps {
+	sessionId: string | null;
+	activeView: string;
+	onFileSelect: (path: string) => void;
 	className?: string;
 	style?: React.CSSProperties;
 }
 
-export function FilePanel({ className, style }: FilePanelProps) {
-	// Get session and file selection from context
-	const { selectedSessionId, activeView, handleFileSelect } =
-		useSessionViewContext();
+export function FilePanel({
+	sessionId,
+	activeView,
+	onFileSelect,
+	className,
+	style,
+}: FilePanelProps) {
 	const selectedFilePath = activeView.startsWith("file:")
 		? activeView.slice(5)
 		: null;
@@ -74,7 +79,7 @@ export function FilePanel({ className, style }: FilePanelProps) {
 		expandAll,
 		collapseAll,
 		isPathLoading,
-	} = useSessionFiles(selectedSessionId, !showChangedOnly);
+	} = useSessionFiles(sessionId, !showChangedOnly);
 
 	// Filter to show only changed files when in "Changed" mode
 	const filteredFiles = React.useMemo(() => {
@@ -148,7 +153,7 @@ export function FilePanel({ className, style }: FilePanelProps) {
 		return hasDir(filteredFiles);
 	}, [filteredFiles]);
 
-	if (!selectedSessionId) {
+	if (!sessionId) {
 		return (
 			<div
 				className={cn(
@@ -220,7 +225,7 @@ export function FilePanel({ className, style }: FilePanelProps) {
 							depth={0}
 							expandedPaths={expandedPaths}
 							toggleExpand={toggleDirectory}
-							onFileSelect={handleFileSelect}
+							onFileSelect={onFileSelect}
 							selectedFilePath={selectedFilePath}
 							isPathLoading={isPathLoading}
 							diffEntries={diffEntries}
