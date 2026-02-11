@@ -27,6 +27,7 @@ type AgentType struct {
 	Icons                    []Icon   `json:"icons,omitempty"`
 	Badges                   []Badge  `json:"badges,omitempty"`
 	Highlighted              bool     `json:"highlighted,omitempty"`
+	Enabled                  bool     `json:"enabled"`
 	SupportedAuthProviders   []string `json:"supportedAuthProviders,omitempty"`   // Use ["*"] for all providers
 	HighlightedAuthProviders []string `json:"highlightedAuthProviders,omitempty"` // Featured auth providers for this agent
 	AllowNoAuth              bool     `json:"allowNoAuth,omitempty"`
@@ -46,6 +47,7 @@ var agentTypes = []AgentType{
 			{Label: "Popular", ClassName: "bg-primary/10 text-primary"},
 		},
 		Highlighted:              true,
+		Enabled:                  true,
 		SupportedAuthProviders:   []string{"anthropic"},
 		HighlightedAuthProviders: []string{"anthropic"},
 	},
@@ -63,6 +65,7 @@ var agentTypes = []AgentType{
 			{Label: "Free", ClassName: "bg-blue-500/10 text-blue-600 dark:text-blue-400"},
 		},
 		Highlighted:              true,
+		Enabled:                  false,
 		SupportedAuthProviders:   []string{"*"},
 		HighlightedAuthProviders: []string{"opencode", "anthropic", "codex"},
 		AllowNoAuth:              true,
@@ -75,6 +78,7 @@ var agentTypes = []AgentType{
 			{Src: "https://cdn.simpleicons.org/googlegemini", MimeType: "image/svg+xml", Theme: "light"},
 			{Src: "https://cdn.simpleicons.org/googlegemini/white", MimeType: "image/svg+xml", Theme: "dark"},
 		},
+		Enabled:                false,
 		SupportedAuthProviders: []string{"google"},
 	},
 	{
@@ -84,6 +88,7 @@ var agentTypes = []AgentType{
 		Icons: []Icon{
 			{Src: "https://aider.chat/assets/logo.svg", MimeType: "image/svg+xml"},
 		},
+		Enabled:                false,
 		SupportedAuthProviders: []string{"anthropic", "openai", "google", "deepseek"},
 	},
 	{
@@ -93,6 +98,7 @@ var agentTypes = []AgentType{
 		Icons: []Icon{
 			{Src: "https://raw.githubusercontent.com/continuedev/continue/main/extensions/vscode/media/icon.png", MimeType: "image/png"},
 		},
+		Enabled:                false,
 		SupportedAuthProviders: []string{"anthropic", "openai"},
 	},
 	{
@@ -103,6 +109,7 @@ var agentTypes = []AgentType{
 			{Src: "https://cdn.simpleicons.org/cursor", MimeType: "image/svg+xml", Theme: "light"},
 			{Src: "https://cdn.simpleicons.org/cursor/white", MimeType: "image/svg+xml", Theme: "dark"},
 		},
+		Enabled:                false,
 		SupportedAuthProviders: []string{"anthropic", "openai"},
 	},
 	{
@@ -112,6 +119,7 @@ var agentTypes = []AgentType{
 		Icons: []Icon{
 			{Src: "https://upload.wikimedia.org/wikipedia/commons/4/4d/OpenAI_Logo.svg", MimeType: "image/svg+xml"},
 		},
+		Enabled:                false,
 		SupportedAuthProviders: []string{"openai", "codex"},
 	},
 	{
@@ -122,6 +130,7 @@ var agentTypes = []AgentType{
 			{Src: "https://cdn.simpleicons.org/githubcopilot", MimeType: "image/svg+xml", Theme: "light"},
 			{Src: "https://cdn.simpleicons.org/githubcopilot/white", MimeType: "image/svg+xml", Theme: "dark"},
 		},
+		Enabled:                false,
 		SupportedAuthProviders: []string{"github-copilot"},
 	},
 }
@@ -167,7 +176,14 @@ func (h *Handler) CreateAgent(w http.ResponseWriter, r *http.Request) {
 
 // GetAgentTypes returns supported agent types
 func (h *Handler) GetAgentTypes(w http.ResponseWriter, _ *http.Request) {
-	h.JSON(w, http.StatusOK, map[string]any{"agentTypes": agentTypes})
+	// Filter out disabled agent types
+	enabledTypes := make([]AgentType, 0, len(agentTypes))
+	for _, at := range agentTypes {
+		if at.Enabled {
+			enabledTypes = append(enabledTypes, at)
+		}
+	}
+	h.JSON(w, http.StatusOK, map[string]any{"agentTypes": enabledTypes})
 }
 
 // GetAuthProviders returns available auth providers from models.dev data
