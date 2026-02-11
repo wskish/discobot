@@ -4,12 +4,14 @@ import {
 	ChevronDownIcon,
 	CircleIcon,
 	ClockIcon,
+	CodeIcon,
 	WrenchIcon,
 	XCircleIcon,
 } from "lucide-react";
 import type { ComponentProps, ReactNode } from "react";
 import { isValidElement, lazy, Suspense } from "react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
 	Collapsible,
 	CollapsibleContent,
@@ -32,11 +34,18 @@ function CodeBlockWithSuspense(props: ComponentProps<typeof CodeBlock>) {
 	);
 }
 
-export type ToolProps = ComponentProps<typeof Collapsible>;
+export type ToolProps = ComponentProps<typeof Collapsible> & {
+	/** Whether to show the border around the tool */
+	showBorder?: boolean;
+};
 
-export const Tool = ({ className, ...props }: ToolProps) => (
+export const Tool = ({ className, showBorder = true, ...props }: ToolProps) => (
 	<Collapsible
-		className={cn("group not-prose mb-4 w-full rounded-md border", className)}
+		className={cn(
+			"group not-prose mb-4 w-full rounded-md",
+			showBorder && "border",
+			className,
+		)}
 		{...props}
 	/>
 );
@@ -46,6 +55,12 @@ export type ToolPart = ToolUIPart | DynamicToolUIPart;
 export type ToolHeaderProps = {
 	title?: string;
 	className?: string;
+	/** Whether to show the wrench icon */
+	showIcon?: boolean;
+	/** Whether raw view is enabled (for optimized tools) */
+	isRaw?: boolean;
+	/** Callback to toggle raw view (for optimized tools) */
+	onToggleRaw?: () => void;
 } & (
 	| { type: ToolUIPart["type"]; state: ToolUIPart["state"]; toolName?: never }
 	| {
@@ -90,25 +105,60 @@ export const ToolHeader = ({
 	type,
 	state,
 	toolName,
+	showIcon = true,
+	isRaw,
+	onToggleRaw,
 	...props
 }: ToolHeaderProps) => {
 	const derivedName =
 		type === "dynamic-tool" ? toolName : type.split("-").slice(1).join("-");
 
+	// Parse title to extract verb badge (e.g., "RUN: ls -la" -> verb="RUN", rest="ls -la")
+	const displayText = title ?? derivedName;
+	const colonIndex = displayText.indexOf(": ");
+	const hasVerb = colonIndex !== -1;
+	const verb = hasVerb ? displayText.slice(0, colonIndex) : null;
+	const rest = hasVerb ? displayText.slice(colonIndex + 2) : displayText;
+
 	return (
 		<CollapsibleTrigger
 			className={cn(
-				"flex w-full items-center justify-between gap-4 p-3",
+				"flex w-full items-center justify-between gap-4",
+				showIcon ? "p-3" : "px-3 py-1.5",
 				className,
 			)}
 			{...props}
 		>
 			<div className="flex items-center gap-2">
-				<WrenchIcon className="size-4 text-muted-foreground" />
-				<span className="font-medium text-sm">{title ?? derivedName}</span>
-				{getStatusBadge(state)}
+				{showIcon && <WrenchIcon className="size-4 text-muted-foreground" />}
+				{verb && (
+					<Badge
+						variant="secondary"
+						className="rounded-full bg-primary/10 px-2 py-0.5 font-bold text-primary text-xs"
+					>
+						{verb}
+					</Badge>
+				)}
+				<span className="font-medium text-sm">{rest}</span>
+				{state !== "output-available" && getStatusBadge(state)}
 			</div>
-			<ChevronDownIcon className="size-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
+			<div className="flex items-center gap-2">
+				{onToggleRaw && (
+					<Button
+						variant="ghost"
+						size="icon"
+						className="size-7 opacity-0 transition-opacity group-data-[state=open]:opacity-100"
+						onClick={(e) => {
+							e.stopPropagation();
+							onToggleRaw();
+						}}
+						title={isRaw ? "Show optimized view" : "Show raw view"}
+					>
+						<CodeIcon className="size-4" />
+					</Button>
+				)}
+				<ChevronDownIcon className="size-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
+			</div>
 		</CollapsibleTrigger>
 	);
 };

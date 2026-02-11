@@ -1,5 +1,5 @@
 import type { UIMessage } from "ai";
-import { memo } from "react";
+import { memo, useState } from "react";
 import { ImageAttachment } from "@/components/ai-elements/image-attachment";
 import { MessageResponse } from "@/components/ai-elements/message";
 import {
@@ -8,13 +8,12 @@ import {
 	ReasoningTrigger,
 } from "@/components/ai-elements/reasoning";
 import { Source } from "@/components/ai-elements/sources";
+import { Tool, ToolContent, ToolHeader } from "@/components/ai-elements/tool";
 import {
-	Tool,
-	ToolContent,
-	ToolHeader,
-	ToolInput,
-	ToolOutput,
-} from "@/components/ai-elements/tool";
+	getToolTitle,
+	hasOptimizedRenderer,
+	OptimizedToolRenderer,
+} from "@/components/ai-elements/tool-renderers";
 
 interface MessagePartsProps {
 	/** The message containing parts to render */
@@ -25,6 +24,42 @@ interface MessagePartsProps {
 	part: UIMessage["parts"][number];
 	/** Whether this message is currently streaming */
 	isStreaming?: boolean;
+}
+
+/**
+ * OptimizedToolWrapper - Wraps optimized tool rendering with raw view toggle
+ *
+ * Manages the state for switching between optimized and raw view.
+ * Edit tool defaults to expanded state.
+ */
+function OptimizedToolWrapper({
+	part,
+}: {
+	part: Extract<UIMessage["parts"][number], { type: "dynamic-tool" }>;
+}) {
+	const [showRaw, setShowRaw] = useState(false);
+	const isOptimized = hasOptimizedRenderer(part.toolName);
+	const title = getToolTitle(part);
+
+	// Edit tool defaults to expanded
+	const isEditTool = part.toolName === "Edit";
+
+	return (
+		<Tool key={part.toolCallId} defaultOpen={isEditTool}>
+			<ToolHeader
+				type={part.type}
+				state={part.state}
+				toolName={part.toolName}
+				title={title}
+				showIcon={!isOptimized}
+				isRaw={showRaw}
+				onToggleRaw={isOptimized ? () => setShowRaw(!showRaw) : undefined}
+			/>
+			<ToolContent>
+				<OptimizedToolRenderer toolPart={part} forceRaw={showRaw} />
+			</ToolContent>
+		</Tool>
+	);
 }
 
 /**
@@ -97,20 +132,7 @@ export const MessagePart = memo(
 
 		// Dynamic tool part (tool calls)
 		if (part.type === "dynamic-tool") {
-			return (
-				<Tool key={part.toolCallId}>
-					<ToolHeader
-						type={part.type}
-						state={part.state}
-						toolName={part.toolName}
-						title={part.title}
-					/>
-					<ToolContent>
-						<ToolInput input={part.input} />
-						<ToolOutput output={part.output} errorText={part.errorText} />
-					</ToolContent>
-				</Tool>
-			);
+			return <OptimizedToolWrapper key={part.toolCallId} part={part} />;
 		}
 
 		// Source URL part (RAG citations)
