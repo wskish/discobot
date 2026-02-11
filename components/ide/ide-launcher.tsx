@@ -44,7 +44,7 @@ const IDE_CONFIGS: IDEConfig[] = [
 		name: "JetBrains",
 		// JetBrains Gateway uses separate parameters for host, user, port, and path
 		urlTemplate:
-			"jetbrains://connect#type=ssh&host={host}&user={user}&port={port}&projectPath={path}",
+			"jetbrains-gateway://connect#projectPath={path}&host={host}&port={port}&user={user}&type=ssh",
 	},
 	{
 		id: "zed",
