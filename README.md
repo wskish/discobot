@@ -1,49 +1,48 @@
-# Discobot - IDE Chat Interface
+# Discobot
 
-Discobot is an IDE-like chat interface for managing coding sessions with AI agents. It provides a web-based development environment that lets users interact with AI coding assistants (Claude Code, Gemini CLI, etc.) within isolated workspaces.
+An AI-powered IDE interface for managing coding sessions with AI agents. Discobot gives you a complete development environment where you can interact with AI coding assistants in isolated, sandboxed workspaces.
 
-## Features
+> **[▶️ Watch the demo video](#)** *(coming soon)*
 
-- **Workspaces**: Manage local folders or git repositories as workspaces
-- **Sessions**: Create chat threads with AI agents within workspaces
-- **Multiple AI Agents**: Configure and switch between different AI coding agents
-- **File Diff Viewer**: View and navigate file changes with tabbed browser
-- **Integrated Terminal**: xterm.js-based terminal for command execution
-- **Theme Support**: Light and dark mode with theme-aware icons
-- **Real-time Updates**: SSE-based live updates for session status
+## What is Discobot?
 
-## Tech Stack
+Discobot is a web-based platform that lets you:
 
-- **Framework**: React Router 7 + Vite
-- **Language**: TypeScript 5.9
-- **Styling**: Tailwind CSS v4 with CSS custom properties
-- **UI Components**: shadcn/ui (Radix primitives)
-- **AI SDK**: Vercel AI SDK v5
-- **State Management**: SWR for data fetching and caching
-- **Terminal**: xterm.js v6
+- **Chat with AI coding agents** to build features, debug issues, and write code
+- **Work in isolated sandboxes** where each session runs in its own secure container
+- **Use your own IDE** by launching remote sessions directly into sandboxes
+- **SSH into environments** for direct access to any sandbox
+- **Switch between agents** with support for multiple AI coding assistants
 
-## Project Structure
+Think of it as your AI coding companion with built-in workspace management, version control integration, and debugging tools.
 
-This is a monorepo with three main components:
+## Key Features
 
-```
-.
-├── src/                    # React frontend (UI)
-├── components/             # React components
-├── lib/                    # Shared utilities and hooks
-├── agent/                  # Container init process (Go)
-├── agent-api/              # Container agent API service (TypeScript/Bun)
-├── server/                 # Go backend server
-├── proxy/                  # HTTP/SOCKS5 proxy with header injection (Go)
-└── docs/                   # Documentation
-```
+### 🤖 Multiple Coding Agents
+Choose which AI agent to use for each session. Currently supports Claude Code, with OpenCode, Gemini CLI, and others coming soon. Each agent can have different models, modes, and capabilities to match your workflow.
+
+### 📦 Isolated Sandboxed Sessions
+Run parallel sessions in secure containers with full app debugging capabilities. Your local files stay safe — changes only apply when you commit them.
+
+### 💻 Use Your Own IDE
+Launch remote IDE sessions (VS Code, Cursor, etc.) directly into each sandbox environment. Get the full power of your favorite development tools.
+
+### 🔒 SSH Access to Sandboxes
+Direct SSH access to every sandbox environment for advanced debugging and configuration.
+
+### 🛠️ Integrated Lightweight Tools
+Built-in terminal, diff viewer, and file editor for quick edits without leaving the interface.
+
+### 🗂️ Workspace Management
+Manage local folders or clone git repositories. Each workspace maintains its own sessions and history.
 
 ## Documentation
 
+For detailed information about the architecture, setup, and development:
+
 - [Architecture Overview](./docs/ARCHITECTURE.md) - Overall system architecture
 - [UI Architecture](./docs/ui/ARCHITECTURE.md) - Frontend architecture
-- [UI Design Documents](./docs/ui/design/) - UI module designs
-- [Server Documentation](./server/README.md) - Go backend
+- [Server Documentation](./server/README.md) - Go backend server
 - [Agent Documentation](./agent/README.md) - Container init process
 - [Agent API Documentation](./agent-api/README.md) - Container agent API service
 - [Proxy Documentation](./proxy/README.md) - HTTP/SOCKS5 MITM proxy
@@ -57,7 +56,7 @@ This is a monorepo with three main components:
 - Go 1.25+
 - Docker (for container runtime)
 
-### Development
+### Quick Start
 
 ```bash
 # Install dependencies
@@ -65,64 +64,22 @@ pnpm install
 
 # Run all services (frontend + backend + agent watcher)
 pnpm dev
-
-# Run individual services
-pnpm dev:vite    # Vite frontend only
-pnpm dev:server  # Go backend with air (auto-reload)
-pnpm dev:agent   # Agent watcher
 ```
 
-### Environment Variables
+This will start:
+- Vite frontend at `http://localhost:3000`
+- Go backend server at `http://localhost:3001`
+- Agent watcher for hot-reload
 
-#### Frontend Environment Variables
+### Configuration
 
-Create a `.env.local` file in the root directory (see `.env.local.example`):
+Create a `.env.local` file in the root directory (see `.env.local.example` for options).
 
-```bash
-# Copy the example file
-cp .env.local.example .env.local
+For server configuration, create a `.env` file in the `server/` directory with your API keys and database settings. See [Server Documentation](./server/README.md) for details.
 
-# The REACT_DEVTOOLS_URL is already set in the example
-# Uncomment or modify as needed
-```
+## Contributing
 
-#### Server Environment Variables
-
-Create a `.env` file in the `server/` directory:
-
-```bash
-# Database (optional, defaults to SQLite)
-DATABASE_URL=postgres://user:pass@localhost:5432/discobot
-
-# Encryption key for credentials
-ENCRYPTION_KEY=your-32-byte-key
-
-# OAuth providers (optional)
-ANTHROPIC_CLIENT_ID=...
-ANTHROPIC_CLIENT_SECRET=...
-```
-
-### Building & Checking
-
-```bash
-# Build Vite frontend
-pnpm build
-
-# Type checking
-pnpm typecheck
-
-# Linting and formatting
-pnpm check
-pnpm check:fix    # Auto-fix issues
-```
-
-## Ports
-
-- **3000**: Vite frontend dev server
-- **3001**: Go backend server
-- **8080**: Agent container endpoint (internal)
-- **17080**: Proxy server (HTTP/HTTPS/SOCKS5, inside containers)
-- **17081**: Proxy API server (inside containers)
+We welcome contributions! Check out our [issues](https://github.com/obot-platform/discobot/issues) to see what features or agent integrations we're working on next.
 
 ## License
 
