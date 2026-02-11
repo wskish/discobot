@@ -150,7 +150,7 @@ export function translateSDKMessage(
 			return translateStreamEvent(msg, state);
 
 		case "result":
-			return createFinishChunks(state);
+			return createFinishChunks(msg, state);
 
 		case "user":
 			// User messages may contain tool_result blocks
@@ -600,8 +600,12 @@ function handleContentBlockStop(
 /**
  * Create finish chunks for the result message.
  * Closes any orphaned blocks and emits the final finish.
+ * Maps Claude SDK stop_reason to AI SDK finishReason.
  */
-function createFinishChunks(state: TranslationState): UIMessageChunk[] {
+function createFinishChunks(
+	msg: SDKMessage,
+	state: TranslationState,
+): UIMessageChunk[] {
 	const chunks: UIMessageChunk[] = [];
 
 	// Emit deferred finish-step from the last API call
@@ -624,8 +628,28 @@ function createFinishChunks(state: TranslationState): UIMessageChunk[] {
 	}
 	state.openReasoningIndices.clear();
 
+	// Map Claude SDK stop_reason to AI SDK finishReason
+	let finishReason: "stop" | "length" | "tool-calls" | "error" | "other" =
+		"stop";
+	if (
+		msg.type === "result" &&
+		"stop_reason" in msg &&
+		typeof msg.stop_reason === "string"
+	) {
+		const stopReason = msg.stop_reason;
+		if (stopReason === "end_turn") {
+			finishReason = "stop";
+		} else if (stopReason === "tool_use") {
+			finishReason = "tool-calls";
+		} else if (stopReason === "max_tokens") {
+			finishReason = "length";
+		} else if (stopReason) {
+			finishReason = "other";
+		}
+	}
+
 	// Emit finish for the overall message/response
-	chunks.push({ type: "finish" });
+	chunks.push({ type: "finish", finishReason });
 
 	return chunks;
 }

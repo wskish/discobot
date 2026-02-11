@@ -364,6 +364,13 @@ export interface SystemStatusResponse {
 	messages: StatusMessage[];
 }
 
+/** Response from cancelling a chat completion */
+export interface CancelChatResponse {
+	success: boolean;
+	completionId: string;
+	status: "cancelled";
+}
+
 // ============================================================================
 // Session File System Types
 // ============================================================================

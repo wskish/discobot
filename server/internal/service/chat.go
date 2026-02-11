@@ -62,6 +62,16 @@ type NewSessionRequest struct {
 	Messages json.RawMessage
 }
 
+// CancelCompletionResponse represents the response from cancelling a completion.
+type CancelCompletionResponse struct {
+	Success      bool   `json:"success"`
+	CompletionID string `json:"completionId"`
+	Status       string `json:"status"`
+}
+
+// ErrNoActiveCompletion is returned when attempting to cancel with no active completion.
+var ErrNoActiveCompletion = errors.New("no active completion to cancel")
+
 // NewSession creates a new chat session and enqueues initialization.
 // Uses the client-provided session ID.
 func (c *ChatService) NewSession(ctx context.Context, req NewSessionRequest) (string, error) {
@@ -382,6 +392,31 @@ func (c *ChatService) GetMessages(ctx context.Context, projectID, sessionID stri
 	// Credentials are automatically fetched by sandboxClient
 	return withSandboxReconciliation(ctx, c, projectID, sessionID, func() ([]sandboxapi.UIMessage, error) {
 		return c.sandboxClient.GetMessages(ctx, sessionID, nil)
+	})
+}
+
+// CancelCompletion cancels an in-progress chat completion in the sandbox.
+// Returns ErrNoActiveCompletion if no completion is active.
+// The sandbox is automatically reconciled if not running.
+func (c *ChatService) CancelCompletion(ctx context.Context, projectID, sessionID string) (*CancelCompletionResponse, error) {
+	// Validate session belongs to project
+	if _, err := c.GetSession(ctx, projectID, sessionID); err != nil {
+		return nil, err
+	}
+
+	if c.sandboxClient == nil {
+		return nil, fmt.Errorf("sandbox provider not available")
+	}
+
+	// Check DB state first - fast reconciliation for known non-running states
+	if err := c.ensureSandboxReady(ctx, projectID, sessionID); err != nil {
+		return nil, err
+	}
+
+	// Use reconciliation wrapper for runtime errors
+	// Credentials are automatically fetched by sandboxClient
+	return withSandboxReconciliation(ctx, c, projectID, sessionID, func() (*CancelCompletionResponse, error) {
+		return c.sandboxClient.CancelCompletion(ctx, sessionID)
 	})
 }
 

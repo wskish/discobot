@@ -1189,6 +1189,20 @@ func main() {
 					},
 				},
 			})
+
+			// Chat cancel endpoint
+			projReg.Register(r, routes.Route{
+				Method: "POST", Pattern: "/chat/{sessionId}/cancel",
+				Handler: h.ChatCancel,
+				Meta: routes.Meta{
+					Group:       "Chat",
+					Description: "Cancel in-progress chat completion",
+					Params: []routes.Param{
+						{Name: "projectId", Example: "local"},
+						{Name: "sessionId", Example: "abc123"},
+					},
+				},
+			})
 		})
 	})
 

@@ -4,10 +4,12 @@ import type { UIMessage } from "ai";
 import type { Agent } from "../agent/interface.js";
 import { generateMessageId } from "../agent/utils.js";
 import type {
+	CancelCompletionResponse,
 	ChatConflictResponse,
 	ChatRequest,
 	ChatStartedResponse,
 	ErrorResponse,
+	NoActiveCompletionResponse,
 } from "../api/types.js";
 import { checkCredentialsChanged } from "../credentials/credentials.js";
 import {
@@ -20,6 +22,11 @@ import {
 } from "../store/session.js";
 
 const execAsync = promisify(exec);
+
+// Global state for the current completion
+let currentAgent: Agent | null = null;
+let currentSessionId: string | undefined;
+let currentAbortController: AbortController | null = null;
 
 export type StartCompletionResult =
 	| { ok: true; status: 202; response: ChatStartedResponse }
@@ -102,7 +109,12 @@ export function tryStartCompletion(
 	const { changed: credentialsChanged, env: credentialEnv } =
 		checkCredentialsChanged(credentialsHeader);
 
-	// Run completion in background (don't await)
+	// Store agent and session references for cancellation
+	currentAgent = agent;
+	currentSessionId = sessionId;
+	currentAbortController = new AbortController();
+
+	// Run completion with abort signal in background (don't await)
 	runCompletion(
 		agent,
 		completionId,
@@ -113,12 +125,63 @@ export function tryStartCompletion(
 		gitUserEmail,
 		log,
 		sessionId,
+		currentAbortController.signal,
 	);
 
 	return {
 		ok: true,
 		status: 202,
 		response: { completionId, status: "started" },
+	};
+}
+
+export type CancelCompletionResult =
+	| { ok: true; status: 200; response: CancelCompletionResponse }
+	| { ok: false; status: 409; response: NoActiveCompletionResponse };
+
+/**
+ * Attempt to cancel an in-progress chat completion.
+ * Returns a result object with the appropriate response and status code.
+ */
+export function tryCancelCompletion(): CancelCompletionResult {
+	if (!isCompletionRunning()) {
+		return {
+			ok: false,
+			status: 409,
+			response: { error: "no_active_completion" },
+		};
+	}
+
+	const state = getCompletionState();
+
+	// Cancel through the agent interface (which will handle SDK-level cancellation)
+	if (currentAgent) {
+		currentAgent.cancel(currentSessionId).catch((err) => {
+			console.error("Error calling agent.cancel():", err);
+		});
+	}
+
+	// Also abort the controller as a fallback
+	if (currentAbortController) {
+		currentAbortController.abort();
+		currentAbortController = null;
+	}
+
+	console.log(
+		JSON.stringify({
+			event: "cancelled",
+			completionId: state.completionId,
+		}),
+	);
+
+	return {
+		ok: true,
+		status: 200,
+		response: {
+			success: true,
+			completionId: state.completionId || "unknown",
+			status: "cancelled",
+		},
 	};
 }
 
@@ -152,7 +215,8 @@ function runCompletion(
 	gitUserName: string | null,
 	gitUserEmail: string | null,
 	log: (data: Record<string, unknown>) => void,
-	sessionId?: string,
+	sessionId: string | undefined,
+	abortSignal: AbortSignal,
 ): void {
 	// Run asynchronously without blocking the caller
 	(async () => {
@@ -160,6 +224,11 @@ function runCompletion(
 		clearCompletionEvents();
 
 		try {
+			// Check if already cancelled before starting
+			if (abortSignal.aborted) {
+				throw new Error("Completion cancelled before start");
+			}
+
 			// Configure git user settings if provided
 			if (gitUserName || gitUserEmail) {
 				await configureGitUser(gitUserName, gitUserEmail);
@@ -189,20 +258,56 @@ function runCompletion(
 				id: lastUserMessage.id || generateMessageId(),
 			};
 
-			// Stream chunks from the agent's prompt generator
+			// Stream chunks from the agent's prompt generator with cancellation checking
 			// The SDK emits start (via message_start) and finish (via result) events
 			for await (const chunk of agent.prompt(userMessage, sessionId)) {
+				// Check if cancelled during iteration
+				if (abortSignal.aborted) {
+					// Send finish event with stop reason instead of error
+					addCompletionEvent({
+						type: "finish",
+						finishReason: "stop",
+					});
+					log({ event: "cancelled" });
+					await finishCompletion();
+					return;
+				}
+
 				addCompletionEvent(chunk);
 			}
 
 			log({ event: "completed" });
 			await finishCompletion();
 		} catch (error) {
+			// Check if this was an abort error
+			if (
+				error instanceof Error &&
+				(error.name === "AbortError" || error.message.includes("cancelled"))
+			) {
+				// Send finish event with stop reason for cancellation
+				addCompletionEvent({
+					type: "finish",
+					finishReason: "stop",
+				});
+				log({ event: "cancelled" });
+				await finishCompletion();
+				return;
+			}
+
 			const errorText = extractErrorMessage(error);
 			log({ event: "error", error: errorText });
 			// Send error event to SSE stream so the client receives it
 			addCompletionEvent({ type: "error", errorText });
+			// Also send finish event with error reason for proper completion
+			addCompletionEvent({
+				type: "finish",
+				finishReason: "error",
+			});
 			await finishCompletion(errorText);
+		} finally {
+			currentAgent = null;
+			currentSessionId = undefined;
+			currentAbortController = null;
 		}
 	})();
 }
