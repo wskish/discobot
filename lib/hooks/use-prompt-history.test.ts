@@ -118,6 +118,147 @@ describe("usePromptHistory localStorage helpers", () => {
 			const draft = localStorageMock.getItem(`${DRAFT_PREFIX}${sessionId}`);
 			assert.strictEqual(draft, null);
 		});
+
+		describe("isNewSession draft key logic", () => {
+			it("should use 'new' key when isNewSession is true", () => {
+				const sessionId = "temp-session-123";
+				const isNewSession = true;
+				const draftValue = "Draft for new session";
+
+				// Simulate getDraft/saveDraft logic: isNewSession || !sessionId ? "new" : sessionId
+				const key = isNewSession || !sessionId ? "new" : sessionId;
+				localStorageMock.setItem(`${DRAFT_PREFIX}${key}`, draftValue);
+
+				// Should be stored with "new" key, not the temporary session ID
+				assert.strictEqual(
+					localStorageMock.getItem(`${DRAFT_PREFIX}new`),
+					draftValue,
+					"Draft should be stored with 'new' key when isNewSession=true",
+				);
+				assert.strictEqual(
+					localStorageMock.getItem(`${DRAFT_PREFIX}${sessionId}`),
+					null,
+					"Draft should NOT be stored with temporary session ID",
+				);
+			});
+
+			it("should use session ID key when isNewSession is false", () => {
+				const sessionId = "real-session-456";
+				const isNewSession = false;
+				const draftValue = "Draft for existing session";
+
+				const key = isNewSession || !sessionId ? "new" : sessionId;
+				localStorageMock.setItem(`${DRAFT_PREFIX}${key}`, draftValue);
+
+				// Should be stored with session ID key
+				assert.strictEqual(
+					localStorageMock.getItem(`${DRAFT_PREFIX}${sessionId}`),
+					draftValue,
+					"Draft should be stored with session ID when isNewSession=false",
+				);
+				assert.strictEqual(
+					localStorageMock.getItem(`${DRAFT_PREFIX}new`),
+					null,
+					"Draft should NOT be stored with 'new' key",
+				);
+			});
+
+			it("should use 'new' key when sessionId is null regardless of isNewSession", () => {
+				const sessionId = null;
+				const isNewSession = false;
+				const draftValue = "Draft with null session ID";
+
+				const key = isNewSession || !sessionId ? "new" : sessionId;
+				localStorageMock.setItem(`${DRAFT_PREFIX}${key}`, draftValue);
+
+				assert.strictEqual(
+					localStorageMock.getItem(`${DRAFT_PREFIX}new`),
+					draftValue,
+					"Draft should use 'new' key when sessionId is null",
+				);
+			});
+
+			it("should preserve 'new' draft across multiple temporary session IDs", () => {
+				const draftValue = "Draft that should persist";
+				const tempId1 = "temp-session-1";
+				const tempId2 = "temp-session-2";
+				const isNewSession = true;
+
+				// First new session - save draft
+				const key1 = isNewSession || !tempId1 ? "new" : tempId1;
+				localStorageMock.setItem(`${DRAFT_PREFIX}${key1}`, draftValue);
+
+				// User navigates away and comes back - new temporary ID
+				const key2 = isNewSession || !tempId2 ? "new" : tempId2;
+
+				// Draft should still be accessible with same "new" key
+				assert.strictEqual(
+					localStorageMock.getItem(`${DRAFT_PREFIX}${key2}`),
+					draftValue,
+					"Draft should persist under 'new' key regardless of temporary session ID changes",
+				);
+			});
+
+			it("should clear 'new' draft when transitioning to saved session", () => {
+				const newSessionDraft = "Draft for new session";
+				const savedSessionId = "saved-session-789";
+
+				// Set up draft for new session
+				localStorageMock.setItem(`${DRAFT_PREFIX}new`, newSessionDraft);
+				assert.strictEqual(
+					localStorageMock.getItem(`${DRAFT_PREFIX}new`),
+					newSessionDraft,
+				);
+
+				// Transition to saved session - clear "new" draft
+				localStorageMock.removeItem(`${DRAFT_PREFIX}new`);
+
+				// Verify "new" draft is cleared
+				assert.strictEqual(
+					localStorageMock.getItem(`${DRAFT_PREFIX}new`),
+					null,
+					"'new' draft should be cleared when session becomes saved",
+				);
+
+				// Saved session has its own draft storage
+				const savedDraft = "Draft for saved session";
+				localStorageMock.setItem(
+					`${DRAFT_PREFIX}${savedSessionId}`,
+					savedDraft,
+				);
+				assert.strictEqual(
+					localStorageMock.getItem(`${DRAFT_PREFIX}${savedSessionId}`),
+					savedDraft,
+				);
+			});
+
+			it("should isolate drafts between 'new' and saved sessions", () => {
+				const newDraft = "New session draft";
+				const savedDraft1 = "Saved session 1 draft";
+				const savedDraft2 = "Saved session 2 draft";
+				const session1 = "session-1";
+				const session2 = "session-2";
+
+				// Set up drafts
+				localStorageMock.setItem(`${DRAFT_PREFIX}new`, newDraft);
+				localStorageMock.setItem(`${DRAFT_PREFIX}${session1}`, savedDraft1);
+				localStorageMock.setItem(`${DRAFT_PREFIX}${session2}`, savedDraft2);
+
+				// Verify all are independent
+				assert.strictEqual(
+					localStorageMock.getItem(`${DRAFT_PREFIX}new`),
+					newDraft,
+				);
+				assert.strictEqual(
+					localStorageMock.getItem(`${DRAFT_PREFIX}${session1}`),
+					savedDraft1,
+				);
+				assert.strictEqual(
+					localStorageMock.getItem(`${DRAFT_PREFIX}${session2}`),
+					savedDraft2,
+				);
+			});
+		});
 	});
 });
 
