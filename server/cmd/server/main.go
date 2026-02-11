@@ -250,9 +250,6 @@ func main() {
 	r.Use(chimiddleware.Recoverer)
 	// Note: No global timeout - SSE endpoints need long-lived connections
 
-	// Tauri auth middleware - validates secret cookie when running in Tauri mode
-	r.Use(middleware.TauriAuth(cfg))
-
 	// Service subdomain proxy - intercepts {session-id}-svc-{service-id}.* domains
 	// and proxies to agent-api's HTTP proxy endpoint without credentials.
 	// IMPORTANT: This must run BEFORE CORS middleware so that OPTIONS requests
@@ -261,15 +258,21 @@ func main() {
 		r.Use(middleware.ServiceProxy(sandboxProvider))
 	}
 
-	// CORS configuration (only applies to non-service-proxy requests)
-	r.Use(cors.Handler(cors.Options{
-		AllowedOrigins:   cfg.CORSOrigins,
-		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
-		ExposedHeaders:   []string{"Link"},
-		AllowCredentials: true,
-		MaxAge:           300,
-	}))
+	if len(cfg.CORSOrigins) > 0 {
+		// CORS configuration (only applies to non-service-proxy requests)
+		r.Use(cors.Handler(cors.Options{
+			AllowedOrigins:   cfg.CORSOrigins,
+			AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD", "PATCH"},
+			AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
+			ExposedHeaders:   []string{"Link"},
+			AllowCredentials: true,
+			MaxAge:           300,
+			Debug:            true,
+		}))
+	}
+
+	// Tauri auth middleware - validates secret cookie when running in Tauri mode
+	r.Use(middleware.TauriAuth(cfg))
 
 	// Initialize handlers
 	h := handler.New(s, cfg, gitProvider, sandboxProvider, eventBroker)

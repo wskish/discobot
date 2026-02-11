@@ -5,15 +5,7 @@
  * and browser environments.
  */
 
-/**
- * Whether the app is running in Tauri (desktop) mode.
- * Checks for Tauri runtime API or build-time env var.
- */
-export const IS_TAURI =
-	typeof window !== "undefined" &&
-	("__TAURI__" in window ||
-		import.meta.env.VITE_TAURI === "true" ||
-		import.meta.env.TAURI_ENV_PLATFORM !== undefined);
+import { isTauri } from "./api-config";
 
 /**
  * Open a URL in the system's default browser.
@@ -24,7 +16,7 @@ export const IS_TAURI =
  * @param url - The URL to open
  */
 export async function openExternal(url: string): Promise<void> {
-	if (IS_TAURI) {
+	if (isTauri()) {
 		const { openUrl: tauriOpenUrl } = await import("@tauri-apps/plugin-opener");
 		await tauriOpenUrl(url);
 	} else {
@@ -41,7 +33,7 @@ export async function openExternal(url: string): Promise<void> {
  * @param url - The URL to open (can be a custom protocol like vscode://)
  */
 export async function openUrl(url: string): Promise<void> {
-	if (IS_TAURI) {
+	if (isTauri()) {
 		const { openUrl: tauriOpenUrl } = await import("@tauri-apps/plugin-opener");
 		await tauriOpenUrl(url);
 	} else {

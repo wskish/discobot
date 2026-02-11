@@ -22,9 +22,10 @@ const (
 const sessionCookieName = "discobot_session"
 const tauriSecretCookieName = "discobot_secret"
 
-// TauriAuth middleware validates the Tauri secret cookie.
+// TauriAuth middleware validates the Tauri secret from cookie or query string.
 // Only active when cfg.TauriMode is true.
 // Rejects requests without valid secret with 401 Unauthorized.
+// Checks both cookie and ?token= query parameter for flexibility with WebSocket/SSE.
 func TauriAuth(cfg *config.Config) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -34,15 +35,23 @@ func TauriAuth(cfg *config.Config) func(http.Handler) http.Handler {
 				return
 			}
 
-			// Get the secret cookie
-			cookie, err := r.Cookie(tauriSecretCookieName)
-			if err != nil {
+			var secret string
+
+			// First check query parameter (for WebSocket/SSE URLs)
+			if token := r.URL.Query().Get("token"); token != "" {
+				secret = token
+			} else if cookie, err := r.Cookie(tauriSecretCookieName); err == nil {
+				// Fall back to cookie
+				secret = cookie.Value
+			}
+
+			if secret == "" {
 				http.Error(w, `{"error":"Tauri authentication required"}`, http.StatusUnauthorized)
 				return
 			}
 
 			// Constant-time comparison to prevent timing attacks
-			if subtle.ConstantTimeCompare([]byte(cookie.Value), []byte(cfg.TauriSecret)) != 1 {
+			if subtle.ConstantTimeCompare([]byte(secret), []byte(cfg.TauriSecret)) != 1 {
 				http.Error(w, `{"error":"Invalid Tauri secret"}`, http.StatusUnauthorized)
 				return
 			}

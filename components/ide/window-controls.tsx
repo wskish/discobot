@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { IS_TAURI } from "@/lib/tauri";
+import { isTauri } from "@/lib/api-config";
 
 type Platform = "macos" | "windows" | "linux";
 
@@ -9,7 +9,7 @@ export function WindowControls() {
 	const [mounted, setMounted] = useState(false);
 
 	useEffect(() => {
-		if (!IS_TAURI) return;
+		if (!isTauri()) return;
 
 		setMounted(true);
 
@@ -43,7 +43,7 @@ export function WindowControls() {
 		};
 	}, []);
 
-	if (!IS_TAURI || !mounted) return null;
+	if (!isTauri() || !mounted) return null;
 
 	const handleMinimize = async () => {
 		const { getCurrentWindow } = await import("@tauri-apps/api/window");

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef } from "react";
-import { getApiBase } from "../api-config";
+import { appendAuthToken, getApiBase } from "../api-config";
 
 // Event types from the server
 export type ProjectEventType = "session_updated" | "workspace_updated";
@@ -85,7 +85,7 @@ export function useProjectEvents(options: UseProjectEventsOptions = {}) {
 			eventSourceRef.current.close();
 		}
 
-		const url = `${getApiBase()}/events`;
+		const url = appendAuthToken(`${getApiBase()}/events`);
 		const eventSource = new EventSource(url);
 		eventSourceRef.current = eventSource;
 
