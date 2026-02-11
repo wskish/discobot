@@ -43,6 +43,7 @@ import {
 } from "../services/manager.js";
 import { proxyHttpRequest } from "../services/proxy.js";
 import {
+	aggregateDeltas,
 	getCompletionEvents,
 	getCompletionState,
 	isCompletionRunning,
@@ -120,11 +121,23 @@ export function createApp(options: AppOptions) {
 
 			// Stream all events (past and future) until completion finishes
 			return streamSSE(c, async (stream) => {
-				// Send all events accumulated so far
-				let lastEventIndex = 0;
+				// Get initial batch and aggregate deltas for efficient replay
+				const initialEvents = getCompletionEvents();
+				const aggregatedInitial = aggregateDeltas(initialEvents);
+
+				// Send aggregated initial batch
+				for (const event of aggregatedInitial) {
+					await stream.writeSSE({
+						data: JSON.stringify(event),
+					});
+				}
+
+				// Track the raw event index (not aggregated) for polling new events
+				let lastEventIndex = initialEvents.length;
 
 				const sendNewEvents = async () => {
 					const events = getCompletionEvents();
+					// Send new events as-is (no aggregation for live streaming)
 					while (lastEventIndex < events.length) {
 						await stream.writeSSE({
 							data: JSON.stringify(events[lastEventIndex]),
@@ -132,9 +145,6 @@ export function createApp(options: AppOptions) {
 						lastEventIndex++;
 					}
 				};
-
-				// Send initial batch
-				await sendNewEvents();
 
 				// Poll for new events until completion finishes
 				while (isCompletionRunning()) {

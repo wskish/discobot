@@ -80,6 +80,84 @@ export function getCompletionEvents(): UIMessageChunk[] {
 	return [...completionEvents];
 }
 
+/**
+ * Aggregate consecutive delta chunks of the same type/ID into single larger deltas.
+ * This dramatically reduces chunk count on replay while keeping protocol intact.
+ */
+export function aggregateDeltas(chunks: UIMessageChunk[]): UIMessageChunk[] {
+	if (chunks.length === 0) return [];
+
+	const result: UIMessageChunk[] = [];
+	let i = 0;
+
+	while (i < chunks.length) {
+		const chunk = chunks[i];
+
+		// Check if this is a delta chunk that can be aggregated
+		if (
+			chunk.type === "text-delta" ||
+			chunk.type === "reasoning-delta" ||
+			chunk.type === "tool-input-delta"
+		) {
+			// Accumulate consecutive deltas of the same type and ID
+			let accumulatedDelta = "";
+
+			while (i < chunks.length) {
+				const current = chunks[i];
+
+				// Check if we can aggregate this chunk
+				let canAggregate = false;
+				if (chunk.type === "text-delta" && current.type === "text-delta") {
+					canAggregate = chunk.id === current.id;
+					if (canAggregate) accumulatedDelta += current.delta;
+				} else if (
+					chunk.type === "reasoning-delta" &&
+					current.type === "reasoning-delta"
+				) {
+					canAggregate = chunk.id === current.id;
+					if (canAggregate) accumulatedDelta += current.delta;
+				} else if (
+					chunk.type === "tool-input-delta" &&
+					current.type === "tool-input-delta"
+				) {
+					canAggregate = chunk.toolCallId === current.toolCallId;
+					if (canAggregate) accumulatedDelta += current.inputTextDelta;
+				}
+
+				if (!canAggregate) break;
+				i++;
+			}
+
+			// Emit single aggregated delta
+			if (chunk.type === "text-delta") {
+				result.push({
+					type: "text-delta",
+					id: chunk.id,
+					delta: accumulatedDelta,
+				});
+			} else if (chunk.type === "reasoning-delta") {
+				result.push({
+					type: "reasoning-delta",
+					id: chunk.id,
+					delta: accumulatedDelta,
+				});
+			} else if (chunk.type === "tool-input-delta") {
+				result.push({
+					type: "tool-input-delta",
+					toolCallId: chunk.toolCallId,
+					inputTextDelta: accumulatedDelta,
+				});
+			}
+		} else {
+			// Not a delta - pass through as-is
+			result.push(chunk);
+			i++;
+		}
+	}
+
+	return result;
+}
+
 export function clearCompletionEvents(): void {
 	completionEvents = [];
 }
