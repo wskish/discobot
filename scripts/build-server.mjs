@@ -13,11 +13,6 @@ const binariesDir = join(projectRoot, "src-tauri", "binaries");
 // In CI, DISCOBOT_VERSION is set from the git tag (e.g., "0.1.0-12")
 let version = process.env.DISCOBOT_VERSION || "main";
 
-// Add 'v' prefix for Go binary (e.g., "0.1.0-12" → "v0.1.0-12")
-// Keep "main" as-is for dev builds
-if (version !== "main" && !version.startsWith("v")) {
-	version = `v${version}`;
-}
 
 // Create binaries directory
 mkdirSync(binariesDir, { recursive: true });
