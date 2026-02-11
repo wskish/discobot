@@ -29,12 +29,20 @@ function DiffView({
 	oldString,
 	newString,
 	fileName,
+	isStreaming,
 }: {
 	oldString: string;
 	newString: string;
 	fileName: string;
+	isStreaming: boolean;
 }) {
 	const fileDiff = useMemo(() => {
+		// During streaming, defer expensive diff calculation to avoid infinite loops
+		// This prevents React from entering an update cycle while the input is changing
+		if (isStreaming) {
+			return null;
+		}
+
 		// Create a unified diff patch using the diff library
 		const patch = Diff.createPatch(
 			fileName,
@@ -49,12 +57,12 @@ function DiffView({
 
 		// Return the first file diff (there should only be one)
 		return parsedPatches[0]?.files[0];
-	}, [oldString, newString, fileName]);
+	}, [oldString, newString, fileName, isStreaming]);
 
 	if (!fileDiff) {
 		return (
 			<div className="rounded-md border border-border bg-muted/20 p-3 text-muted-foreground text-sm">
-				No changes to display
+				{isStreaming ? "Loading changes..." : "No changes to display"}
 			</div>
 		);
 	}
@@ -86,6 +94,7 @@ export default function EditToolRenderer({
 	input,
 	output,
 	errorText,
+	state,
 }: ToolRendererProps<EditToolInput, EditToolOutput>) {
 	// Validate output if present (before any early returns)
 	const outputValidation = output ? validateEditOutput(output) : null;
@@ -119,6 +128,10 @@ export default function EditToolRenderer({
 	// Extract file name from path
 	const fileName =
 		validInput.file_path.split("/").pop() || validInput.file_path;
+
+	// Check if this tool is currently streaming
+	const isStreaming =
+		state === "input-streaming" || state === "input-available";
 
 	return (
 		<div className="space-y-4 p-4">
@@ -166,6 +179,7 @@ export default function EditToolRenderer({
 						oldString={validInput.old_string}
 						newString={validInput.new_string}
 						fileName={fileName}
+						isStreaming={isStreaming}
 					/>
 				)}
 			</div>
