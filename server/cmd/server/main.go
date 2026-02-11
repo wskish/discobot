@@ -246,7 +246,7 @@ func main() {
 	// Global middleware
 	r.Use(chimiddleware.RequestID)
 	r.Use(chimiddleware.RealIP)
-	r.Use(chimiddleware.Logger)
+	r.Use(middleware.SanitizedLogger)
 	r.Use(chimiddleware.Recoverer)
 	// Note: No global timeout - SSE endpoints need long-lived connections
 
