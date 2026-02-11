@@ -16,11 +16,15 @@ import (
 	"github.com/obot-platform/discobot/server/internal/sandbox/vm"
 )
 
+// SessionProjectResolver looks up the project ID for a session from the database.
+// Returns the project ID or an error if the session doesn't exist.
+type SessionProjectResolver func(ctx context.Context, sessionID string) (projectID string, err error)
+
 // DockerProvider is a stub that returns an error on non-darwin platforms.
 type DockerProvider struct{}
 
 // NewProvider returns an error on non-darwin platforms.
-func NewProvider(_ *config.Config, _ *vm.Config) (*DockerProvider, error) {
+func NewProvider(_ *config.Config, _ *vm.Config, _ SessionProjectResolver) (*DockerProvider, error) {
 	return nil, fmt.Errorf("vz sandbox provider is only available on macOS (darwin), current platform: %s", runtime.GOOS)
 }
 
@@ -100,8 +104,8 @@ func (p *DockerProvider) Close() error {
 }
 
 // Status returns not available status on non-darwin platforms.
-func (p *DockerProvider) Status() ProviderStatus {
-	return ProviderStatus{
+func (p *DockerProvider) Status() sandbox.ProviderStatus {
+	return sandbox.ProviderStatus{
 		Available: false,
 		State:     "not_available",
 		Message:   fmt.Sprintf("VZ provider is only available on macOS ARM64, current platform: %s/%s", runtime.GOOS, runtime.GOARCH),

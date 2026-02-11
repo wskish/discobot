@@ -6,11 +6,13 @@ export default [
 		// Ignore build outputs, dependencies, and Go code
 		ignores: [
 			"dist/**",
+			"out/**",
 			"node_modules/**",
 			"server/**",
 			"proxy/**",
 			"agent/**",
 			"agent-api/**",
+			"src-tauri/**",
 			".claude/**",
 			".cursor/**",
 			".opencode/**",
