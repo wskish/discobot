@@ -290,7 +290,15 @@ export function SessionViewProvider({
 	// Refresh diff data (called after chat completion)
 	const refreshDiffData = React.useCallback(() => {
 		if (selectedSessionId) {
-			mutate(`session-diff-${selectedSessionId}-files`);
+			// Invalidate all caches starting with session-diff-${sessionId}- to refresh both
+			// the file list and all individual file diffs
+			mutate(
+				(key) =>
+					typeof key === "string" &&
+					key.startsWith(`session-diff-${selectedSessionId}-`),
+				undefined,
+				{ revalidate: true },
+			);
 		}
 	}, [selectedSessionId, mutate]);
 
