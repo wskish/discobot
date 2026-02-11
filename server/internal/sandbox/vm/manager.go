@@ -70,6 +70,11 @@ type Config struct {
 	// The base image should have Docker daemon pre-installed.
 	BaseDiskPath string
 
+	// ImageRef is the Docker registry image reference for auto-downloading
+	// kernel and base disk if KernelPath and BaseDiskPath are not set.
+	// Example: "ghcr.io/obot-platform/discobot-vz:main"
+	ImageRef string
+
 	// IdleTimeout is how long to wait before shutting down idle VMs.
 	// Zero means VMs are never shut down automatically.
 	IdleTimeout string

@@ -98,3 +98,17 @@ func (p *DockerProvider) Watch(_ context.Context) (<-chan sandbox.StateEvent, er
 func (p *DockerProvider) Close() error {
 	return nil
 }
+
+// Status returns not available status on non-darwin platforms.
+func (p *DockerProvider) Status() ProviderStatus {
+	return ProviderStatus{
+		Available: false,
+		State:     "not_available",
+		Message:   fmt.Sprintf("VZ provider is only available on macOS ARM64, current platform: %s/%s", runtime.GOOS, runtime.GOARCH),
+	}
+}
+
+// IsReady always returns false on non-darwin platforms.
+func (p *DockerProvider) IsReady() bool {
+	return false
+}

@@ -27,7 +27,12 @@ type DockerProvider struct {
 	cfg *config.Config
 
 	// vmManager manages project-level VMs (abstraction)
-	vmManager vm.ProjectVMManager
+	// May be nil during async initialization
+	vmManager   vm.ProjectVMManager
+	downloadMu  sync.RWMutex
+
+	// imageDownloader handles async download of VZ images from registry
+	imageDownloader *ImageDownloader
 
 	// dockerProviders maps projectID -> Docker provider (with VSOCK transport)
 	dockerProviders   map[string]*docker.Provider
@@ -45,19 +50,79 @@ func NewProvider(cfg *config.Config, vmConfig *vm.Config) (*DockerProvider, erro
 }
 
 // NewDockerProvider creates a new VZ+Docker hybrid provider.
+// If kernel and base disk paths are not configured, it starts an async download
+// from the container registry specified in vmConfig.ImageRef.
 func NewDockerProvider(cfg *config.Config, vmConfig vm.Config) (*DockerProvider, error) {
-	// Create VZ VM manager
+	p := &DockerProvider{
+		cfg:              cfg,
+		dockerProviders:  make(map[string]*docker.Provider),
+		sessionToProject: make(map[string]string),
+	}
+
+	// Check if we need to download images
+	needsDownload := vmConfig.KernelPath == "" || vmConfig.BaseDiskPath == ""
+
+	if needsDownload {
+		// Auto-download from registry
+		imageRef := vmConfig.ImageRef
+		if imageRef == "" {
+			imageRef = config.DefaultVZImage
+		}
+
+		log.Printf("VZ kernel or base disk not configured, will download from %s", imageRef)
+
+		downloader := NewImageDownloader(DownloadConfig{
+			ImageRef: imageRef,
+			DataDir:  vmConfig.DataDir,
+		})
+		p.imageDownloader = downloader
+
+		// Start async download in background
+		go func() {
+			ctx := context.Background()
+			if err := downloader.Start(ctx); err != nil {
+				log.Printf("VZ image download failed: %v", err)
+				return
+			}
+
+			// Get paths from downloader
+			kernelPath, baseDiskPath, ok := downloader.GetPaths()
+			if !ok {
+				log.Printf("Failed to get VZ image paths after download")
+				return
+			}
+
+			// Update vmConfig with downloaded paths
+			vmConfig.KernelPath = kernelPath
+			vmConfig.BaseDiskPath = baseDiskPath
+
+			// Create VM manager now that images are ready
+			vmManager, err := NewVzVMManager(vmConfig)
+			if err != nil {
+				log.Printf("Failed to create VZ VM manager after download: %v", err)
+				return
+			}
+
+			p.downloadMu.Lock()
+			p.vmManager = vmManager
+			p.downloadMu.Unlock()
+
+			log.Printf("VZ VM manager initialized after image download")
+		}()
+
+		log.Printf("VZ provider created, images downloading in background")
+		return p, nil
+	}
+
+	// Manual configuration - initialize immediately
 	vmManager, err := NewVzVMManager(vmConfig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create VZ VM manager: %w", err)
 	}
 
-	return &DockerProvider{
-		cfg:              cfg,
-		vmManager:        vmManager,
-		dockerProviders:  make(map[string]*docker.Provider),
-		sessionToProject: make(map[string]string),
-	}, nil
+	p.vmManager = vmManager
+	log.Printf("VZ VM manager initialized with manual configuration")
+	return p, nil
 }
 
 // ImageExists checks if the Docker image exists.
@@ -82,10 +147,19 @@ func (p *DockerProvider) Create(ctx context.Context, sessionID string, opts sand
 		return nil, fmt.Errorf("ProjectID is required for VZ+Docker provider")
 	}
 
+	// Check if vmManager is ready
+	p.downloadMu.RLock()
+	vmManager := p.vmManager
+	p.downloadMu.RUnlock()
+
+	if vmManager == nil {
+		return nil, fmt.Errorf("VZ provider not ready, images still downloading")
+	}
+
 	log.Printf("Creating sandbox for session %s in project %s", sessionID, opts.ProjectID)
 
 	// Get or create project VM
-	pvm, err := p.vmManager.GetOrCreateVM(ctx, opts.ProjectID, sessionID)
+	pvm, err := vmManager.GetOrCreateVM(ctx, opts.ProjectID, sessionID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get/create project VM: %w", err)
 	}
@@ -286,8 +360,14 @@ func (p *DockerProvider) Watch(ctx context.Context) (<-chan sandbox.StateEvent, 
 func (p *DockerProvider) Close() error {
 	log.Printf("Shutting down VZ+Docker provider")
 
-	// Shutdown VM manager
-	p.vmManager.Shutdown()
+	// Shutdown VM manager if initialized
+	p.downloadMu.RLock()
+	vmManager := p.vmManager
+	p.downloadMu.RUnlock()
+
+	if vmManager != nil {
+		vmManager.Shutdown()
+	}
 
 	// Close all Docker providers
 	p.dockerProvidersMu.Lock()
@@ -297,6 +377,63 @@ func (p *DockerProvider) Close() error {
 	p.dockerProvidersMu.Unlock()
 
 	return nil
+}
+
+// Status returns the current status of the VZ provider.
+func (p *DockerProvider) Status() ProviderStatus {
+	p.downloadMu.RLock()
+	vmManager := p.vmManager
+	downloader := p.imageDownloader
+	p.downloadMu.RUnlock()
+
+	status := ProviderStatus{
+		Available: true,
+	}
+
+	// If downloader exists, we're in async download mode
+	if downloader != nil {
+		progress := downloader.Status()
+		status.Progress = &progress
+
+		switch progress.State {
+		case DownloadStateDownloading, DownloadStateExtracting:
+			status.State = "downloading"
+			status.Message = "Downloading VZ kernel and base disk images"
+		case DownloadStateReady:
+			status.State = "ready"
+			if kernelPath, baseDiskPath, ok := downloader.GetPaths(); ok {
+				status.Config = &ProviderConfigInfo{
+					KernelPath:   kernelPath,
+					BaseDiskPath: baseDiskPath,
+					MemoryMB:     2048, // Default values
+					CPUCount:     2,
+				}
+			}
+		case DownloadStateFailed:
+			status.State = "failed"
+			status.Message = progress.Error
+		default:
+			status.State = "downloading"
+			status.Message = "Initializing download"
+		}
+	} else if vmManager != nil {
+		// Manual configuration - ready immediately
+		status.State = "ready"
+		// Config info would be available from vmManager if needed
+	} else {
+		// Shouldn't happen, but handle gracefully
+		status.State = "failed"
+		status.Message = "Provider not properly initialized"
+	}
+
+	return status
+}
+
+// IsReady returns true if the provider is ready to create VMs.
+func (p *DockerProvider) IsReady() bool {
+	p.downloadMu.RLock()
+	defer p.downloadMu.RUnlock()
+	return p.vmManager != nil
 }
 
 // getOrCreateDockerProvider gets or creates a Docker provider for the given project.
