@@ -80,6 +80,4 @@ export default defineConfig({
 	},
 	// Clear screen disabled for better logging during dev
 	clearScreen: false,
-	// Tauri needs this for its custom protocol
-	envPrefix: ["VITE_", "TAURI_", "NEXT_PUBLIC_"],
 });
