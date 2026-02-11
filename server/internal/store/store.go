@@ -305,6 +305,13 @@ func (s *Store) ListSessionsByStatuses(ctx context.Context, statuses []string) (
 	return sessions, err
 }
 
+// ListSessionsByCommitStatuses returns sessions with the given commit statuses.
+func (s *Store) ListSessionsByCommitStatuses(ctx context.Context, commitStatuses []string) ([]*model.Session, error) {
+	var sessions []*model.Session
+	err := s.db.WithContext(ctx).Where("commit_status IN ?", commitStatuses).Find(&sessions).Error
+	return sessions, err
+}
+
 // GetSessionsByStatus returns all sessions with the given status.
 func (s *Store) GetSessionsByStatus(ctx context.Context, status string) ([]model.Session, error) {
 	var sessions []model.Session

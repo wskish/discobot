@@ -353,7 +353,7 @@ index 0000000..abc123
 	// Create session service
 	sandboxSvc := NewSandboxService(env.store, env.mockSandbox, &config.Config{}, nil, env.eventBroker, nil)
 	sandboxSvc.SetSessionInitializer(&testSessionInitializer{})
-	sessionSvc := NewSessionService(env.store, env.gitService, env.mockSandbox, sandboxSvc, env.eventBroker)
+	sessionSvc := NewSessionService(env.store, env.gitService, env.mockSandbox, sandboxSvc, env.eventBroker, nil)
 
 	// Run PerformCommit
 	err = sessionSvc.PerformCommit(context.Background(), project.ID, session.ID)
@@ -441,7 +441,7 @@ index 0000000..def456
 	// Create session service
 	sandboxSvc := NewSandboxService(env.store, env.mockSandbox, &config.Config{}, nil, env.eventBroker, nil)
 	sandboxSvc.SetSessionInitializer(&testSessionInitializer{})
-	sessionSvc := NewSessionService(env.store, env.gitService, env.mockSandbox, sandboxSvc, env.eventBroker)
+	sessionSvc := NewSessionService(env.store, env.gitService, env.mockSandbox, sandboxSvc, env.eventBroker, nil)
 
 	// Run PerformCommit
 	err = sessionSvc.PerformCommit(context.Background(), project.ID, session.ID)
@@ -565,7 +565,7 @@ index 0000000..abc123
 	// Create session service
 	sandboxSvc := NewSandboxService(env.store, env.mockSandbox, &config.Config{}, nil, env.eventBroker, nil)
 	sandboxSvc.SetSessionInitializer(&testSessionInitializer{})
-	sessionSvc := NewSessionService(env.store, env.gitService, env.mockSandbox, sandboxSvc, env.eventBroker)
+	sessionSvc := NewSessionService(env.store, env.gitService, env.mockSandbox, sandboxSvc, env.eventBroker, nil)
 
 	// Run PerformCommit
 	err = sessionSvc.PerformCommit(context.Background(), project.ID, session.ID)
@@ -691,7 +691,7 @@ index 0000000..abc123
 	// Create session service
 	sandboxSvc := NewSandboxService(env.store, env.mockSandbox, &config.Config{}, nil, env.eventBroker, nil)
 	sandboxSvc.SetSessionInitializer(&testSessionInitializer{})
-	sessionSvc := NewSessionService(env.store, env.gitService, env.mockSandbox, sandboxSvc, env.eventBroker)
+	sessionSvc := NewSessionService(env.store, env.gitService, env.mockSandbox, sandboxSvc, env.eventBroker, nil)
 
 	// Run PerformCommit
 	err = sessionSvc.PerformCommit(context.Background(), project.ID, session.ID)
@@ -749,7 +749,7 @@ func TestPerformCommit_AlreadyCompleted(t *testing.T) {
 
 	sandboxSvc := NewSandboxService(env.store, env.mockSandbox, &config.Config{}, nil, env.eventBroker, nil)
 	sandboxSvc.SetSessionInitializer(&testSessionInitializer{})
-	sessionSvc := NewSessionService(env.store, env.gitService, env.mockSandbox, sandboxSvc, env.eventBroker)
+	sessionSvc := NewSessionService(env.store, env.gitService, env.mockSandbox, sandboxSvc, env.eventBroker, nil)
 
 	// Run PerformCommit - should be a no-op
 	err := sessionSvc.PerformCommit(context.Background(), project.ID, session.ID)
@@ -795,7 +795,7 @@ func TestPerformCommit_NotPendingOrCommitting(t *testing.T) {
 
 	sandboxSvc := NewSandboxService(env.store, env.mockSandbox, &config.Config{}, nil, env.eventBroker, nil)
 	sandboxSvc.SetSessionInitializer(&testSessionInitializer{})
-	sessionSvc := NewSessionService(env.store, env.gitService, env.mockSandbox, sandboxSvc, env.eventBroker)
+	sessionSvc := NewSessionService(env.store, env.gitService, env.mockSandbox, sandboxSvc, env.eventBroker, nil)
 
 	// Run PerformCommit - should be a no-op
 	err := sessionSvc.PerformCommit(context.Background(), project.ID, session.ID)
@@ -861,7 +861,7 @@ index 0000000..abc123
 	// Create session service
 	sandboxSvc := NewSandboxService(env.store, env.mockSandbox, &config.Config{}, nil, env.eventBroker, nil)
 	sandboxSvc.SetSessionInitializer(&testSessionInitializer{})
-	sessionSvc := NewSessionService(env.store, env.gitService, env.mockSandbox, sandboxSvc, env.eventBroker)
+	sessionSvc := NewSessionService(env.store, env.gitService, env.mockSandbox, sandboxSvc, env.eventBroker, nil)
 
 	// Run PerformCommit
 	err = sessionSvc.PerformCommit(context.Background(), project.ID, session.ID)
@@ -979,7 +979,7 @@ index 0000000..abc123
 
 	// Create session service with real initializer to test sandbox reconciliation
 	sandboxSvc := NewSandboxService(env.store, env.mockSandbox, &config.Config{}, nil, env.eventBroker, nil)
-	sessionSvc := NewSessionService(env.store, env.gitService, env.mockSandbox, sandboxSvc, env.eventBroker)
+	sessionSvc := NewSessionService(env.store, env.gitService, env.mockSandbox, sandboxSvc, env.eventBroker, nil)
 	sandboxSvc.SetSessionInitializer(sessionSvc)
 
 	// Run PerformCommit - should reconcile (start) the sandbox and complete successfully

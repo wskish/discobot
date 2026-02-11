@@ -67,7 +67,7 @@ func New(s *store.Store, cfg *config.Config, gitProvider git.Provider, sandboxPr
 	}
 
 	// Create session service
-	sessionSvc := service.NewSessionService(s, gitSvc, sandboxProvider, sandboxSvc, eventBroker)
+	sessionSvc := service.NewSessionService(s, gitSvc, sandboxProvider, sandboxSvc, eventBroker, jobQueue)
 
 	// Break circular dependency: SandboxService needs SessionInitializer (which is SessionService)
 	if sandboxSvc != nil {

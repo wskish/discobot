@@ -232,31 +232,6 @@ func main() {
 
 		sandboxProvider = sandbox.NewProviderProxy(sandboxManager, providerGetter)
 		log.Printf("Sandbox provider proxy initialized with %d providers", len(sandboxManager.ListProviders()))
-
-		// Start sandbox reconciliation in background to not block server startup
-		sandboxSvc := service.NewSandboxService(s, sandboxProvider, cfg, nil, nil, nil)
-		go func() {
-			log.Println("Starting sandbox reconciliation in background...")
-
-			// Reconcile sandboxes to ensure they use the correct image
-			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
-			if err := sandboxSvc.ReconcileSandboxes(ctx); err != nil {
-				log.Printf("Warning: Failed to reconcile sandboxes: %v", err)
-			} else {
-				log.Println("Sandbox reconciliation completed successfully")
-			}
-			cancel()
-
-			// Reconcile session states with actual sandbox states
-			// This catches sessions that think they're running but have failed sandboxes
-			ctx, cancel = context.WithTimeout(context.Background(), 10*time.Minute)
-			if err := sandboxSvc.ReconcileSessionStates(ctx); err != nil {
-				log.Printf("Warning: Failed to reconcile session states: %v", err)
-			} else {
-				log.Println("Session state reconciliation completed successfully")
-			}
-			cancel()
-		}()
 	}
 
 	// Create event poller and broker for SSE
@@ -319,6 +294,8 @@ func main() {
 
 	// Initialize and start job dispatcher
 	var disp *dispatcher.Service
+	var sessionSvc *service.SessionService
+	var dispSandboxSvc *service.SandboxService
 	if cfg.DispatcherEnabled {
 		disp = dispatcher.NewService(s, cfg, eventBroker)
 
@@ -334,8 +311,8 @@ func main() {
 				log.Fatalf("Failed to create credential service for dispatcher: %v", err)
 			}
 			credFetcher := service.MakeCredentialFetcher(s, credSvc)
-			dispSandboxSvc := service.NewSandboxService(s, sandboxProvider, cfg, credFetcher, eventBroker, jobQueue)
-			sessionSvc := service.NewSessionService(s, gitSvc, sandboxProvider, dispSandboxSvc, eventBroker)
+			dispSandboxSvc = service.NewSandboxService(s, sandboxProvider, cfg, credFetcher, eventBroker, jobQueue)
+			sessionSvc = service.NewSessionService(s, gitSvc, sandboxProvider, dispSandboxSvc, eventBroker, jobQueue)
 			dispSandboxSvc.SetSessionInitializer(sessionSvc)
 			disp.RegisterExecutor(dispatcher.NewSessionInitExecutor(sessionSvc))
 			disp.RegisterExecutor(dispatcher.NewSessionDeleteExecutor(sessionSvc))
@@ -344,6 +321,43 @@ func main() {
 
 		disp.Start(context.Background())
 		log.Printf("Job dispatcher started (server ID: %s)", disp.ServerID())
+
+		// Start all reconciliation in background after dispatcher is ready
+		// This ensures all reconciliation can properly enqueue jobs if needed
+		if dispSandboxSvc != nil && sessionSvc != nil {
+			go func() {
+				log.Println("Starting reconciliation in background...")
+
+				// 1. Reconcile sandboxes to ensure they use the correct image
+				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+				if err := dispSandboxSvc.ReconcileSandboxes(ctx); err != nil {
+					log.Printf("Warning: Failed to reconcile sandboxes: %v", err)
+				} else {
+					log.Println("Sandbox reconciliation completed successfully")
+				}
+				cancel()
+
+				// 2. Reconcile session states with actual sandbox states
+				ctx, cancel = context.WithTimeout(context.Background(), 10*time.Minute)
+				if err := dispSandboxSvc.ReconcileSessionStates(ctx); err != nil {
+					log.Printf("Warning: Failed to reconcile session states: %v", err)
+				} else {
+					log.Println("Session state reconciliation completed successfully")
+				}
+				cancel()
+
+				// 3. Reconcile commit states to re-enqueue stuck commits
+				ctx, cancel = context.WithTimeout(context.Background(), 5*time.Minute)
+				if err := sessionSvc.ReconcileCommitStates(ctx); err != nil {
+					log.Printf("Warning: Failed to reconcile commit states: %v", err)
+				} else {
+					log.Println("Commit state reconciliation completed successfully")
+				}
+				cancel()
+
+				log.Println("All reconciliation completed")
+			}()
+		}
 	} else {
 		log.Println("Job dispatcher disabled")
 	}

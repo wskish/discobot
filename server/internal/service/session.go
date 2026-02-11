@@ -80,16 +80,18 @@ type SessionService struct {
 	sandboxProvider sandbox.Provider
 	sandboxService  *SandboxService
 	eventBroker     *events.Broker
+	jobEnqueuer     JobEnqueuer
 }
 
 // NewSessionService creates a new session service
-func NewSessionService(s *store.Store, gitSvc *GitService, sandboxProv sandbox.Provider, sandboxService *SandboxService, eventBroker *events.Broker) *SessionService {
+func NewSessionService(s *store.Store, gitSvc *GitService, sandboxProv sandbox.Provider, sandboxService *SandboxService, eventBroker *events.Broker, jobEnqueuer JobEnqueuer) *SessionService {
 	return &SessionService{
 		store:           s,
 		gitService:      gitSvc,
 		sandboxProvider: sandboxProv,
 		sandboxService:  sandboxService,
 		eventBroker:     eventBroker,
+		jobEnqueuer:     jobEnqueuer,
 	}
 }
 
@@ -318,6 +320,61 @@ func (s *SessionService) publishCommitStatusChanged(ctx context.Context, project
 			log.Printf("Failed to publish session commit status event: %v", err)
 		}
 	}
+}
+
+// ReconcileCommitStates checks sessions stuck in pending/committing commit states
+// and re-enqueues commit jobs if needed. This should be called on server startup.
+func (s *SessionService) ReconcileCommitStates(ctx context.Context) error {
+	// Query sessions with stuck commit states
+	statuses := []string{model.CommitStatusPending, model.CommitStatusCommitting}
+	sessions, err := s.store.ListSessionsByCommitStatuses(ctx, statuses)
+	if err != nil {
+		return fmt.Errorf("failed to list sessions with commit states: %w", err)
+	}
+
+	if len(sessions) == 0 {
+		log.Println("No sessions with stuck commit states found")
+		return nil
+	}
+
+	log.Printf("Reconciling %d sessions with stuck commit states", len(sessions))
+
+	// For each session, check if job exists and re-enqueue if needed
+	var enqueuedCount int
+	for _, sess := range sessions {
+		// Check if active job already exists
+		hasJob, err := s.store.HasActiveJobForResource(ctx, jobs.ResourceTypeSession, sess.ID)
+		if err != nil {
+			log.Printf("Failed to check job for session %s: %v", sess.ID, err)
+			continue
+		}
+
+		if hasJob {
+			log.Printf("Session %s (commit_status: %s) already has active job, skipping", sess.ID, sess.CommitStatus)
+			continue
+		}
+
+		// Re-enqueue commit job
+		log.Printf("Re-enqueueing commit job for session %s (commit_status: %s)", sess.ID, sess.CommitStatus)
+		payload := jobs.SessionCommitPayload{
+			ProjectID: sess.ProjectID,
+			SessionID: sess.ID,
+		}
+
+		if s.jobEnqueuer != nil {
+			if err := s.jobEnqueuer.Enqueue(ctx, payload); err != nil {
+				// Log but continue - this session remains stuck but others proceed
+				log.Printf("Failed to enqueue commit job for session %s: %v", sess.ID, err)
+				continue
+			}
+			enqueuedCount++
+		} else {
+			log.Printf("Job enqueuer not available for session %s, skipping", sess.ID)
+		}
+	}
+
+	log.Printf("Reconciled commit states: %d jobs re-enqueued", enqueuedCount)
+	return nil
 }
 
 // PerformDeletion performs the actual session deletion work.
