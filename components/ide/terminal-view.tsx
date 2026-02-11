@@ -1,10 +1,20 @@
 import "@xterm/xterm/css/xterm.css";
 
-import { MessageSquare } from "lucide-react";
+import { Check, Copy, MessageSquare } from "lucide-react";
 import * as React from "react";
 import { Button } from "@/components/ui/button";
 import { getWsBase } from "@/lib/api-config";
 import { cn } from "@/lib/utils";
+
+/**
+ * Get the SSH host from the current location.
+ */
+function getSSHHost(): string {
+	if (typeof window === "undefined") return "localhost";
+	const hostname = window.location.hostname;
+	if (hostname === "127.0.0.1" || hostname === "::1") return "localhost";
+	return hostname;
+}
 
 export type ConnectionStatus =
 	| "disconnected"
@@ -53,6 +63,7 @@ export const TerminalView = React.forwardRef<
 	// Track previous values to detect changes
 	const prevSessionIdRef = React.useRef<string | null>(null);
 	const prevRootRef = React.useRef<boolean>(false);
+	const [copied, setCopied] = React.useState(false);
 
 	// Update connection status and notify parent
 	const updateConnectionStatus = React.useCallback(
@@ -354,6 +365,22 @@ export const TerminalView = React.forwardRef<
 					? "bg-red-500"
 					: "bg-gray-500";
 
+	// Copy SSH location to clipboard
+	const handleCopySSH = React.useCallback(async () => {
+		if (!sessionId) return;
+
+		const host = getSSHHost();
+		const sshLocation = `${sessionId}@${host}:3333`;
+
+		try {
+			await navigator.clipboard.writeText(sshLocation);
+			setCopied(true);
+			setTimeout(() => setCopied(false), 2000);
+		} catch (error) {
+			console.error("Failed to copy SSH location:", error);
+		}
+	}, [sessionId]);
+
 	return (
 		<div className={cn("flex flex-col h-full bg-background", className)}>
 			{!hideHeader && (
@@ -374,17 +401,37 @@ export const TerminalView = React.forwardRef<
 							title={connectionStatus}
 						/>
 					</div>
-					{onToggleChat && (
-						<Button
-							variant="ghost"
-							size="sm"
-							onClick={onToggleChat}
-							className="gap-2"
-						>
-							<MessageSquare className="h-4 w-4" />
-							<span className="hidden sm:inline">Back to Chat</span>
-						</Button>
-					)}
+					<div className="flex items-center gap-2">
+						{sessionId && (
+							<Button
+								variant="ghost"
+								size="sm"
+								onClick={handleCopySSH}
+								className="gap-2 h-6 px-2 text-xs"
+								title={`Copy SSH location: ${sessionId}@${getSSHHost()}:3333`}
+							>
+								{copied ? (
+									<Check className="h-3 w-3" />
+								) : (
+									<Copy className="h-3 w-3" />
+								)}
+								<span className="hidden sm:inline">
+									{copied ? "Copied!" : "Copy SSH"}
+								</span>
+							</Button>
+						)}
+						{onToggleChat && (
+							<Button
+								variant="ghost"
+								size="sm"
+								onClick={onToggleChat}
+								className="gap-2"
+							>
+								<MessageSquare className="h-4 w-4" />
+								<span className="hidden sm:inline">Back to Chat</span>
+							</Button>
+						)}
+					</div>
 				</div>
 			)}
 

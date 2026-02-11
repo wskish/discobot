@@ -1,6 +1,8 @@
 import {
+	Check,
 	ChevronLeft,
 	ChevronRight,
+	Copy,
 	FileCode,
 	FileMinus,
 	FilePlus,
@@ -19,6 +21,16 @@ import { CommitStatus } from "@/lib/api-constants";
 import { useSessionViewContext } from "@/lib/contexts/session-view-context";
 import { useSessionFiles } from "@/lib/hooks/use-session-files";
 import { cn } from "@/lib/utils";
+
+/**
+ * Get the SSH host from the current location.
+ */
+function getSSHHost(): string {
+	if (typeof window === "undefined") return "localhost";
+	const hostname = window.location.hostname;
+	if (hostname === "127.0.0.1" || hostname === "::1") return "localhost";
+	return hostname;
+}
 
 export function SessionViewHeader() {
 	const {
@@ -58,6 +70,24 @@ export function SessionViewHeader() {
 	const handleTerminalReconnect = React.useCallback(() => {
 		terminalRef.current?.reconnect();
 	}, [terminalRef]);
+
+	// SSH copy state and handler
+	const [copied, setCopied] = React.useState(false);
+
+	const handleCopySSH = React.useCallback(async () => {
+		if (!selectedSessionId) return;
+
+		const host = getSSHHost();
+		const sshLocation = `${selectedSessionId}@${host}:3333`;
+
+		try {
+			await navigator.clipboard.writeText(sshLocation);
+			setCopied(true);
+			setTimeout(() => setCopied(false), 2000);
+		} catch (error) {
+			console.error("Failed to copy SSH location:", error);
+		}
+	}, [selectedSessionId]);
 
 	// File tabs scroll state
 	const tabsContainerRef = React.useRef<HTMLDivElement>(null);
@@ -336,6 +366,22 @@ export function SessionViewHeader() {
 							/>
 							root
 						</label>
+						{selectedSessionId && (
+							<Button
+								variant="ghost"
+								size="sm"
+								onClick={handleCopySSH}
+								className="h-6 text-xs gap-1"
+								title={`Copy SSH location: ${selectedSessionId}@${getSSHHost()}:3333`}
+							>
+								{copied ? (
+									<Check className="h-3 w-3" />
+								) : (
+									<Copy className="h-3 w-3" />
+								)}
+								{copied ? "Copied!" : "Copy SSH"}
+							</Button>
+						)}
 					</>
 				)}
 				{changedFilesCount > 0 && (
