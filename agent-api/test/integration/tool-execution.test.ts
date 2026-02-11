@@ -384,7 +384,7 @@ describe("Tool Execution Integration", { skip: shouldSkip }, () => {
 					if (!byToolId.has(state.toolCallId)) {
 						byToolId.set(state.toolCallId, []);
 					}
-					byToolId.get(state.toolCallId)!.push(state.state);
+					byToolId.get(state.toolCallId)?.push(state.state);
 				}
 
 				// Check each tool's state progression

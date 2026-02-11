@@ -5,7 +5,7 @@ import { DiskBackedSession } from "./disk-backed-session.js";
 
 describe("DiskBackedSession", () => {
 	const testCwd = "/test/workspace";
-	const testSessionId = "test-session-" + Date.now();
+	const testSessionId = `test-session-${Date.now()}`;
 
 	const createMockMessage = (
 		id: string,
@@ -29,7 +29,7 @@ describe("DiskBackedSession", () => {
 		it("loads messages from disk on first load() call (empty session)", async () => {
 			// Use a non-existent session ID to test empty load
 			const session = new DiskBackedSession(
-				"non-existent-" + Date.now(),
+				`non-existent-${Date.now()}`,
 				testCwd,
 			);
 			await session.load();
@@ -41,7 +41,7 @@ describe("DiskBackedSession", () => {
 
 		it("caches messages after load", async () => {
 			const session = new DiskBackedSession(
-				"cache-test-" + Date.now(),
+				`cache-test-${Date.now()}`,
 				testCwd,
 			);
 			await session.load();
@@ -61,10 +61,7 @@ describe("DiskBackedSession", () => {
 		});
 
 		it("returns empty array if session file does not exist", async () => {
-			const session = new DiskBackedSession(
-				"empty-" + Date.now(),
-				testCwd,
-			);
+			const session = new DiskBackedSession(`empty-${Date.now()}`, testCwd);
 			await session.load();
 
 			const messages = session.getMessages();
@@ -74,10 +71,7 @@ describe("DiskBackedSession", () => {
 
 	describe("dirty updates during streaming", () => {
 		it("addMessage adds to dirty map", async () => {
-			const session = new DiskBackedSession(
-				"dirty-add-" + Date.now(),
-				testCwd,
-			);
+			const session = new DiskBackedSession(`dirty-add-${Date.now()}`, testCwd);
 			await session.load();
 
 			const newMessage = createMockMessage("msg-new", "user", "New message");
@@ -90,13 +84,15 @@ describe("DiskBackedSession", () => {
 
 		it("updateMessage updates in dirty map", async () => {
 			const session = new DiskBackedSession(
-				"dirty-update-" + Date.now(),
+				`dirty-update-${Date.now()}`,
 				testCwd,
 			);
 			await session.load();
 
 			// Add initial message
-			session.addMessage(createMockMessage("msg-1", "assistant", "Original text"));
+			session.addMessage(
+				createMockMessage("msg-1", "assistant", "Original text"),
+			);
 
 			// Update the message
 			session.updateMessage("msg-1", {
@@ -105,22 +101,21 @@ describe("DiskBackedSession", () => {
 
 			const messages = session.getMessages();
 			assert.strictEqual(messages.length, 1);
-			assert.strictEqual(
-				(messages[0].parts[0] as any).text,
-				"Updated text",
-			);
+			assert.strictEqual((messages[0].parts[0] as any).text, "Updated text");
 		});
 
 		it("getMessages merges cached and dirty", async () => {
 			const session = new DiskBackedSession(
-				"dirty-merge-" + Date.now(),
+				`dirty-merge-${Date.now()}`,
 				testCwd,
 			);
 			await session.load();
 
 			// Simulate a cached message by adding and then invalidating/reloading
 			session.addMessage(createMockMessage("msg-1", "user", "First message"));
-			session.addMessage(createMockMessage("msg-2", "assistant", "Second message"));
+			session.addMessage(
+				createMockMessage("msg-2", "assistant", "Second message"),
+			);
 
 			const messages = session.getMessages();
 			assert.strictEqual(messages.length, 2);
@@ -130,7 +125,7 @@ describe("DiskBackedSession", () => {
 
 		it("updateMessage works for messages added to dirty map", async () => {
 			const session = new DiskBackedSession(
-				"dirty-msg-update-" + Date.now(),
+				`dirty-msg-update-${Date.now()}`,
 				testCwd,
 			);
 			await session.load();
@@ -145,38 +140,36 @@ describe("DiskBackedSession", () => {
 
 			const messages = session.getMessages();
 			assert.strictEqual(messages.length, 1);
-			assert.strictEqual(
-				(messages[0].parts[0] as any).text,
-				"Updated",
-			);
+			assert.strictEqual((messages[0].parts[0] as any).text, "Updated");
 		});
 
 		it("dirty updates replace messages with same ID", async () => {
 			const session = new DiskBackedSession(
-				"dirty-replace-" + Date.now(),
+				`dirty-replace-${Date.now()}`,
 				testCwd,
 			);
 			await session.load();
 
 			// Add initial message
-			session.addMessage(createMockMessage("msg-1", "assistant", "Original text"));
+			session.addMessage(
+				createMockMessage("msg-1", "assistant", "Original text"),
+			);
 
 			// Add a message with the same ID (simulating streaming update)
-			session.addMessage(createMockMessage("msg-1", "assistant", "Updated text"));
+			session.addMessage(
+				createMockMessage("msg-1", "assistant", "Updated text"),
+			);
 
 			const messages = session.getMessages();
 			assert.strictEqual(messages.length, 1);
-			assert.strictEqual(
-				(messages[0].parts[0] as any).text,
-				"Updated text",
-			);
+			assert.strictEqual((messages[0].parts[0] as any).text, "Updated text");
 		});
 	});
 
 	describe("cache invalidation", () => {
 		it("invalidateCache clears cached messages", async () => {
 			const session = new DiskBackedSession(
-				"cache-invalid-" + Date.now(),
+				`cache-invalid-${Date.now()}`,
 				testCwd,
 			);
 			await session.load();
@@ -193,7 +186,7 @@ describe("DiskBackedSession", () => {
 			// Dirty map should still have the message from before
 			// but after invalidation and reload, only disk content matters
 			// Since we cleared dirty, it should be empty
-			const messages = session.getMessages();
+			const _messages = session.getMessages();
 			// After invalidate + load, cached is empty, and if we didn't clear dirty it would show
 			// But the test is about cache invalidation, so let's verify cache is cleared
 			assert.ok(true); // Cache invalidation works
@@ -201,7 +194,7 @@ describe("DiskBackedSession", () => {
 
 		it("getMessages returns empty after invalidation before reload", async () => {
 			const session = new DiskBackedSession(
-				"invalid-empty-" + Date.now(),
+				`invalid-empty-${Date.now()}`,
 				testCwd,
 			);
 			await session.load();
@@ -218,7 +211,7 @@ describe("DiskBackedSession", () => {
 
 		it("clearDirty removes streaming updates", async () => {
 			const session = new DiskBackedSession(
-				"clear-dirty-" + Date.now(),
+				`clear-dirty-${Date.now()}`,
 				testCwd,
 			);
 			await session.load();
@@ -235,7 +228,7 @@ describe("DiskBackedSession", () => {
 
 		it("clearDirty does not affect cache when both present", async () => {
 			const session = new DiskBackedSession(
-				"clear-dirty-cache-" + Date.now(),
+				`clear-dirty-cache-${Date.now()}`,
 				testCwd,
 			);
 			await session.load();
@@ -252,10 +245,7 @@ describe("DiskBackedSession", () => {
 
 	describe("clearMessages", () => {
 		it("clears both cache and dirty map", async () => {
-			const session = new DiskBackedSession(
-				"clear-all-" + Date.now(),
-				testCwd,
-			);
+			const session = new DiskBackedSession(`clear-all-${Date.now()}`, testCwd);
 			await session.load();
 
 			// Add messages
@@ -273,7 +263,7 @@ describe("DiskBackedSession", () => {
 	describe("getLastAssistantMessage", () => {
 		it("returns last assistant message from messages", async () => {
 			const session = new DiskBackedSession(
-				"last-assistant-" + Date.now(),
+				`last-assistant-${Date.now()}`,
 				testCwd,
 			);
 			await session.load();
@@ -290,7 +280,7 @@ describe("DiskBackedSession", () => {
 
 		it("considers dirty updates when finding last assistant", async () => {
 			const session = new DiskBackedSession(
-				"last-asst-dirty-" + Date.now(),
+				`last-asst-dirty-${Date.now()}`,
 				testCwd,
 			);
 			await session.load();
@@ -306,7 +296,7 @@ describe("DiskBackedSession", () => {
 
 		it("returns undefined if no assistant messages exist", async () => {
 			const session = new DiskBackedSession(
-				"no-assistant-" + Date.now(),
+				`no-assistant-${Date.now()}`,
 				testCwd,
 			);
 			await session.load();
