@@ -237,7 +237,7 @@ func (p *Provider) Create(ctx context.Context, sessionID string, opts sandbox.Cr
 	// WORKSPACE_SOURCE is the original source (local path or git URL)
 	env := make(map[string]string)
 
-	// Add session ID (required by obot-agent for AgentFS database naming)
+	// Add session ID (required by octobot-agent for AgentFS database naming)
 	env["SESSION_ID"] = sessionID
 
 	if opts.SharedSecret != "" {

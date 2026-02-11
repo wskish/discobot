@@ -69,7 +69,7 @@ func New(s *store.Store, cfg *config.Config, gitProvider git.Provider, sandboxPr
 	// Create remaining services
 	agentSvc := service.NewAgentService(s)
 	workspaceSvc := service.NewWorkspaceService(s, gitProvider, eventBroker)
-	projectSvc := service.NewProjectService(s)
+	projectSvc := service.NewProjectService(s, sandboxProvider)
 	preferenceSvc := service.NewPreferenceService(s)
 
 	h := &Handler{

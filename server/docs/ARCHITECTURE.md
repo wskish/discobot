@@ -35,6 +35,7 @@ The server follows a layered architecture:
 - [Service Module](./design/service.md) - Business logic layer
 - [Store Module](./design/store.md) - Data access layer
 - [Sandbox Module](./design/sandbox.md) - Docker integration
+- [Cache System](./design/cache.md) - Project-scoped cache volumes
 - [Events Module](./design/events.md) - SSE and event system
 - [Jobs Module](./design/jobs.md) - Background job processing
 
@@ -353,7 +354,7 @@ Chat Message → Update session status to "running"
 
 ```go
 type SandboxOptions struct {
-    Image       string            // e.g., "obot-agent-api:latest"
+    Image       string            // e.g., "octobot-agent-api:latest"
     Binds       []string          // Volume mounts
     Env         []string          // Environment variables
     NetworkMode string            // Docker network

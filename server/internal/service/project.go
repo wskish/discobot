@@ -5,17 +5,20 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"log"
 	"regexp"
 	"strings"
 	"time"
 
 	"github.com/obot-platform/octobot/server/internal/model"
+	"github.com/obot-platform/octobot/server/internal/sandbox"
 	"github.com/obot-platform/octobot/server/internal/store"
 )
 
 // ProjectService handles project operations
 type ProjectService struct {
-	store *store.Store
+	store    *store.Store
+	provider sandbox.Provider
 }
 
 // Project represents a project (for API responses)
@@ -52,8 +55,11 @@ type ProjectInvitation struct {
 }
 
 // NewProjectService creates a new project service
-func NewProjectService(s *store.Store) *ProjectService {
-	return &ProjectService{store: s}
+func NewProjectService(s *store.Store, p sandbox.Provider) *ProjectService {
+	return &ProjectService{
+		store:    s,
+		provider: p,
+	}
 }
 
 // ListProjects returns all projects for a user
@@ -145,9 +151,28 @@ func (s *ProjectService) UpdateProject(ctx context.Context, projectID, name stri
 	}, nil
 }
 
-// DeleteProject deletes a project
+// DeleteProject deletes a project and cleans up associated resources
 func (s *ProjectService) DeleteProject(ctx context.Context, projectID string) error {
-	return s.store.DeleteProject(ctx, projectID)
+	// Delete from database first
+	if err := s.store.DeleteProject(ctx, projectID); err != nil {
+		return err
+	}
+
+	// Clean up cache volume if provider supports it
+	if s.provider != nil {
+		// Use type assertion to check if provider supports cache volume cleanup
+		type cacheVolumeManager interface {
+			RemoveCacheVolume(ctx context.Context, projectID string) error
+		}
+		if cvm, ok := s.provider.(cacheVolumeManager); ok {
+			if err := cvm.RemoveCacheVolume(ctx, projectID); err != nil {
+				// Log but don't fail - cache cleanup is best-effort
+				log.Printf("Warning: failed to remove cache volume for project %s: %v", projectID, err)
+			}
+		}
+	}
+
+	return nil
 }
 
 // GetMemberRole returns the role of a user in a project

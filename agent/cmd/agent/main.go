@@ -14,6 +14,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	_ "embed"
+	"encoding/json"
 	"encoding/pem"
 	"errors"
 	"fmt"
@@ -36,7 +37,7 @@ var defaultProxyConfig []byte
 
 const (
 	// Default binary to execute
-	defaultAgentBinary = "/opt/octobot/bin/obot-agent-api"
+	defaultAgentBinary = "/opt/octobot/bin/octobot-agent-api"
 
 	// Default user to run as
 	defaultUser = "octobot"
@@ -79,6 +80,17 @@ const (
 	fsTypeOverlayFS filesystemType = iota
 	fsTypeAgentFS
 )
+
+func (f filesystemType) String() string {
+	switch f {
+	case fsTypeOverlayFS:
+		return "overlayfs"
+	case fsTypeAgentFS:
+		return "agentfs"
+	default:
+		return "unknown"
+	}
+}
 
 // detectFilesystemType determines which filesystem to use based on existing data.
 // If an agentfs database exists for the session, use agentfs for backwards compatibility.
@@ -261,6 +273,12 @@ func run() error {
 	startupStart := time.Now()
 	fmt.Printf("octobot-agent: container startup beginning at %s\n", startupStart.Format(time.RFC3339))
 
+	// Change to root directory to avoid issues with overlayfs mounting
+	// The current directory might be inside /home/octobot which will be mounted over
+	if err := os.Chdir("/"); err != nil {
+		return fmt.Errorf("failed to chdir to /: %w", err)
+	}
+
 	// Step 0: Fix localhost resolution to use IPv4 consistently
 	// This prevents IPv4/IPv6 mismatches where servers bind to ::1 but clients connect to 127.0.0.1
 	if err := fixLocalhostResolution(); err != nil {
@@ -301,14 +319,14 @@ func run() error {
 	}
 	fmt.Printf("octobot-agent: [%.3fs] base home setup completed\n", time.Since(stepStart).Seconds())
 
-	// Step 2: Start workspace clone in background (slowest operation)
-	// This runs in parallel with filesystem setup, proxy startup, etc.
-	workspaceStart := time.Now()
-	workspaceDone := make(chan error, 1)
-	go func() {
-		workspaceDone <- setupWorkspace(workspacePath, workspaceCommit, userInfo)
-	}()
-	fmt.Printf("octobot-agent: workspace clone started in background\n")
+	// Step 2: Clone workspace (must complete before overlayfs mount)
+	// The overlayfs captures the lower layer state at mount time, so the workspace
+	// must be fully cloned into /.data/octobot/workspace before we mount overlayfs.
+	stepStart = time.Now()
+	if err := setupWorkspace(workspacePath, workspaceCommit, userInfo); err != nil {
+		return fmt.Errorf("workspace setup failed: %w", err)
+	}
+	fmt.Printf("octobot-agent: [%.3fs] workspace setup completed\n", time.Since(stepStart).Seconds())
 
 	// Step 3: Detect filesystem type (overlayfs for new sessions, agentfs for existing)
 	fsType := detectFilesystemType(sessionID)
@@ -369,6 +387,14 @@ func run() error {
 	}
 	fmt.Printf("octobot-agent: [%.3fs] filesystem setup completed (%s)\n", time.Since(stepStart).Seconds(), fsType)
 
+	// Step 4.5: Mount cache directories on top of the overlay
+	stepStart = time.Now()
+	if err := mountCacheDirectories(); err != nil {
+		// Log but don't fail - cache mounting is optional
+		fmt.Printf("octobot-agent: Cache mount failed: %v\n", err)
+	}
+	fmt.Printf("octobot-agent: [%.3fs] cache directories mounted\n", time.Since(stepStart).Seconds())
+
 	// Step 5: Create /workspace symlink to /home/octobot/workspace
 	stepStart = time.Now()
 	if err := createWorkspaceSymlink(); err != nil {
@@ -413,14 +439,7 @@ func run() error {
 		fmt.Printf("octobot-agent: [%.3fs] Docker daemon started\n", time.Since(stepStart).Seconds())
 	}
 
-	// Step 10: Wait for workspace clone to complete before starting agent-api
-	fmt.Printf("octobot-agent: waiting for workspace clone to complete...\n")
-	if err := <-workspaceDone; err != nil {
-		return fmt.Errorf("workspace setup failed: %w", err)
-	}
-	fmt.Printf("octobot-agent: [%.3fs] workspace clone completed\n", time.Since(workspaceStart).Seconds())
-
-	// Step 11: Run the agent API (only after workspace is ready)
+	// Step 10: Run the agent API
 	fmt.Printf("octobot-agent: [%.3fs] total startup time\n", time.Since(startupStart).Seconds())
 	fmt.Printf("octobot-agent: starting agent API\n")
 	return runAgent(agentBinary, userInfo, dockerCmd, proxyCmd)
@@ -1175,28 +1194,35 @@ func startProxyDaemon(userInfo *userInfo) (*exec.Cmd, error) {
 
 	fmt.Printf("octobot-agent: found proxy at %s, starting HTTP proxy...\n", proxyBinary)
 
-	// Create proxy data directory
-	proxyDataDir := filepath.Join(dataDir, "proxy")
-	if err := os.MkdirAll(proxyDataDir, 0755); err != nil {
-		return nil, fmt.Errorf("failed to create proxy data dir: %w", err)
+	// Create proxy directory (session-scoped at /.data/proxy)
+	proxyDir := filepath.Join(dataDir, "proxy")
+	if err := os.MkdirAll(proxyDir, 0755); err != nil {
+		return nil, fmt.Errorf("failed to create proxy dir: %w", err)
 	}
-	if err := os.Chown(proxyDataDir, userInfo.uid, userInfo.gid); err != nil {
-		fmt.Printf("octobot-agent: warning: failed to chown proxy data dir: %v\n", err)
-	}
-
-	// Create proxy subdirectories
-	for _, dir := range []string{"certs", "cache"} {
-		subDir := filepath.Join(proxyDataDir, dir)
-		if err := os.MkdirAll(subDir, 0755); err != nil {
-			return nil, fmt.Errorf("failed to create proxy %s dir: %w", dir, err)
-		}
-		if err := os.Chown(subDir, userInfo.uid, userInfo.gid); err != nil {
-			fmt.Printf("octobot-agent: warning: failed to chown proxy %s dir: %v\n", dir, err)
-		}
+	if err := os.Chown(proxyDir, userInfo.uid, userInfo.gid); err != nil {
+		fmt.Printf("octobot-agent: warning: failed to chown proxy dir: %v\n", err)
 	}
 
-	// Start proxy with config file
-	configPath := filepath.Join(proxyDataDir, "config.yaml")
+	// Create certs subdirectory (session-scoped)
+	certsDir := filepath.Join(proxyDir, "certs")
+	if err := os.MkdirAll(certsDir, 0755); err != nil {
+		return nil, fmt.Errorf("failed to create proxy certs dir: %w", err)
+	}
+	if err := os.Chown(certsDir, userInfo.uid, userInfo.gid); err != nil {
+		fmt.Printf("octobot-agent: warning: failed to chown proxy certs dir: %v\n", err)
+	}
+
+	// Create cache directory (project-scoped at /.data/cache/proxy)
+	cacheDir := filepath.Join(dataDir, "cache", "proxy")
+	if err := os.MkdirAll(cacheDir, 0755); err != nil {
+		return nil, fmt.Errorf("failed to create proxy cache dir: %w", err)
+	}
+	if err := os.Chown(cacheDir, userInfo.uid, userInfo.gid); err != nil {
+		fmt.Printf("octobot-agent: warning: failed to chown proxy cache dir: %v\n", err)
+	}
+
+	// Start proxy with config file (config is session-scoped)
+	configPath := filepath.Join(proxyDir, "config.yaml")
 	cmd := exec.Command(proxyBinary, "-config", configPath)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -1243,7 +1269,7 @@ func waitForProxyReady() error {
 }
 
 // setupProxyCertificate generates a CA certificate for the proxy and installs it in the system trust store.
-// The certificate is stored in /.data/proxy/certs/ and will be used by the proxy for HTTPS MITM.
+// The certificate is stored in /.data/proxy/certs/ (session-scoped) and will be used by the proxy for HTTPS MITM.
 func setupProxyCertificate() error {
 	certDir := filepath.Join(dataDir, "proxy", "certs")
 	certPath := filepath.Join(certDir, "ca.crt")
@@ -1453,14 +1479,13 @@ func setupProxyConfig(userInfo *userInfo) error {
 	// Security: Never read workspace config during init as it's untrusted code
 	fmt.Printf("octobot-agent: using default proxy config with Docker caching enabled\n")
 
+	// Write config with restrictive permissions (0644) and keep as root-owned
+	// This prevents the octobot user from modifying the proxy configuration
 	if err := os.WriteFile(configDest, defaultProxyConfig, 0644); err != nil {
 		return fmt.Errorf("failed to write default proxy config: %w", err)
 	}
 
-	// Set ownership to octobot user
-	if err := os.Chown(configDest, userInfo.uid, userInfo.gid); err != nil {
-		fmt.Printf("octobot-agent: warning: failed to chown proxy config: %v\n", err)
-	}
+	// Config remains root-owned for security (no chown needed)
 
 	return nil
 }
@@ -1736,5 +1761,213 @@ func reapChildren() {
 			break
 		}
 		// Zombie reaped, continue to check for more
+	}
+}
+
+// ===== Cache Volume Mount Support =====
+
+// cacheConfig defines the cache directory configuration.
+type cacheConfig struct {
+	AdditionalPaths []string `json:"additionalPaths,omitempty"`
+}
+
+// wellKnownCachePaths returns the list of well-known cache directories.
+// Note: We only include .cache since all subdirectories under it will be cached.
+func wellKnownCachePaths() []string {
+	return []string{
+		// Universal cache directory - all subdirectories will be cached
+		"/home/octobot/.cache",
+
+		// Package managers that don't use .cache
+		"/home/octobot/.npm",
+		"/home/octobot/.pnpm-store",
+		"/home/octobot/.yarn",
+
+		// Python
+		"/home/octobot/.local/share/uv",
+
+		// Go
+		"/home/octobot/go/pkg/mod",
+
+		// Rust / Cargo
+		"/home/octobot/.cargo/registry",
+		"/home/octobot/.cargo/git",
+
+		// Ruby
+		"/home/octobot/.bundle",
+		"/home/octobot/.gem",
+
+		// Java / Maven / Gradle
+		"/home/octobot/.m2/repository",
+		"/home/octobot/.gradle/caches",
+		"/home/octobot/.gradle/wrapper",
+
+		// .NET
+		"/home/octobot/.nuget/packages",
+
+		// PHP
+		"/home/octobot/.composer/cache",
+
+		// Bun
+		"/home/octobot/.bun/install/cache",
+
+		// Docker build cache (if Docker-in-Docker)
+		"/home/octobot/.docker/buildx",
+
+		// Build caches
+		"/home/octobot/.ccache",
+
+		// IDE caches
+		"/home/octobot/.vscode-server",
+		"/home/octobot/.cursor-server",
+	}
+}
+
+// loadCacheConfig loads the cache configuration from the workspace.
+// If the file doesn't exist or can't be read, returns default config.
+func loadCacheConfig() *cacheConfig {
+	configPath := filepath.Join(mountHome, "workspace", ".octobot", "cache.json")
+
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		// No config file is not an error - return empty config
+		return &cacheConfig{}
+	}
+
+	var cfg cacheConfig
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		fmt.Printf("octobot-agent: warning: failed to parse cache config: %v\n", err)
+		return &cacheConfig{}
+	}
+
+	return &cfg
+}
+
+// getAllCachePaths returns all cache paths (well-known + additional from config).
+// Additional paths are validated to ensure they're within /home/octobot for security.
+func getAllCachePaths(cfg *cacheConfig) []string {
+	paths := make([]string, 0, len(wellKnownCachePaths())+len(cfg.AdditionalPaths))
+	paths = append(paths, wellKnownCachePaths()...)
+
+	// Validate and add additional paths
+	for _, p := range cfg.AdditionalPaths {
+		if isValidCachePath(p) {
+			paths = append(paths, p)
+		} else {
+			fmt.Printf("octobot-agent: warning: ignoring invalid cache path from config: %s\n", p)
+		}
+	}
+
+	return paths
+}
+
+// isValidCachePath checks if a path is safe to use as a cache directory.
+// Only paths within /home/octobot are allowed for security.
+func isValidCachePath(path string) bool {
+	// Clean the path to resolve any .. or . components
+	cleanPath := filepath.Clean(path)
+
+	// Must be absolute path
+	if !filepath.IsAbs(cleanPath) {
+		return false
+	}
+
+	// Must be within /home/octobot (not equal to it, must be a subdirectory)
+	homePrefix := "/home/octobot/"
+	if !strings.HasPrefix(cleanPath+"/", homePrefix) {
+		return false
+	}
+
+	// Must not contain any suspicious components
+	// This prevents paths like /home/octobot/../etc
+	if strings.Contains(cleanPath, "..") {
+		return false
+	}
+
+	return true
+}
+
+// mountCacheDirectories bind-mounts cache directories from /.data/cache to /home/octobot/*.
+// This is called after the overlay filesystem is mounted, so cache mounts sit on top of the overlay.
+func mountCacheDirectories() error {
+	// Check if CACHE_ENABLED environment variable is set
+	if cacheEnabled := os.Getenv("CACHE_ENABLED"); cacheEnabled == "false" {
+		fmt.Printf("octobot-agent: cache volumes disabled via CACHE_ENABLED=false\n")
+		return nil
+	}
+
+	// Check if /.data/cache exists (created by Docker provider)
+	cacheVolumeBase := filepath.Join(dataDir, "cache")
+	if _, err := os.Stat(cacheVolumeBase); os.IsNotExist(err) {
+		fmt.Printf("octobot-agent: cache volume not found at %s, skipping cache mounts\n", cacheVolumeBase)
+		return nil
+	}
+
+	// Load cache configuration
+	cfg := loadCacheConfig()
+
+	// Get all cache paths
+	cachePaths := getAllCachePaths(cfg)
+
+	mounted := 0
+	for _, cachePath := range cachePaths {
+		// Clean the path to create a safe subdirectory name in the cache volume
+		// e.g., "/home/octobot/.npm" -> "home/octobot/.npm"
+		subDir := filepath.Clean(cachePath)
+		if subDir[0] == '/' {
+			subDir = subDir[1:]
+		}
+
+		// Source is in the cache volume
+		source := filepath.Join(cacheVolumeBase, subDir)
+
+		// Ensure the source directory exists in the cache volume with world-writable permissions
+		// This allows all users/processes to write to cache directories
+		if err := os.MkdirAll(source, 0777); err != nil {
+			fmt.Printf("octobot-agent: warning: failed to create cache dir %s: %v\n", source, err)
+			continue
+		}
+		// Explicitly set permissions to 0777 on the entire tree (umask may have restricted MkdirAll)
+		chmodPathToRoot(source, cacheVolumeBase, 0777)
+
+		// Ensure the target directory exists in the overlay with world-writable permissions
+		if err := os.MkdirAll(cachePath, 0777); err != nil {
+			fmt.Printf("octobot-agent: warning: failed to create target dir %s: %v\n", cachePath, err)
+			continue
+		}
+		// Explicitly set permissions to 0777 on the entire tree (umask may have restricted MkdirAll)
+		chmodPathToRoot(cachePath, "/home/octobot", 0777)
+
+		// Bind mount the cache directory
+		if err := syscall.Mount(source, cachePath, "none", syscall.MS_BIND, ""); err != nil {
+			fmt.Printf("octobot-agent: warning: failed to bind mount %s to %s: %v\n", source, cachePath, err)
+			continue
+		}
+
+		mounted++
+	}
+
+	if mounted > 0 {
+		fmt.Printf("octobot-agent: mounted %d cache directories\n", mounted)
+	}
+
+	return nil
+}
+
+// chmodPathToRoot sets permissions on path and all parent directories up to (but not including) root.
+// This ensures all intermediate directories created by MkdirAll have the correct permissions.
+func chmodPathToRoot(path, root string, mode os.FileMode) {
+	// Clean paths to normalize them
+	path = filepath.Clean(path)
+	root = filepath.Clean(root)
+
+	// Walk up the directory tree from path to root
+	current := path
+	for current != root && current != "/" && current != "." {
+		if err := os.Chmod(current, mode); err != nil {
+			// Don't log every error as it's noisy; the leaf chmod failure is logged elsewhere
+			break
+		}
+		current = filepath.Dir(current)
 	}
 }

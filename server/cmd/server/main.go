@@ -515,6 +515,27 @@ func main() {
 				},
 			})
 
+			// Cache Volumes
+			projReg.Register(r, routes.Route{
+				Method: "GET", Pattern: "/cache",
+				Handler: h.ListProjectCacheVolumes,
+				Meta: routes.Meta{
+					Group:       "Cache",
+					Description: "List cache volumes for project",
+					Params:      []routes.Param{{Name: "projectId", Example: "local"}},
+				},
+			})
+
+			projReg.Register(r, routes.Route{
+				Method: "DELETE", Pattern: "/cache",
+				Handler: h.DeleteProjectCacheVolume,
+				Meta: routes.Meta{
+					Group:       "Cache",
+					Description: "Delete cache volume for project (clears all caches)",
+					Params:      []routes.Param{{Name: "projectId", Example: "local"}},
+				},
+			})
+
 			// Workspaces
 			r.Route("/workspaces", func(r chi.Router) {
 				wsReg := projReg.WithPrefix("/workspaces")

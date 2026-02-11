@@ -1,6 +1,6 @@
 # Init Process Design
 
-This document describes the design of the `obot-agent` init process.
+This document describes the design of the `octobot-agent` init process.
 
 ## Problem Statement
 
@@ -397,13 +397,13 @@ docker stop test-agent  # Should exit cleanly
 
 ```bash
 # Build and test locally
-go build -o obot-agent ./agent/cmd/agent
+go build -o octobot-agent ./agent/cmd/agent
 
 # Test user lookup
-AGENT_USER=$USER SESSION_ID=test ./obot-agent --help
+AGENT_USER=$USER SESSION_ID=test ./octobot-agent --help
 
 # Test as PID 1 (requires root)
-sudo unshare -p -f --mount-proc ./obot-agent
+sudo unshare -p -f --mount-proc ./octobot-agent
 ```
 
 ## Container Requirements

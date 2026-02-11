@@ -9,9 +9,10 @@ tls:
   cert_dir: /.data/proxy/certs
 
 # Docker registry caching enabled by default
+# Cache stored in project-scoped cache volume (shared across all sessions in project)
 cache:
   enabled: true
-  dir: /.data/proxy/cache
+  dir: /.data/cache/proxy
   max_size: 21474836480  # 20GB
   patterns:
     - "^/v2/.*/blobs/sha256:.*"                           # Docker blob layers (immutable)

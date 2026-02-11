@@ -67,7 +67,7 @@ COPY agent/ ./agent/
 
 # Build the agent binary (static for portability)
 # The go:embed directive will include agent/internal/proxy/default-config.yaml
-RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /obot-agent ./agent/cmd/agent
+RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /octobot-agent ./agent/cmd/agent
 
 # Stage 3: Build the Bun standalone binary (glibc)
 FROM oven/bun:1 AS bun-builder
@@ -89,7 +89,7 @@ COPY agent-api/src ./src
 RUN bun build ./src/index.ts \
     --compile \
     --minify \
-    --outfile=obot-agent-api
+    --outfile=octobot-agent-api
 
 # Stage 3b: Build the Bun standalone binary (musl)
 FROM oven/bun:1-alpine AS bun-builder-musl
@@ -111,7 +111,7 @@ COPY agent-api/src ./src
 RUN bun build ./src/index.ts \
     --compile \
     --minify \
-    --outfile=obot-agent-api.musl
+    --outfile=octobot-agent-api.musl
 
 # Stage 4: Minimal Ubuntu runtime
 FROM ubuntu:24.04 AS runtime
@@ -175,17 +175,16 @@ COPY --chown=octobot:octobot container-assets/claude /home/octobot/.claude
 # Create directory structure per filesystem design
 # /.data      - persistent storage (Docker volume or VZ disk)
 # /.workspace - base workspace (read-only)
-# /data       - general data storage (writable, ephemeral)
 # /workspace  - project root (writable)
-RUN mkdir -p /.data /.workspace /data /workspace /opt/octobot/bin \
-    && chown octobot:octobot /.data /data /workspace
+RUN mkdir -p /.data /.workspace /workspace /opt/octobot/bin \
+    && chown octobot:octobot /.data /workspace
 
 # Copy binaries to /opt/octobot/bin
 # (placed after apt-get so code changes don't invalidate apt cache)
-COPY --from=bun-builder /app/obot-agent-api /opt/octobot/bin/obot-agent-api
-COPY --from=bun-builder-musl /app/obot-agent-api.musl /opt/octobot/bin/obot-agent-api.musl
+COPY --from=bun-builder /app/octobot-agent-api /opt/octobot/bin/octobot-agent-api
+COPY --from=bun-builder-musl /app/octobot-agent-api.musl /opt/octobot/bin/octobot-agent-api.musl
 COPY --from=proxy-builder /proxy /opt/octobot/bin/proxy
-COPY --from=agent-builder /obot-agent /opt/octobot/bin/obot-agent
+COPY --from=agent-builder /octobot-agent /opt/octobot/bin/octobot-agent
 RUN chmod +x /opt/octobot/bin/*
 
 # Add octobot binaries and npm global bin to PATH
@@ -199,10 +198,10 @@ WORKDIR /workspace
 
 EXPOSE 3002
 
-# Use obot-agent as PID 1 init process
+# Use octobot-agent as PID 1 init process
 # It handles signal forwarding, process reaping, and user switching
-# Container starts as root; obot-agent switches to octobot user for the API
-CMD ["/opt/octobot/bin/obot-agent"]
+# Container starts as root; octobot-agent switches to octobot user for the API
+CMD ["/opt/octobot/bin/octobot-agent"]
 
 # Stage 5: VZ disk image builder (non-default target)
 # Build with: docker build --target vz-disk-image --output type=local,dest=. .
@@ -251,9 +250,9 @@ mount -t virtiofs octobot-data /.data 2>/dev/null || true\n\
 # Mount workspace from host at /.workspace (read-only)\n\
 mount -t virtiofs octobot-workspace /.workspace 2>/dev/null || true\n\
 \n\
-# Start the agent (obot-agent handles user switching and process reaping)\n\
+# Start the agent (octobot-agent handles user switching and process reaping)\n\
 cd /workspace\n\
-exec /opt/octobot/bin/obot-agent\n\
+exec /opt/octobot/bin/octobot-agent\n\
 ' > /rootfs/init \
     && chmod +x /rootfs/init
 

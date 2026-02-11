@@ -17,7 +17,8 @@ const (
 
 // ProjectMember middleware validates project membership
 func ProjectMember(s *store.Store) func(http.Handler) http.Handler {
-	projectService := service.NewProjectService(s)
+	// Note: This middleware doesn't need sandbox provider since it only checks membership
+	projectService := service.NewProjectService(s, nil)
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

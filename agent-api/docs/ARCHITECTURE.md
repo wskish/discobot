@@ -151,12 +151,12 @@ Multi-stage build producing multiple binaries:
 
 | Binary | Description | Linking |
 |--------|-------------|---------|
-| `obot-agent-api` | Agent API server (glibc) | Dynamic (glibc) |
-| `obot-agent-api.musl` | Agent API server (musl) | Dynamic (musl) |
+| `octobot-agent-api` | Agent API server (glibc) | Dynamic (glibc) |
+| `octobot-agent-api.musl` | Agent API server (musl) | Dynamic (musl) |
 | `agentfs` | Filesystem tool | Static (musl) |
 | `proxy` | HTTP/SOCKS5 proxy | Static (CGO_ENABLED=0) |
 
-**Note**: All binaries except `obot-agent-api` are fully statically linked. The agent API binary is built with Bun's `--compile` flag, which produces a self-contained executable that still requires libc (either glibc or musl depending on the build environment).
+**Note**: All binaries except `octobot-agent-api` are fully statically linked. The agent API binary is built with Bun's `--compile` flag, which produces a self-contained executable that still requires libc (either glibc or musl depending on the build environment).
 
 ```dockerfile
 # Stage 1: Build agentfs (Rust/musl - static)
@@ -165,10 +165,10 @@ FROM rust:alpine AS agentfs-builder
 # Stage 2: Build proxy (Go - static)
 FROM golang:1.25 AS proxy-builder
 
-# Stage 3: Build obot-agent-api (Bun/glibc - dynamic)
+# Stage 3: Build octobot-agent-api (Bun/glibc - dynamic)
 FROM oven/bun:1 AS bun-builder
 
-# Stage 3b: Build obot-agent-api.musl (Bun/musl - dynamic)
+# Stage 3b: Build octobot-agent-api.musl (Bun/musl - dynamic)
 FROM oven/bun:1-alpine AS bun-builder-musl
 
 # Stage 4: Ubuntu runtime
