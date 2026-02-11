@@ -10,9 +10,13 @@ import {
 
 // Mock plan data
 const createMockPlan = (): PlanEntry[] => [
-	{ content: "Task 1", status: "completed" },
-	{ content: "Task 2", status: "in_progress" },
-	{ content: "Task 3", status: "pending" },
+	{ content: "Task 1", status: "completed", activeForm: "Completing Task 1" },
+	{
+		content: "Task 2",
+		status: "in_progress",
+		activeForm: "Working on Task 2",
+	},
+	{ content: "Task 3", status: "pending", activeForm: "Preparing Task 3" },
 ];
 
 describe("ChatPlanQueue", () => {
@@ -137,7 +141,12 @@ describe("ChatPlanQueue", () => {
 	describe("plan entry rendering", () => {
 		it("should display priority when specified", () => {
 			const planWithPriority: PlanEntry[] = [
-				{ content: "High priority task", status: "pending", priority: "high" },
+				{
+					content: "High priority task",
+					status: "pending",
+					activeForm: "Working on high priority task",
+					priority: "high",
+				},
 			];
 			render(<ChatPlanQueue plan={planWithPriority} />);
 
@@ -147,9 +156,21 @@ describe("ChatPlanQueue", () => {
 
 		it("should handle all status types", () => {
 			const planWithStatuses: PlanEntry[] = [
-				{ content: "Completed task", status: "completed" },
-				{ content: "In progress task", status: "in_progress" },
-				{ content: "Pending task", status: "pending" },
+				{
+					content: "Completed task",
+					status: "completed",
+					activeForm: "Completing task",
+				},
+				{
+					content: "In progress task",
+					status: "in_progress",
+					activeForm: "Working on task",
+				},
+				{
+					content: "Pending task",
+					status: "pending",
+					activeForm: "Preparing task",
+				},
 			];
 			render(<ChatPlanQueue plan={planWithStatuses} />);
 
