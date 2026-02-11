@@ -84,6 +84,11 @@ export function getToolTitle(toolPart: DynamicToolUIPart): string | undefined {
 		return toolPart.title;
 	}
 
+	// Guard against undefined input (can happen during streaming or malformed calls)
+	if (!input) {
+		return undefined;
+	}
+
 	// Type-safe input access
 	const safeInput = input as Record<string, unknown>;
 
