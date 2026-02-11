@@ -140,7 +140,11 @@ func NewTestServer(t *testing.T) *TestServer {
 	}
 	eventBroker := events.NewBroker(s, eventPoller)
 
-	h := handler.New(s, cfg, gitProvider, mockSandbox, eventBroker)
+	// Create sandbox manager and register mock provider
+	sandboxManager := sandbox.NewManager()
+	sandboxManager.RegisterProvider("mock", mockSandbox)
+
+	h := handler.New(s, cfg, gitProvider, mockSandbox, sandboxManager, eventBroker)
 
 	// Create and start dispatcher for job processing
 	cfg.DispatcherEnabled = true
@@ -393,7 +397,11 @@ func NewTestServerNoAuth(t *testing.T) *TestServer {
 	}
 	eventBroker := events.NewBroker(s, eventPoller)
 
-	h := handler.New(s, cfg, gitProvider, mockSandbox, eventBroker)
+	// Create sandbox manager and register mock provider
+	sandboxManager := sandbox.NewManager()
+	sandboxManager.RegisterProvider("mock", mockSandbox)
+
+	h := handler.New(s, cfg, gitProvider, mockSandbox, sandboxManager, eventBroker)
 
 	// Create and start dispatcher for job processing
 	cfg.DispatcherEnabled = true
