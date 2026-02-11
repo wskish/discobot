@@ -179,15 +179,15 @@ func (s *SessionService) CreateSessionWithID(ctx context.Context, sessionID, pro
 
 // UpdateStatus updates only the session status and optional error message
 func (s *SessionService) UpdateStatus(ctx context.Context, sessionID, status string, errorMsg *string) (*Session, error) {
+	// Use targeted column update to avoid overwriting concurrent changes to other fields
+	if err := s.store.UpdateSessionStatus(ctx, sessionID, status, errorMsg); err != nil {
+		return nil, fmt.Errorf("failed to update session status: %w", err)
+	}
+
+	// Re-read the session to return the full updated state
 	sess, err := s.store.GetSessionByID(ctx, sessionID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get session: %w", err)
-	}
-
-	sess.Status = status
-	sess.ErrorMessage = errorMsg
-	if err := s.store.UpdateSession(ctx, sess); err != nil {
-		return nil, fmt.Errorf("failed to update session status: %w", err)
 	}
 
 	return s.mapSession(sess), nil
