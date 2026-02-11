@@ -167,6 +167,10 @@ const (
 type CreateOptions struct {
 	Labels map[string]string // Sandbox labels/tags for identification
 
+	// ProjectID is the ID of the project this session belongs to.
+	// For VZ provider with project-level VMs, this determines which VM to use.
+	ProjectID string
+
 	// SharedSecret is the secret used for authenticating requests to the sandbox.
 	// The provider stores this secret and makes a salted+hashed version available
 	// to the sandbox via the DISCOBOT_SECRET environment variable.

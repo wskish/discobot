@@ -28,6 +28,7 @@ import (
 	"github.com/obot-platform/discobot/server/internal/sandbox"
 	"github.com/obot-platform/discobot/server/internal/sandbox/docker"
 	"github.com/obot-platform/discobot/server/internal/sandbox/local"
+	"github.com/obot-platform/discobot/server/internal/sandbox/vm"
 	"github.com/obot-platform/discobot/server/internal/sandbox/vz"
 	"github.com/obot-platform/discobot/server/internal/service"
 	"github.com/obot-platform/discobot/server/internal/ssh"
@@ -107,11 +108,12 @@ func main() {
 
 	// On darwin/arm64, try VZ (Virtualization.framework) as well
 	if runtime.GOOS == "darwin" && runtime.GOARCH == "arm64" && cfg.VZKernelPath != "" {
-		vzCfg := &vz.Config{
-			DataDir:      cfg.VZDataDir,
-			KernelPath:   cfg.VZKernelPath,
-			InitrdPath:   cfg.VZInitrdPath,
-			BaseDiskPath: cfg.VZBaseDiskPath,
+		vzCfg := &vm.Config{
+			DataDir:       cfg.VZDataDir,
+			ConsoleLogDir: cfg.VZConsoleLogDir,
+			KernelPath:    cfg.VZKernelPath,
+			InitrdPath:    cfg.VZInitrdPath,
+			BaseDiskPath:  cfg.VZBaseDiskPath,
 		}
 		if vzProvider, vzErr := vz.NewProvider(cfg, vzCfg); vzErr != nil {
 			log.Printf("Warning: Failed to initialize VZ sandbox provider: %v", vzErr)

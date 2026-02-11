@@ -13,95 +13,88 @@ import (
 
 	"github.com/obot-platform/discobot/server/internal/config"
 	"github.com/obot-platform/discobot/server/internal/sandbox"
+	"github.com/obot-platform/discobot/server/internal/sandbox/vm"
 )
 
-// Config holds vz-specific configuration.
-type Config struct {
-	DataDir      string
-	KernelPath   string
-	InitrdPath   string
-	BaseDiskPath string
-}
-
-// Provider is a stub that returns an error on non-darwin platforms.
-type Provider struct{}
+// DockerProvider is a stub that returns an error on non-darwin platforms.
+type DockerProvider struct{}
 
 // NewProvider returns an error on non-darwin platforms.
-func NewProvider(_ *config.Config, _ *Config) (*Provider, error) {
+func NewProvider(_ *config.Config, _ *vm.Config) (*DockerProvider, error) {
 	return nil, fmt.Errorf("vz sandbox provider is only available on macOS (darwin), current platform: %s", runtime.GOOS)
 }
 
 // ImageExists always returns false on non-darwin platforms.
-func (p *Provider) ImageExists(_ context.Context) bool {
+func (p *DockerProvider) ImageExists(_ context.Context) bool {
 	return false
 }
 
 // Image returns empty string on non-darwin platforms.
-func (p *Provider) Image() string {
+func (p *DockerProvider) Image() string {
 	return ""
 }
 
 // Create returns an error on non-darwin platforms.
-func (p *Provider) Create(_ context.Context, _ string, _ sandbox.CreateOptions) (*sandbox.Sandbox, error) {
+func (p *DockerProvider) Create(_ context.Context, _ string, _ sandbox.CreateOptions) (*sandbox.Sandbox, error) {
 	return nil, fmt.Errorf("vz sandbox provider is only available on macOS")
 }
 
 // Start returns an error on non-darwin platforms.
-func (p *Provider) Start(_ context.Context, _ string) error {
+func (p *DockerProvider) Start(_ context.Context, _ string) error {
 	return fmt.Errorf("vz sandbox provider is only available on macOS")
 }
 
 // Stop returns an error on non-darwin platforms.
-func (p *Provider) Stop(_ context.Context, _ string, _ time.Duration) error {
+func (p *DockerProvider) Stop(_ context.Context, _ string, _ time.Duration) error {
 	return fmt.Errorf("vz sandbox provider is only available on macOS")
 }
 
 // Remove returns an error on non-darwin platforms.
-func (p *Provider) Remove(_ context.Context, _ string, _ ...sandbox.RemoveOption) error {
+func (p *DockerProvider) Remove(_ context.Context, _ string, _ ...sandbox.RemoveOption) error {
 	return fmt.Errorf("vz sandbox provider is only available on macOS")
 }
 
 // Get returns an error on non-darwin platforms.
-func (p *Provider) Get(_ context.Context, _ string) (*sandbox.Sandbox, error) {
+func (p *DockerProvider) Get(_ context.Context, _ string) (*sandbox.Sandbox, error) {
 	return nil, fmt.Errorf("vz sandbox provider is only available on macOS")
 }
 
 // GetSecret returns an error on non-darwin platforms.
-func (p *Provider) GetSecret(_ context.Context, _ string) (string, error) {
+func (p *DockerProvider) GetSecret(_ context.Context, _ string) (string, error) {
 	return "", fmt.Errorf("vz sandbox provider is only available on macOS")
 }
 
 // List returns an error on non-darwin platforms.
-func (p *Provider) List(_ context.Context) ([]*sandbox.Sandbox, error) {
+func (p *DockerProvider) List(_ context.Context) ([]*sandbox.Sandbox, error) {
 	return nil, fmt.Errorf("vz sandbox provider is only available on macOS")
 }
 
 // Exec returns an error on non-darwin platforms.
-func (p *Provider) Exec(_ context.Context, _ string, _ []string, _ sandbox.ExecOptions) (*sandbox.ExecResult, error) {
+func (p *DockerProvider) Exec(_ context.Context, _ string, _ []string, _ sandbox.ExecOptions) (*sandbox.ExecResult, error) {
 	return nil, fmt.Errorf("vz sandbox provider is only available on macOS")
 }
 
 // Attach returns an error on non-darwin platforms.
-func (p *Provider) Attach(_ context.Context, _ string, _ sandbox.AttachOptions) (sandbox.PTY, error) {
+func (p *DockerProvider) Attach(_ context.Context, _ string, _ sandbox.AttachOptions) (sandbox.PTY, error) {
 	return nil, fmt.Errorf("vz sandbox provider is only available on macOS")
 }
 
 // ExecStream returns an error on non-darwin platforms.
-func (p *Provider) ExecStream(_ context.Context, _ string, _ []string, _ sandbox.ExecStreamOptions) (sandbox.Stream, error) {
+func (p *DockerProvider) ExecStream(_ context.Context, _ string, _ []string, _ sandbox.ExecStreamOptions) (sandbox.Stream, error) {
 	return nil, fmt.Errorf("vz sandbox provider is only available on macOS")
 }
 
 // HTTPClient returns an error on non-darwin platforms.
-func (p *Provider) HTTPClient(_ context.Context, _ string) (*http.Client, error) {
+func (p *DockerProvider) HTTPClient(_ context.Context, _ string) (*http.Client, error) {
 	return nil, fmt.Errorf("vz sandbox provider is only available on macOS")
 }
 
 // Watch returns an error on non-darwin platforms.
-func (p *Provider) Watch(_ context.Context) (<-chan sandbox.StateEvent, error) {
+func (p *DockerProvider) Watch(_ context.Context) (<-chan sandbox.StateEvent, error) {
 	return nil, fmt.Errorf("vz sandbox provider is only available on macOS")
 }
 
 // Close is a no-op on non-darwin platforms.
-func (p *Provider) Close() error {
+func (p *DockerProvider) Close() error {
 	return nil
 }
