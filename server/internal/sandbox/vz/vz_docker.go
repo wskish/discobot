@@ -4,7 +4,6 @@ package vz
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"log"
