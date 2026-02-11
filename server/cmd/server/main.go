@@ -107,19 +107,25 @@ func main() {
 	}
 
 	// On darwin/arm64, try VZ (Virtualization.framework) as well
-	if runtime.GOOS == "darwin" && runtime.GOARCH == "arm64" && cfg.VZKernelPath != "" {
+	// VZ provider now supports auto-downloading images if paths are not configured
+	if runtime.GOOS == "darwin" && runtime.GOARCH == "arm64" {
 		vzCfg := &vm.Config{
 			DataDir:       cfg.VZDataDir,
 			ConsoleLogDir: cfg.VZConsoleLogDir,
 			KernelPath:    cfg.VZKernelPath,
 			InitrdPath:    cfg.VZInitrdPath,
 			BaseDiskPath:  cfg.VZBaseDiskPath,
+			ImageRef:      cfg.VZImageRef,
 		}
 		if vzProvider, vzErr := vz.NewProvider(cfg, vzCfg); vzErr != nil {
 			log.Printf("Warning: Failed to initialize VZ sandbox provider: %v", vzErr)
 		} else {
 			sandboxManager.RegisterProvider("vz", vzProvider)
-			log.Printf("VZ sandbox provider initialized")
+			if vzProvider.IsReady() {
+				log.Printf("VZ sandbox provider initialized and ready")
+			} else {
+				log.Printf("VZ sandbox provider registered (images downloading in background)")
+			}
 		}
 	}
 
@@ -286,7 +292,7 @@ func main() {
 	r.Use(middleware.TauriAuth(cfg))
 
 	// Initialize handlers
-	h := handler.New(s, cfg, gitProvider, sandboxProvider, eventBroker)
+	h := handler.New(s, cfg, gitProvider, sandboxProvider, sandboxManager, eventBroker)
 
 	// Wire up job queue notification to dispatcher for immediate execution
 	if disp != nil {
@@ -549,6 +555,17 @@ func main() {
 				Meta: routes.Meta{
 					Group:       "Cache",
 					Description: "Delete cache volume for project (clears all caches)",
+					Params:      []routes.Param{{Name: "projectId", Example: "local"}},
+				},
+			})
+
+			// VZ Provider Status
+			projReg.Register(r, routes.Route{
+				Method: "GET", Pattern: "/vz/status",
+				Handler: h.GetVZStatus,
+				Meta: routes.Meta{
+					Group:       "VZ",
+					Description: "Get VZ provider status and configuration",
 					Params:      []routes.Param{{Name: "projectId", Example: "local"}},
 				},
 			})
