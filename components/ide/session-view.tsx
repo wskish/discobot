@@ -74,6 +74,10 @@ export function SessionView({
 		registerChatResumeStream,
 	} = useSessionViewContext();
 
+	// Track if this session started as new - if so, we skip the loading screen
+	// to avoid unmounting ChatPanel during the new→existing transition
+	const startedAsNew = React.useRef(isNew);
+
 	// Manage right sidebar width state
 	const [rightSidebarWidth, setRightSidebarWidth] = usePersistedState(
 		STORAGE_KEYS.RIGHT_SIDEBAR_WIDTH,
@@ -161,7 +165,7 @@ export function SessionView({
 										Failed to load messages: {messagesError.message}
 									</div>
 								</div>
-							) : !isNew && messagesLoading ? (
+							) : !startedAsNew.current && !isNew && messagesLoading ? (
 								<div className="flex flex-col h-full items-center justify-center">
 									<div className="text-sm text-muted-foreground">
 										Loading messages...

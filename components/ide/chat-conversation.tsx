@@ -134,7 +134,7 @@ export function ChatConversation({
 	isChatActive,
 	onCopy,
 }: ChatConversationProps) {
-	// Show loading state when fetching messages
+	// Show loading state when fetching messages (shouldn't happen often due to SessionView logic)
 	if (messagesLoading) {
 		return (
 			<div className="flex-1 flex items-center justify-center">
