@@ -62,7 +62,7 @@ export function buildTargetHeaders(
 	}
 
 	// Set host to the target
-	headers["host"] = `localhost:${targetPort}`;
+	headers.host = `localhost:${targetPort}`;
 
 	return headers;
 }

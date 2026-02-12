@@ -3,7 +3,7 @@ import "@xterm/xterm/css/xterm.css";
 import { Check, Copy, MessageSquare } from "lucide-react";
 import * as React from "react";
 import { Button } from "@/components/ui/button";
-import { getWsBase } from "@/lib/api-config";
+import { appendAuthToken, getWsBase } from "@/lib/api-config";
 import { cn } from "@/lib/utils";
 
 /**
@@ -102,7 +102,9 @@ export const TerminalView = React.forwardRef<
 			const rows = term.rows;
 			const cols = term.cols;
 			const rootParam = root ? "&root=true" : "";
-			const wsUrl = `${getWsBase()}/sessions/${sessionId}/terminal/ws?rows=${rows}&cols=${cols}${rootParam}`;
+			const wsUrl = appendAuthToken(
+				`${getWsBase()}/sessions/${sessionId}/terminal/ws?rows=${rows}&cols=${cols}${rootParam}`,
+			);
 
 			const ws = new WebSocket(wsUrl);
 			wsRef.current = ws;
