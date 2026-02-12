@@ -78,6 +78,11 @@ func WaitForJobCompletion(
 			// This provides a fallback if events aren't working
 			job, err := s.GetJobByResourceID(ctx, resourceType, resourceID)
 			if err != nil && err != store.ErrNotFound {
+				// If the context expired during the DB call, return the
+				// context error directly (same as the ctx.Done() path).
+				if ctx.Err() != nil {
+					return "", "", ctx.Err()
+				}
 				return "", "", fmt.Errorf("failed to get job: %w", err)
 			}
 
