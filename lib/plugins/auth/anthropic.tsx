@@ -118,29 +118,38 @@ export function AnthropicOAuthFlow({
 	};
 
 	const handleSubmitCode = async () => {
-		if (!code.trim() || !verifier) return;
+		const trimmedCode = code.trim();
+		if (!trimmedCode) return;
+
+		// Allow direct tokens (sk-ant-oat0...) without verifier
+		const isDirectToken = trimmedCode.startsWith("sk-ant-oat0");
+		if (!isDirectToken && !verifier) return;
 
 		setIsLoading(true);
 		setError(null);
 		try {
 			const result = await anthropicAuthPlugin.completeOAuth(
-				code.trim(),
-				verifier,
+				trimmedCode,
+				verifier || "", // Pass empty string for direct tokens
 			);
 			if (result.success) {
 				onComplete();
 			} else {
-				setError(result.error || "Failed to exchange code");
+				setError(result.error || "Failed to authenticate");
 			}
 		} catch (err) {
-			setError(err instanceof Error ? err.message : "Failed to exchange code");
+			setError(err instanceof Error ? err.message : "Failed to authenticate");
 		} finally {
 			setIsLoading(false);
 		}
 	};
 
 	const handleKeyDown = (e: React.KeyboardEvent) => {
-		if (e.key === "Enter" && code.trim()) {
+		const trimmedCode = code.trim();
+		const isDirectToken = trimmedCode.startsWith("sk-ant-oat0");
+		const canSubmit = trimmedCode && (isDirectToken || verifier);
+
+		if (e.key === "Enter" && canSubmit) {
 			handleSubmitCode();
 		} else if (e.key === "Escape") {
 			onCancel();
@@ -229,15 +238,22 @@ export function AnthropicOAuthFlow({
 				)}
 
 				<div className="space-y-2">
-					<Label className="text-sm">Authorization Code</Label>
+					<Label className="text-sm">Authorization Code or Access Token</Label>
 					<Input
 						value={code}
 						onChange={(e) => setCode(e.target.value)}
 						onKeyDown={handleKeyDown}
-						placeholder="Paste the code here..."
+						placeholder="Paste the code or token here..."
 						className="font-mono text-sm"
 						disabled={isLoading}
 					/>
+					<p className="text-xs text-muted-foreground">
+						Alternatively, run{" "}
+						<code className="px-1.5 py-0.5 rounded bg-muted font-mono">
+							claude setup-token
+						</code>{" "}
+						and paste the output token (starts with sk-ant-oat0...)
+					</p>
 				</div>
 
 				{error && <p className="text-sm text-destructive">{error}</p>}
@@ -250,7 +266,11 @@ export function AnthropicOAuthFlow({
 				<Button
 					size="sm"
 					onClick={handleSubmitCode}
-					disabled={!code.trim() || isLoading}
+					disabled={
+						!code.trim() ||
+						isLoading ||
+						(!code.trim().startsWith("sk-ant-oat0") && !verifier)
+					}
 				>
 					{isLoading ? (
 						<>
