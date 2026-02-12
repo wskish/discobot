@@ -36,7 +36,6 @@ This document describes the file system layout inside the agent container, inclu
 │
 ├── opt/discobot/bin/
 │   ├── discobot-agent-api            # Agent API server binary (Bun standalone, glibc)
-│   ├── discobot-agent-api.musl       # Agent API server binary (Bun standalone, musl)
 │   ├── agentfs                   # AgentFS file system tool (Rust, static)
 │   └── proxy                     # MITM proxy (Go, static)
 │
@@ -127,11 +126,10 @@ All Discobot executables are installed here. Added to `$PATH` at runtime.
 | Binary | Source | Purpose | Linking |
 |--------|--------|---------|---------|
 | `discobot-agent-api` | Bun standalone | Agent HTTP server (glibc) | Dynamic (glibc) |
-| `discobot-agent-api.musl` | Bun standalone | Agent HTTP server (musl) | Dynamic (musl) |
 | `agentfs` | Rust (tursodatabase/agentfs) | File system operations with sandboxing | Static |
 | `proxy` | Go (proxy module) | MITM proxy for network interception | Static |
 
-**Note:** All binaries except `discobot-agent-api*` are fully statically linked. The agent API binaries are built with Bun's `--compile` flag, which produces self-contained executables that still require libc (either glibc or musl depending on build variant). Use the `.musl` variant for Alpine-based systems.
+**Note:** All binaries except `discobot-agent-api` are fully statically linked. The agent API binary is built with Bun's `--compile` flag, which produces a self-contained executable that still requires glibc.
 
 Permissions: **Read-only** at runtime
 

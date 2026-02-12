@@ -71,7 +71,7 @@ RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /discobot-agent ./agent/cmd/agent
 
 # Stage 2c: Extract Claude CLI version from SDK package metadata
 # The SDK's package.json contains "claudeCodeVersion" field declaring compatible CLI version
-FROM oven/bun:1-alpine AS version-extractor
+FROM oven/bun:1.3.9-alpine AS version-extractor
 COPY agent-api/package.json agent-api/bun.lock* /tmp/
 WORKDIR /tmp
 RUN bun install --frozen-lockfile 2>/dev/null || bun install \
@@ -80,7 +80,7 @@ RUN bun install --frozen-lockfile 2>/dev/null || bun install \
     && echo "Claude Code CLI version from SDK: $CLI_VERSION"
 
 # Stage 3: Build the Bun standalone binary (glibc)
-FROM oven/bun:1 AS bun-builder
+FROM oven/bun:1.3.9 AS bun-builder
 
 WORKDIR /app
 
@@ -100,28 +100,6 @@ RUN bun build ./src/index.ts \
     --compile \
     --minify \
     --outfile=discobot-agent-api
-
-# Stage 3b: Build the Bun standalone binary (musl)
-FROM oven/bun:1-alpine AS bun-builder-musl
-
-WORKDIR /app
-
-# Copy package files from agent-api directory
-COPY agent-api/package.json agent-api/bun.lock* ./
-
-# Install dependencies with Bun
-RUN bun install
-
-# Copy source files from agent-api directory
-COPY agent-api/tsconfig.json ./
-COPY agent-api/src ./src
-
-# Build standalone binary for musl-based systems (Alpine Linux)
-# This binary links against musl libc and works on Alpine-based systems
-RUN bun build ./src/index.ts \
-    --compile \
-    --minify \
-    --outfile=discobot-agent-api.musl
 
 # Stage 4: Minimal Ubuntu runtime
 FROM ubuntu:24.04 AS runtime
@@ -216,7 +194,6 @@ RUN mkdir -p /.data /.workspace /workspace /opt/discobot/bin \
 # Copy binaries to /opt/discobot/bin
 # (placed after apt-get so code changes don't invalidate apt cache)
 COPY --from=bun-builder /app/discobot-agent-api /opt/discobot/bin/discobot-agent-api
-COPY --from=bun-builder-musl /app/discobot-agent-api.musl /opt/discobot/bin/discobot-agent-api.musl
 COPY --from=proxy-builder /proxy /opt/discobot/bin/proxy
 COPY --from=agent-builder /discobot-agent /opt/discobot/bin/discobot-agent
 RUN chmod +x /opt/discobot/bin/*

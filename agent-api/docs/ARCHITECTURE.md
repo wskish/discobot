@@ -177,7 +177,6 @@ Multi-stage build producing multiple binaries:
 | Binary | Description | Linking |
 |--------|-------------|---------|
 | `discobot-agent-api` | Agent API server (glibc) | Dynamic (glibc) |
-| `discobot-agent-api.musl` | Agent API server (musl) | Dynamic (musl) |
 | `agentfs` | Filesystem tool | Static (musl) |
 | `proxy` | HTTP/SOCKS5 proxy | Static (CGO_ENABLED=0) |
 
@@ -191,10 +190,7 @@ FROM rust:alpine AS agentfs-builder
 FROM golang:1.25 AS proxy-builder
 
 # Stage 3: Build discobot-agent-api (Bun/glibc - dynamic)
-FROM oven/bun:1 AS bun-builder
-
-# Stage 3b: Build discobot-agent-api.musl (Bun/musl - dynamic)
-FROM oven/bun:1-alpine AS bun-builder-musl
+FROM oven/bun:1.3.9 AS bun-builder
 
 # Stage 4: Ubuntu runtime
 FROM ubuntu:24.04 AS runtime
