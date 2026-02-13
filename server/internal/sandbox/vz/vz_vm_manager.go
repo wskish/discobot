@@ -75,7 +75,6 @@ type vzProjectVM struct {
 	projectID    string
 	vm           *vz.VirtualMachine
 	socketDevice *vz.VirtioSocketDevice
-	diskPath     string   // Root disk (read-only)
 	dataDiskPath string   // Data disk (writable)
 	consoleLog   *os.File // Console log file
 
@@ -341,18 +340,13 @@ func (m *VMManager) Shutdown() {
 
 // createProjectVM creates and starts a new VM for a project.
 func (m *VMManager) createProjectVM(ctx context.Context, projectID, sessionID string) (*vzProjectVM, error) {
-	// Root disk (read-only)
-	diskPath := filepath.Join(m.config.DataDir, fmt.Sprintf("project-%s.img", projectID))
+	// Root disk (read-only) - use the base disk directly, shared across all VMs
+	rootDiskPath := m.config.BaseDiskPath
 
-	// Data disk (writable)
+	// Data disk (writable) - per-project persistent storage
 	dataDiskPath := filepath.Join(m.config.DataDir, fmt.Sprintf("project-%s-data.img", projectID))
 
-	// Clone base disk (will be mounted read-only)
-	if err := m.cloneDisk(m.config.BaseDiskPath, diskPath); err != nil {
-		return nil, fmt.Errorf("failed to clone disk: %w", err)
-	}
-
-	log.Printf("Cloned base disk to: %s", diskPath)
+	log.Printf("Using shared base disk (read-only): %s", rootDiskPath)
 
 	// Create data disk if it doesn't exist
 	if _, err := os.Stat(dataDiskPath); os.IsNotExist(err) {
@@ -362,7 +356,6 @@ func (m *VMManager) createProjectVM(ctx context.Context, projectID, sessionID st
 		}
 		dataDiskSize := int64(diskGB) * 1024 * 1024 * 1024
 		if err := vz.CreateDiskImage(dataDiskPath, dataDiskSize); err != nil {
-			os.Remove(diskPath)
 			return nil, fmt.Errorf("failed to create data disk: %w", err)
 		}
 		log.Printf("Created data disk: %s", dataDiskPath)
@@ -382,7 +375,7 @@ func (m *VMManager) createProjectVM(ctx context.Context, projectID, sessionID st
 	log.Printf("Console log: %s", consoleLogPath)
 
 	// Build and start VM
-	vzVM, socketDevice, consoleRead, consoleWrite, err := m.buildAndStartVM(diskPath, dataDiskPath, projectID)
+	vzVM, socketDevice, consoleRead, consoleWrite, err := m.buildAndStartVM(rootDiskPath, dataDiskPath, projectID)
 	if err != nil {
 		consoleLog.Close()
 		return nil, fmt.Errorf("failed to build and start VM: %w", err)
@@ -429,7 +422,6 @@ func (m *VMManager) createProjectVM(ctx context.Context, projectID, sessionID st
 		projectID:    projectID,
 		vm:           vzVM,
 		socketDevice: socketDevice,
-		diskPath:     diskPath,
 		dataDiskPath: dataDiskPath,
 		consoleLog:   consoleLog,
 		sessions:     sessions,
@@ -442,33 +434,6 @@ func (m *VMManager) createProjectVM(ctx context.Context, projectID, sessionID st
 }
 
 // cloneDisk copies the base disk to a new location.
-func (m *VMManager) cloneDisk(baseDiskPath, diskPath string) error {
-	if baseDiskPath == "" {
-		// Create empty disk if no base disk
-		diskSize := int64(10 * 1024 * 1024 * 1024) // 10GB
-		return vz.CreateDiskImage(diskPath, diskSize)
-	}
-
-	src, err := os.Open(baseDiskPath)
-	if err != nil {
-		return fmt.Errorf("failed to open base disk: %w", err)
-	}
-	defer src.Close()
-
-	dst, err := os.Create(diskPath)
-	if err != nil {
-		return fmt.Errorf("failed to create disk image: %w", err)
-	}
-	defer dst.Close()
-
-	if _, err := io.Copy(dst, src); err != nil {
-		os.Remove(diskPath)
-		return fmt.Errorf("failed to copy base disk: %w", err)
-	}
-
-	return nil
-}
-
 // buildAndStartVM creates and starts a VM with the given disk images.
 // rootDiskPath is mounted read-only as /dev/vda, dataDiskPath is mounted read-write as /dev/vdb.
 func (m *VMManager) buildAndStartVM(rootDiskPath, dataDiskPath, _ string) (*vz.VirtualMachine, *vz.VirtioSocketDevice, *os.File, *os.File, error) {
