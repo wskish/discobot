@@ -10,6 +10,7 @@ import * as React from "react";
 import { DiscobotBrand } from "@/components/ide/discobot-brand";
 import { SessionDropdownItem } from "@/components/ide/session-dropdown-item";
 import { getSessionDisplayName } from "@/components/ide/session-name";
+import { ThemeSelector } from "@/components/ide/theme-selector";
 import { ThemeToggle } from "@/components/ide/theme-toggle";
 import { WindowControls } from "@/components/ide/window-controls";
 import { WorkspaceDisplay } from "@/components/ide/workspace-display";
@@ -413,8 +414,13 @@ export function Header({ leftSidebarOpen, onToggleSidebar }: HeaderProps) {
 					<Info className="h-4 w-4" />
 					<span className="sr-only">Support Information</span>
 				</Button>
-				{/* Hide theme toggle on macOS Tauri (follows system theme) */}
-				{!(isTauri() && isMac) && <ThemeToggle className="tauri-no-drag" />}
+				{/* Hide theme controls on macOS Tauri (follows system theme) */}
+				{!(isTauri() && isMac) && (
+					<>
+						<ThemeSelector className="tauri-no-drag" />
+						<ThemeToggle className="tauri-no-drag" />
+					</>
+				)}
 				{/* Windows/Linux window controls on the right (macOS uses native) */}
 				{isTauri() && <WindowControls />}
 			</div>

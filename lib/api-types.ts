@@ -16,6 +16,19 @@ export interface UserPreference {
 /** File status in diff */
 export type FileStatus = "added" | "modified" | "deleted" | "renamed";
 
+/** Theme color scheme for customization */
+export type ThemeColorScheme =
+	| "default"
+	| "nord"
+	| "tokyo-night"
+	| "solarized"
+	| "dracula"
+	| "alucard"
+	| "catppuccin-mocha"
+	| "catppuccin-macchiato"
+	| "catppuccin-frappe"
+	| "catppuccin-latte";
+
 export interface FileNode {
 	id: string;
 	name: string;

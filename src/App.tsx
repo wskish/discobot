@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Route, Routes } from "react-router";
 import { AppShell } from "@/components/app-shell";
 import { ResizeObserverFix } from "@/components/resize-observer-fix";
@@ -6,6 +7,12 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { HomePage } from "./pages/HomePage";
 
 export function App() {
+	// Initialize theme attribute from localStorage on mount
+	useEffect(() => {
+		const saved = localStorage.getItem("theme.colorScheme") || "default";
+		document.documentElement.setAttribute("data-theme", saved);
+	}, []);
+
 	return (
 		<ThemeProvider
 			attribute="class"
