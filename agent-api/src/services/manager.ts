@@ -205,14 +205,26 @@ export async function stopService(
 	// Update status
 	managed.service.status = "stopping";
 
-	// Kill the process
-	if (managed.process.pid) {
-		managed.process.kill("SIGTERM");
+	// Kill the entire process group (including all child processes)
+	const pid = managed.process.pid;
+	if (pid) {
+		try {
+			// Negative PID kills the entire process group
+			process.kill(-pid, "SIGTERM");
+		} catch (err) {
+			// Process may have already exited
+			console.error(`Failed to send SIGTERM to process group ${pid}:`, err);
+		}
 
 		// Force kill after 5 seconds if still running
 		setTimeout(() => {
 			if (managed.service.status === "stopping") {
-				managed.process.kill("SIGKILL");
+				try {
+					process.kill(-pid, "SIGKILL");
+				} catch (err) {
+					// Process group may have already exited
+					console.error(`Failed to send SIGKILL to process group ${pid}:`, err);
+				}
 			}
 		}, 5000);
 	}
@@ -243,11 +255,13 @@ function spawnService(workspaceRoot: string, serviceTemplate: Service): void {
 		startedAt: new Date().toISOString(),
 	};
 
-	// Spawn the process
+	// Spawn the process in its own process group (detached)
+	// This allows us to kill the entire process tree later
 	const proc = spawn(serviceTemplate.path, [], {
 		cwd: workspaceRoot,
 		stdio: ["pipe", "pipe", "pipe"],
 		env: { ...process.env },
+		detached: true,
 	});
 
 	service.pid = proc.pid;
