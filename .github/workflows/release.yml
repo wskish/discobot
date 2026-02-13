@@ -122,14 +122,24 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # Install crane for extracting VZ image (Docker is not available on macOS runners)
+      - name: Install crane
+        if: matrix.vz-arch
+        run: go install github.com/google/go-containerregistry/cmd/crane@latest
+
       # Extract VZ image files for macOS builds
       - name: Extract VZ image
         if: matrix.vz-arch
         shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Determine the image tag from the release tag or use 'main' for workflow_dispatch
+          # Authenticate crane with ghcr.io
+          echo "${GITHUB_TOKEN}" | crane auth login ghcr.io -u ${{ github.actor }} --password-stdin
+
+          # Determine the image tag — strip 'v' prefix to match semver tags from metadata-action
           if [ "${{ github.ref_type }}" = "tag" ]; then
-            IMAGE_TAG="${{ github.ref_name }}"
+            IMAGE_TAG="${GITHUB_REF_NAME#v}"
           else
             IMAGE_TAG="main"
           fi
