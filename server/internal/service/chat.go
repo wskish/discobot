@@ -24,13 +24,12 @@ type JobEnqueuer interface {
 
 // ChatService handles chat operations including session creation and message streaming.
 type ChatService struct {
-	store               *store.Store
-	sessionService      *SessionService
-	jobEnqueuer         JobEnqueuer
-	eventBroker         *events.Broker
-	sandboxService      *SandboxService
-	gitService          *GitService
-	sessionStatusPoller *SessionStatusPoller
+	store          *store.Store
+	sessionService *SessionService
+	jobEnqueuer    JobEnqueuer
+	eventBroker    *events.Broker
+	sandboxService *SandboxService
+	gitService     *GitService
 
 	// Git user config cache - populated once on first use
 	gitConfigOnce sync.Once
@@ -39,15 +38,14 @@ type ChatService struct {
 }
 
 // NewChatService creates a new chat service.
-func NewChatService(s *store.Store, sessionService *SessionService, jobEnqueuer JobEnqueuer, eventBroker *events.Broker, sandboxService *SandboxService, gitService *GitService, sessionStatusPoller *SessionStatusPoller) *ChatService {
+func NewChatService(s *store.Store, sessionService *SessionService, jobEnqueuer JobEnqueuer, eventBroker *events.Broker, sandboxService *SandboxService, gitService *GitService) *ChatService {
 	return &ChatService{
-		store:               s,
-		sessionService:      sessionService,
-		jobEnqueuer:         jobEnqueuer,
-		eventBroker:         eventBroker,
-		sandboxService:      sandboxService,
-		gitService:          gitService,
-		sessionStatusPoller: sessionStatusPoller,
+		store:          s,
+		sessionService: sessionService,
+		jobEnqueuer:    jobEnqueuer,
+		eventBroker:    eventBroker,
+		sandboxService: sandboxService,
+		gitService:     gitService,
 	}
 }
 
@@ -200,18 +198,10 @@ func (c *ChatService) SendToSandbox(ctx context.Context, projectID, sessionID st
 	}
 
 	// Set session status to running before starting chat
-	if _, err := c.sessionService.UpdateStatus(ctx, sessionID, model.SessionStatusRunning, nil); err != nil {
+	// UpdateStatus now automatically publishes SSE event
+	if _, err := c.sessionService.UpdateStatus(ctx, projectID, sessionID, model.SessionStatusRunning, nil); err != nil {
 		log.Printf("Warning: failed to update session status to running for %s: %v", sessionID, err)
 	}
-
-	// Emit SSE event for status change
-	if c.eventBroker != nil {
-		if err := c.eventBroker.PublishSessionUpdated(ctx, projectID, sessionID, model.SessionStatusRunning, ""); err != nil {
-			log.Printf("Warning: failed to publish session update event: %v", err)
-		}
-	}
-
-	// Note: The session status poller is kicked AFTER SendMessages returns
 	// (in the handler) to ensure the agent API has received the request
 	// before we start polling for status.
 

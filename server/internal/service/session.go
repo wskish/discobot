@@ -178,8 +178,8 @@ func (s *SessionService) CreateSessionWithID(ctx context.Context, sessionID, pro
 	return s.mapSession(sess), nil
 }
 
-// UpdateStatus updates only the session status and optional error message
-func (s *SessionService) UpdateStatus(ctx context.Context, sessionID, status string, errorMsg *string) (*Session, error) {
+// UpdateStatus updates the session status and optional error message, and publishes an SSE event.
+func (s *SessionService) UpdateStatus(ctx context.Context, projectID, sessionID, status string, errorMsg *string) (*Session, error) {
 	// Use targeted column update to avoid overwriting concurrent changes to other fields
 	if err := s.store.UpdateSessionStatus(ctx, sessionID, status, errorMsg); err != nil {
 		return nil, fmt.Errorf("failed to update session status: %w", err)
@@ -189,6 +189,13 @@ func (s *SessionService) UpdateStatus(ctx context.Context, sessionID, status str
 	sess, err := s.store.GetSessionByID(ctx, sessionID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get session: %w", err)
+	}
+
+	// Always publish SSE event for status changes
+	if s.eventBroker != nil {
+		if err := s.eventBroker.PublishSessionUpdated(ctx, projectID, sessionID, status, ""); err != nil {
+			log.Printf("Failed to publish session update event: %v", err)
+		}
 	}
 
 	return s.mapSession(sess), nil
@@ -757,19 +764,11 @@ func (s *SessionService) initializeSync(
 }
 
 // updateStatusWithEvent updates session status and emits an SSE event.
+// This now just delegates to UpdateStatus since it always publishes events.
 func (s *SessionService) updateStatusWithEvent(ctx context.Context, projectID, sessionID, status string, errorMsg *string) {
-	// Update session in database
-	_, err := s.UpdateStatus(ctx, sessionID, status, errorMsg)
+	_, err := s.UpdateStatus(ctx, projectID, sessionID, status, errorMsg)
 	if err != nil {
 		log.Printf("Failed to update session %s status to %s: %v", sessionID, status, err)
-	}
-
-	// Emit SSE event
-	if s.eventBroker != nil {
-		// Note: We don't include commitStatus here since this is only updating session status
-		if err := s.eventBroker.PublishSessionUpdated(ctx, projectID, sessionID, status, ""); err != nil {
-			log.Printf("Failed to publish session update event: %v", err)
-		}
 	}
 }
 

@@ -117,17 +117,9 @@ func (h *Handler) Chat(w http.ResponseWriter, r *http.Request) {
 	// Defer resetting the status back to ready when the chat completes
 	defer func() {
 		// Reset session status to ready after chat completion
-		if _, err := h.sessionService.UpdateStatus(ctx, sessionID, model.SessionStatusReady, nil); err != nil {
+		// UpdateStatus now automatically publishes SSE event
+		if _, err := h.sessionService.UpdateStatus(ctx, projectID, sessionID, model.SessionStatusReady, nil); err != nil {
 			log.Printf("[Chat] Warning: failed to reset session %s status to ready: %v", sessionID, err)
-		}
-		// Emit SSE event for status change
-		if err := h.eventBroker.PublishSessionUpdated(ctx, projectID, sessionID, model.SessionStatusReady, ""); err != nil {
-			log.Printf("[Chat] Warning: failed to publish session update event: %v", err)
-		}
-		// Kick the poller after chat completes to check for any stale running sessions
-		// We don't poll during active streams since they're clearly running
-		if h.sessionStatusPoller != nil {
-			h.sessionStatusPoller.Kick()
 		}
 	}()
 
@@ -295,6 +287,12 @@ func (h *Handler) ChatCancel(w http.ResponseWriter, r *http.Request) {
 		}
 		h.Error(w, http.StatusInternalServerError, err.Error())
 		return
+	}
+
+	// Update session status to ready after successful cancellation
+	// UpdateStatus now automatically publishes SSE event
+	if _, err := h.sessionService.UpdateStatus(ctx, projectID, sessionID, model.SessionStatusReady, nil); err != nil {
+		log.Printf("[ChatCancel] Warning: failed to reset session %s status to ready: %v", sessionID, err)
 	}
 
 	h.JSON(w, http.StatusOK, result)
