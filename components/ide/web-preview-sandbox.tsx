@@ -2,6 +2,7 @@ import { AlertCircle, ExternalLink, Loader2, RefreshCw } from "lucide-react";
 import * as React from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { getApiRootBase } from "@/lib/api-config";
 import type { ServiceStatus } from "@/lib/api-types";
 import { openUrl } from "@/lib/tauri";
 import { cn } from "@/lib/utils";
@@ -53,25 +54,16 @@ export function WebPreviewSandbox({
 	const key = refreshKey + internalKey;
 
 	// Build the base service URL (without path)
+	// Derives from getApiRootBase() origin, replacing the host with a subdomain proxy
 	const baseUrl = React.useMemo(() => {
 		if (typeof window === "undefined") return "";
 
-		const currentHost = window.location.host;
+		const apiRoot = getApiRootBase();
+		const parsed = new URL(apiRoot);
 		const subdomain = `${sessionId}-svc-${serviceId}`;
+		const protocol = useHttps ? "https:" : parsed.protocol;
 
-		// Check if we're in Next.js dev mode (localhost:3000)
-		// In that case, connect directly to Go backend on port 3001
-		if (
-			currentHost === "localhost:3000" ||
-			currentHost.startsWith("localhost:3000")
-		) {
-			const protocol = useHttps ? "https:" : "http:";
-			return `${protocol}//${subdomain}.localhost:3001`;
-		}
-
-		// Production or Tauri - use same host with subdomain
-		const protocol = useHttps ? "https:" : window.location.protocol;
-		return `${protocol}//${subdomain}.${currentHost}`;
+		return `${protocol}//${subdomain}.${parsed.host}`;
 	}, [sessionId, serviceId, useHttps]);
 
 	// Full URL with path
