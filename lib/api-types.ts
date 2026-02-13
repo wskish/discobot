@@ -361,6 +361,34 @@ export interface StatusMessage {
 export interface SystemStatusResponse {
 	ok: boolean;
 	messages: StatusMessage[];
+	startupTasks?: StartupTask[];
+}
+
+// Startup Task types
+export type StartupTaskState =
+	| "pending"
+	| "in_progress"
+	| "completed"
+	| "failed";
+
+export interface StartupTask {
+	id: string;
+	name: string;
+	state: StartupTaskState;
+	/** Progress percentage (0-100) */
+	progress?: number;
+	/** Current operation description */
+	currentOperation?: string;
+	/** Bytes downloaded (for download tasks) */
+	bytesDownloaded?: number;
+	/** Total bytes (for download tasks) */
+	totalBytes?: number;
+	/** Error message if state is "failed" */
+	error?: string;
+	/** When the task started */
+	startedAt?: string;
+	/** When the task completed or failed */
+	completedAt?: string;
 }
 
 /** Runtime information for debug/support */

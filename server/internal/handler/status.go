@@ -3,94 +3,41 @@ package handler
 import (
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"syscall"
 
 	"github.com/adrg/xdg"
 
+	"github.com/obot-platform/discobot/server/internal/startup"
 	"github.com/obot-platform/discobot/server/internal/version"
 )
 
-// StatusMessageLevel represents the severity level of a status message
-type StatusMessageLevel string
-
-const (
-	StatusLevelWarn  StatusMessageLevel = "warn"
-	StatusLevelError StatusMessageLevel = "error"
-)
-
-// StatusMessage represents a status check message
-type StatusMessage struct {
-	ID      string             `json:"id"`
-	Level   StatusMessageLevel `json:"level"`
-	Title   string             `json:"title"`
-	Message string             `json:"message"`
-}
-
-// SystemStatusResponse represents the system status check response
-type SystemStatusResponse struct {
-	OK       bool            `json:"ok"`
-	Messages []StatusMessage `json:"messages"`
-}
-
-// GetSystemStatus checks system requirements and returns status
+// GetSystemStatus checks system requirements and returns status (including startup tasks)
 func (h *Handler) GetSystemStatus(w http.ResponseWriter, _ *http.Request) {
-	status := h.getSystemStatusInfo()
-	h.JSON(w, http.StatusOK, status)
-}
-
-// getSystemStatusInfo is a helper that collects and returns system status information
-func (h *Handler) getSystemStatusInfo() SystemStatusResponse {
-	var messages []StatusMessage
-
-	// Check for Git
-	if _, err := exec.LookPath("git"); err != nil {
-		messages = append(messages, StatusMessage{
-			ID:      "git-not-found",
-			Level:   StatusLevelWarn,
-			Title:   "Git not found",
-			Message: "Git is required for version control features. Please install Git to enable repository management.",
-		})
+	// Use system manager to get complete system status
+	if h.systemManager != nil {
+		status := h.systemManager.GetSystemStatus()
+		h.JSON(w, http.StatusOK, status)
+		return
 	}
 
-	// Check for Docker (only required on Linux and Windows; macOS uses VZ)
-	if runtime.GOOS != "darwin" {
-		if _, err := exec.LookPath("docker"); err != nil {
-			messages = append(messages, StatusMessage{
-				ID:      "docker-not-found",
-				Level:   StatusLevelWarn,
-				Title:   "Docker not found",
-				Message: "Docker is required for running coding agents in isolated containers. Please install Docker to enable agent execution.",
-			})
-		}
-	}
-
-	// Determine if system is OK (no error-level messages)
-	ok := true
-	for _, msg := range messages {
-		if msg.Level == StatusLevelError {
-			ok = false
-			break
-		}
-	}
-
-	return SystemStatusResponse{
-		OK:       ok,
-		Messages: messages,
-	}
+	// Fallback if system manager is not available
+	h.JSON(w, http.StatusOK, startup.SystemStatusResponse{
+		OK:       true,
+		Messages: []startup.StatusMessage{},
+	})
 }
 
 // SupportInfoResponse contains diagnostic information for debugging and support
 type SupportInfoResponse struct {
-	Version    string               `json:"version"`
-	Runtime    RuntimeInfo          `json:"runtime"`
-	Config     ConfigInfo           `json:"config"`
-	ServerLog  string               `json:"server_log"`
-	LogPath    string               `json:"log_path"`
-	LogExists  bool                 `json:"log_exists"`
-	SystemInfo SystemStatusResponse `json:"system_info"`
+	Version    string                       `json:"version"`
+	Runtime    RuntimeInfo                  `json:"runtime"`
+	Config     ConfigInfo                   `json:"config"`
+	ServerLog  string                       `json:"server_log"`
+	LogPath    string                       `json:"log_path"`
+	LogExists  bool                         `json:"log_exists"`
+	SystemInfo startup.SystemStatusResponse `json:"system_info"`
 }
 
 // RuntimeInfo contains Go runtime information
@@ -203,8 +150,11 @@ func (h *Handler) GetSupportInfo(w http.ResponseWriter, _ *http.Request) {
 		logExists = true
 	}
 
-	// Get system status
-	systemStatus := h.getSystemStatusInfo()
+	// Get system status from system manager
+	var systemStatus startup.SystemStatusResponse
+	if h.systemManager != nil {
+		systemStatus = h.systemManager.GetSystemStatus()
+	}
 
 	response := SupportInfoResponse{
 		Version:    version.Get(),

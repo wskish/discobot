@@ -10,6 +10,7 @@ import (
 	"github.com/obot-platform/discobot/server/internal/jobs"
 	"github.com/obot-platform/discobot/server/internal/sandbox"
 	"github.com/obot-platform/discobot/server/internal/service"
+	"github.com/obot-platform/discobot/server/internal/startup"
 	"github.com/obot-platform/discobot/server/internal/store"
 )
 
@@ -38,10 +39,11 @@ type Handler struct {
 	jobQueue            *jobs.Queue
 	eventBroker         *events.Broker
 	codexCallbackServer *CodexCallbackServer
+	systemManager       *startup.SystemManager
 }
 
 // New creates a new Handler with the required git and sandbox providers.
-func New(s *store.Store, cfg *config.Config, gitProvider git.Provider, sandboxProvider sandbox.Provider, sandboxManager *sandbox.Manager, eventBroker *events.Broker, jobQueue *jobs.Queue) *Handler {
+func New(s *store.Store, cfg *config.Config, gitProvider git.Provider, sandboxProvider sandbox.Provider, sandboxManager *sandbox.Manager, eventBroker *events.Broker, jobQueue *jobs.Queue, systemManager *startup.SystemManager) *Handler {
 	credSvc, err := service.NewCredentialService(s, cfg)
 	if err != nil {
 		// This should only fail if the encryption key is invalid
@@ -100,6 +102,7 @@ func New(s *store.Store, cfg *config.Config, gitProvider git.Provider, sandboxPr
 		preferenceService: preferenceSvc,
 		jobQueue:          jobQueue,
 		eventBroker:       eventBroker,
+		systemManager:     systemManager,
 	}
 
 	// Create Codex callback server (will be started on first use)

@@ -147,7 +147,7 @@ func NewTestServer(t *testing.T) *TestServer {
 	// Create job queue early so it can be passed to services
 	jobQueue := jobs.NewQueue(s, cfg)
 
-	h := handler.New(s, cfg, gitProvider, mockSandbox, sandboxManager, eventBroker, jobQueue)
+	h := handler.New(s, cfg, gitProvider, mockSandbox, sandboxManager, eventBroker, jobQueue, nil)
 
 	// Create and start dispatcher for job processing
 	cfg.DispatcherEnabled = true
@@ -409,7 +409,7 @@ func NewTestServerNoAuth(t *testing.T) *TestServer {
 	// Create job queue early so it can be passed to services
 	jobQueue := jobs.NewQueue(s, cfg)
 
-	h := handler.New(s, cfg, gitProvider, mockSandbox, sandboxManager, eventBroker, jobQueue)
+	h := handler.New(s, cfg, gitProvider, mockSandbox, sandboxManager, eventBroker, jobQueue, nil)
 
 	// Create and start dispatcher for job processing
 	cfg.DispatcherEnabled = true

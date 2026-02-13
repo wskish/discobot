@@ -34,6 +34,7 @@ import (
 	"github.com/obot-platform/discobot/server/internal/sandbox/vz"
 	"github.com/obot-platform/discobot/server/internal/service"
 	"github.com/obot-platform/discobot/server/internal/ssh"
+	"github.com/obot-platform/discobot/server/internal/startup"
 	"github.com/obot-platform/discobot/server/internal/store"
 	"github.com/obot-platform/discobot/server/internal/version"
 	"github.com/obot-platform/discobot/server/static"
@@ -94,6 +95,17 @@ func main() {
 	// Create a manager that can route to different providers based on workspace configuration
 	sandboxManager := sandbox.NewManager()
 
+	// Create event poller and broker for SSE (needed by startup manager)
+	eventPoller := events.NewPoller(s, events.DefaultPollerConfig())
+	if err := eventPoller.Start(context.Background()); err != nil {
+		log.Fatalf("Failed to start event poller: %v", err)
+	}
+	eventBroker := events.NewBroker(s, eventPoller)
+
+	// Create startup task manager for tracking long-running startup operations
+	// Use the default project ID ("local") for startup events
+	systemManager := startup.NewSystemManager(eventBroker, model.DefaultProjectID)
+
 	// Shared resolver: looks up project ID for a session from the database.
 	// Used by Docker (for cache volumes) and VZ (for project VM routing).
 	sessionProjectResolver := func(ctx context.Context, sessionID string) (string, error) {
@@ -105,7 +117,7 @@ func main() {
 	}
 
 	// Initialize Docker provider (default)
-	if dockerProvider, dockerErr := docker.NewProvider(cfg, sessionProjectResolver); dockerErr != nil {
+	if dockerProvider, dockerErr := docker.NewProvider(cfg, sessionProjectResolver, docker.WithSystemManager(systemManager)); dockerErr != nil {
 		log.Printf("Warning: Failed to initialize Docker sandbox provider: %v", dockerErr)
 	} else {
 		sandboxManager.RegisterProvider("docker", dockerProvider)
@@ -137,7 +149,7 @@ func main() {
 			MemoryMB:      cfg.VZMemoryMB,
 			DataDiskGB:    cfg.VZDataDiskGB,
 		}
-		if vzProvider, vzErr := vz.NewProvider(cfg, vzCfg, sessionProjectResolver); vzErr != nil {
+		if vzProvider, vzErr := vz.NewProvider(cfg, vzCfg, sessionProjectResolver, systemManager); vzErr != nil {
 			log.Printf("Warning: Failed to initialize VZ sandbox provider: %v", vzErr)
 		} else {
 			sandboxManager.RegisterProvider("vz", vzProvider)
@@ -146,58 +158,6 @@ func main() {
 			} else {
 				log.Printf("VZ sandbox provider registered (images downloading in background)")
 			}
-
-			// Warm VZ VMs in background for projects that have VZ workspaces
-			go func() {
-				warmCtx, warmCancel := context.WithTimeout(context.Background(), 10*time.Minute)
-				defer warmCancel()
-
-				// Wait for VZ provider to be ready (may be downloading images)
-				log.Println("Waiting for VZ provider to be ready before warming VMs...")
-				if err := vzProvider.WaitForReady(warmCtx); err != nil {
-					log.Printf("Warning: VZ provider not ready, skipping VM warming: %v", err)
-					return
-				}
-
-				// Find all workspaces that explicitly use VZ provider
-				vzWorkspaces, err := s.ListWorkspacesByProvider(warmCtx, model.WorkspaceProviderVZ)
-				if err != nil {
-					log.Printf("Warning: Failed to list VZ workspaces: %v", err)
-					return
-				}
-
-				// Also find workspaces with no provider set — on macOS the platform
-				// default is "vz", so these will be routed to the VZ provider at runtime.
-				defaultWorkspaces, err := s.ListWorkspacesByProvider(warmCtx, "")
-				if err != nil {
-					log.Printf("Warning: Failed to list default-provider workspaces: %v", err)
-				}
-
-				// Collect unique project IDs
-				projectIDs := make(map[string]bool)
-				for _, ws := range vzWorkspaces {
-					projectIDs[ws.ProjectID] = true
-				}
-				for _, ws := range defaultWorkspaces {
-					projectIDs[ws.ProjectID] = true
-				}
-
-				if len(projectIDs) == 0 {
-					log.Println("No VZ workspaces found, skipping VM warming")
-					return
-				}
-
-				log.Printf("Warming VMs for %d projects with VZ workspaces", len(projectIDs))
-
-				for projectID := range projectIDs {
-					if err := vzProvider.WarmVM(warmCtx, projectID); err != nil {
-						log.Printf("Warning: Failed to warm VM for project %s: %v", projectID, err)
-						continue
-					}
-				}
-
-				log.Println("VM warming complete")
-			}()
 		}
 	}
 
@@ -233,13 +193,6 @@ func main() {
 		sandboxProvider = sandbox.NewProviderProxy(sandboxManager, providerGetter)
 		log.Printf("Sandbox provider proxy initialized with %d providers", len(sandboxManager.ListProviders()))
 	}
-
-	// Create event poller and broker for SSE
-	eventPoller := events.NewPoller(s, events.DefaultPollerConfig())
-	if err := eventPoller.Start(context.Background()); err != nil {
-		log.Fatalf("Failed to start event poller: %v", err)
-	}
-	eventBroker := events.NewBroker(s, eventPoller)
 
 	// Create job queue early so it can be passed to services
 	jobQueue := jobs.NewQueue(s, cfg)
@@ -397,7 +350,7 @@ func main() {
 	r.Use(middleware.TauriAuth(cfg))
 
 	// Initialize handlers
-	h := handler.New(s, cfg, gitProvider, sandboxProvider, sandboxManager, eventBroker, jobQueue)
+	h := handler.New(s, cfg, gitProvider, sandboxProvider, sandboxManager, eventBroker, jobQueue, systemManager)
 
 	// Wire up job queue notification to dispatcher for immediate execution
 	if disp != nil {

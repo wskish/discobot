@@ -7,6 +7,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -83,6 +84,19 @@ type Provider struct {
 
 	// sessionProjectResolver looks up session -> project mapping from the database.
 	sessionProjectResolver SessionProjectResolver
+
+	// systemManager tracks startup tasks and system status (optional)
+	systemManager SystemManager
+}
+
+// SystemManager interface for tracking startup tasks
+type SystemManager interface {
+	RegisterTask(id, name string)
+	StartTask(id string)
+	UpdateTaskProgress(id string, progress int, currentOperation string)
+	UpdateTaskBytes(id string, bytesDownloaded, totalBytes int64)
+	CompleteTask(id string)
+	FailTask(id string, err error)
 }
 
 // Option configures the Docker provider.
@@ -94,6 +108,13 @@ type Option func(*Provider)
 func WithVsockDialer(dialer func(ctx context.Context, network, addr string) (net.Conn, error)) Option {
 	return func(p *Provider) {
 		p.vsockDialer = dialer
+	}
+}
+
+// WithSystemManager configures the Docker provider with a system manager for tracking startup tasks
+func WithSystemManager(sm SystemManager) Option {
+	return func(p *Provider) {
+		p.systemManager = sm
 	}
 }
 
@@ -169,6 +190,12 @@ func NewProvider(cfg *config.Config, sessionProjectResolver SessionProjectResolv
 	// Pull the sandbox image and cleanup old images in the background
 	// This prevents blocking server startup while still ensuring the image is available
 	go func() {
+		// Register startup task if system manager is available
+		if p.systemManager != nil && !isLocalImage(cfg.SandboxImage) {
+			p.systemManager.RegisterTask("docker-pull", fmt.Sprintf("Pulling Docker sandbox image: %s", cfg.SandboxImage))
+			p.systemManager.StartTask("docker-pull")
+		}
+
 		// Check if the image is local-only (cannot be pulled from registry)
 		if isLocalImage(cfg.SandboxImage) {
 			// For local images, just verify they exist
@@ -196,6 +223,9 @@ func NewProvider(cfg *config.Config, sessionProjectResolver SessionProjectResolv
 
 				if err == nil {
 					log.Printf("Successfully pulled sandbox image in background")
+					if p.systemManager != nil {
+						p.systemManager.CompleteTask("docker-pull")
+					}
 					break
 				}
 
@@ -550,6 +580,9 @@ func (p *Provider) pullSandboxImage(ctx context.Context, image string) error {
 	_, err := p.client.ImageInspect(ctx, image)
 	if err == nil {
 		log.Printf("Sandbox image already exists locally, skipping pull: %s", image)
+		if p.systemManager != nil {
+			p.systemManager.UpdateTaskProgress("docker-pull", 100, "Image already exists")
+		}
 		return nil
 	}
 
@@ -567,13 +600,73 @@ func (p *Provider) pullSandboxImage(ctx context.Context, image string) error {
 	}
 	defer func() { _ = reader.Close() }()
 
-	// Drain the reader to complete the pull (progress is discarded)
-	_, err = io.Copy(io.Discard, reader)
+	// Process pull progress and update system manager if available
+	if p.systemManager != nil {
+		err = p.processPullProgress(reader, "docker-pull")
+	} else {
+		// No system manager - just drain the reader
+		_, err = io.Copy(io.Discard, reader)
+	}
+
 	if err != nil {
 		return fmt.Errorf("failed to complete sandbox image pull for %s: %w", image, err)
 	}
 
 	log.Printf("Successfully pulled sandbox image: %s", image)
+	return nil
+}
+
+// processPullProgress reads Docker pull events and updates the system manager with real progress
+func (p *Provider) processPullProgress(reader io.Reader, taskID string) error {
+	decoder := json.NewDecoder(reader)
+
+	// Track per-layer download progress (keep maximum to avoid going backwards)
+	layerDownloadProgress := make(map[string]int64) // layerID -> max bytes downloaded
+
+	for {
+		var rawEvent map[string]interface{}
+		if err := decoder.Decode(&rawEvent); err != nil {
+			if err == io.EOF {
+				break
+			}
+			// Don't fail on JSON decode errors - just continue
+			continue
+		}
+
+		// Extract fields we care about
+		status, _ := rawEvent["status"].(string)
+		id, _ := rawEvent["id"].(string)
+
+		var current int64
+		if pd, ok := rawEvent["progressDetail"].(map[string]interface{}); ok {
+			if c, ok := pd["current"].(float64); ok {
+				current = int64(c)
+			}
+		}
+
+		// Only track "Downloading" events - ignore extraction
+		if status == "Downloading" && id != "" && current > 0 {
+			// Track download progress - keep maximum
+			if existing, exists := layerDownloadProgress[id]; !exists || current > existing {
+				layerDownloadProgress[id] = current
+
+				// Calculate aggregate download progress across all layers
+				var downloadedBytes int64
+				for _, bytes := range layerDownloadProgress {
+					downloadedBytes += bytes
+				}
+
+				// Fake total estimate: 750MB
+				totalBytes := int64(750 * 1024 * 1024)
+
+				// Update system manager
+				if downloadedBytes > 0 {
+					p.systemManager.UpdateTaskBytes(taskID, downloadedBytes, totalBytes)
+				}
+			}
+		}
+	}
+
 	return nil
 }
 

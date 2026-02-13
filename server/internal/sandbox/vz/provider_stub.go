@@ -23,8 +23,18 @@ type SessionProjectResolver func(ctx context.Context, sessionID string) (project
 // DockerProvider is a stub that returns an error on non-darwin platforms.
 type DockerProvider struct{}
 
+// SystemManager interface for tracking startup tasks
+type SystemManager interface {
+	RegisterTask(id, name string)
+	StartTask(id string)
+	UpdateTaskProgress(id string, progress int, currentOperation string)
+	UpdateTaskBytes(id string, bytesDownloaded, totalBytes int64)
+	CompleteTask(id string)
+	FailTask(id string, err error)
+}
+
 // NewProvider returns an error on non-darwin platforms.
-func NewProvider(_ *config.Config, _ *vm.Config, _ SessionProjectResolver) (*DockerProvider, error) {
+func NewProvider(_ *config.Config, _ *vm.Config, _ SessionProjectResolver, _ SystemManager) (*DockerProvider, error) {
 	return nil, fmt.Errorf("vz sandbox provider is only available on macOS (darwin), current platform: %s", runtime.GOOS)
 }
 

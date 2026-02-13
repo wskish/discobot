@@ -55,24 +55,38 @@ type DockerProvider struct {
 	hostDockerClient     *dockerclient.Client
 	hostDockerClientOnce sync.Once
 	hostDockerClientErr  error
+
+	// systemManager tracks startup tasks and system status (optional)
+	systemManager SystemManager
+}
+
+// SystemManager interface for tracking startup tasks
+type SystemManager interface {
+	RegisterTask(id, name string)
+	StartTask(id string)
+	UpdateTaskProgress(id string, progress int, currentOperation string)
+	UpdateTaskBytes(id string, bytesDownloaded, totalBytes int64)
+	CompleteTask(id string)
+	FailTask(id string, err error)
 }
 
 // NewProvider creates a new VZ+Docker hybrid provider.
 // This is the main entry point that matches the Provider interface.
 // The resolver function looks up the project ID for a session from the database.
-func NewProvider(cfg *config.Config, vmConfig *vm.Config, resolver SessionProjectResolver) (*DockerProvider, error) {
-	return NewDockerProvider(cfg, *vmConfig, resolver)
+func NewProvider(cfg *config.Config, vmConfig *vm.Config, resolver SessionProjectResolver, systemManager SystemManager) (*DockerProvider, error) {
+	return NewDockerProvider(cfg, *vmConfig, resolver, systemManager)
 }
 
 // NewDockerProvider creates a new VZ+Docker hybrid provider.
 // If kernel and base disk paths are not configured, it starts an async download
 // from the container registry specified in vmConfig.ImageRef.
 // The resolver function looks up the project ID for a session from the database.
-func NewDockerProvider(cfg *config.Config, vmConfig vm.Config, resolver SessionProjectResolver) (*DockerProvider, error) {
+func NewDockerProvider(cfg *config.Config, vmConfig vm.Config, resolver SessionProjectResolver, systemManager SystemManager) (*DockerProvider, error) {
 	p := &DockerProvider{
 		cfg:                    cfg,
 		dockerProviders:        make(map[string]*docker.Provider),
 		sessionProjectResolver: resolver,
+		systemManager:          systemManager,
 	}
 
 	// Check if we need to download images
@@ -93,11 +107,46 @@ func NewDockerProvider(cfg *config.Config, vmConfig vm.Config, resolver SessionP
 		})
 		p.imageDownloader = downloader
 
+		// Register startup task if system manager is available
+		if p.systemManager != nil {
+			p.systemManager.RegisterTask("vz-download", "Downloading VZ kernel and base disk")
+			p.systemManager.StartTask("vz-download")
+		}
+
 		// Start async download in background with retry logic
 		go func() {
 			ctx := context.Background()
 			const maxRetries = 5
 			const baseDelay = 5 * time.Second
+
+			// Poll download progress and update system manager
+			if p.systemManager != nil {
+				go func() {
+					ticker := time.NewTicker(500 * time.Millisecond)
+					defer ticker.Stop()
+
+					for range ticker.C {
+						progress := downloader.Status()
+
+						// Update system manager with progress
+						if progress.TotalBytes > 0 {
+							p.systemManager.UpdateTaskBytes("vz-download", progress.BytesDownloaded, progress.TotalBytes)
+						}
+						if progress.CurrentLayer != "" {
+							p.systemManager.UpdateTaskProgress("vz-download", 0, progress.CurrentLayer)
+						}
+
+						// Check if complete or failed
+						if progress.State == DownloadStateReady {
+							p.systemManager.CompleteTask("vz-download")
+							return
+						} else if progress.State == DownloadStateFailed {
+							p.systemManager.FailTask("vz-download", fmt.Errorf("%s", progress.Error))
+							return
+						}
+					}
+				}()
+			}
 
 			for attempt := 1; attempt <= maxRetries; attempt++ {
 				// Attempt download
