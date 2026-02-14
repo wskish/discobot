@@ -15,9 +15,7 @@
 	},
 	"bundle": {
 		"resources": {
-			"resources/vmlinuz": "vz/",
-			"resources/kernel-version": "vz/",
-			"resources/discobot-rootfs.squashfs": "vz/"
+			"resources/*": "vz/"
 		}
 	}
 }
