@@ -5,7 +5,6 @@ package vz
 import (
 	"context"
 	"fmt"
-	"io"
 	"log"
 	"net"
 	"net/http"
