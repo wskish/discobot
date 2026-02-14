@@ -493,18 +493,16 @@ func (m *VMManager) Shutdown() {
 
 // createProjectVM creates and starts a new VM for a project.
 func (m *VMManager) createProjectVM(ctx context.Context, projectID string) (*vzProjectVM, error) {
-	// Root disk (read-only) - use the base disk directly, shared across all VMs
+	// Ensure data directory exists
+	if err := os.MkdirAll(m.config.DataDir, 0755); err != nil {
+		return nil, fmt.Errorf("failed to create data directory: %w", err)
+	}
+
+	// Root disk (read-only) - shared across all VMs
 	rootDiskPath := m.config.BaseDiskPath
 
 	// Data disk (writable) - per-project persistent storage
 	dataDiskPath := filepath.Join(m.config.DataDir, fmt.Sprintf("project-%s-data.img", projectID))
-
-	log.Printf("Using shared base disk (read-only): %s", rootDiskPath)
-
-	// Ensure data disk directory exists
-	if err := os.MkdirAll(filepath.Dir(dataDiskPath), 0755); err != nil {
-		return nil, fmt.Errorf("failed to create data disk directory: %w", err)
-	}
 
 	// Create data disk if it doesn't exist
 	if _, err := os.Stat(dataDiskPath); os.IsNotExist(err) {
@@ -582,7 +580,6 @@ func (m *VMManager) createProjectVM(ctx context.Context, projectID string) (*vzP
 	return pvm, nil
 }
 
-// cloneDisk copies the base disk to a new location.
 // buildAndStartVM creates and starts a VM with the given disk images.
 // rootDiskPath is mounted read-only as /dev/vda, dataDiskPath is mounted read-write as /dev/vdb.
 func (m *VMManager) buildAndStartVM(rootDiskPath, dataDiskPath, _ string) (*vz.VirtualMachine, *vz.VirtioSocketDevice, *os.File, *os.File, error) {
