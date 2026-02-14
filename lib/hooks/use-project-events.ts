@@ -1,8 +1,12 @@
 import { useCallback, useEffect, useRef } from "react";
 import { appendAuthToken, getApiBase } from "../api-config";
+import type { StartupTask } from "../api-types";
 
 // Event types from the server
-export type ProjectEventType = "session_updated" | "workspace_updated";
+export type ProjectEventType =
+	| "session_updated"
+	| "workspace_updated"
+	| "startup_task_updated";
 
 export interface ProjectEvent {
 	id: string;
@@ -26,6 +30,8 @@ interface UseProjectEventsOptions {
 	onSessionUpdated?: (data: SessionUpdatedData) => void;
 	/** Called when a workspace_updated event is received */
 	onWorkspaceUpdated?: (data: WorkspaceUpdatedData) => void;
+	/** Called when a startup_task_updated event is received */
+	onStartupTaskUpdated?: (data: StartupTask) => void;
 	/** Whether to auto-reconnect on disconnect (default: true) */
 	autoReconnect?: boolean;
 	/** Reconnect delay in ms (default: 3000) */
@@ -43,6 +49,7 @@ export function useProjectEvents(options: UseProjectEventsOptions = {}) {
 	const {
 		onSessionUpdated,
 		onWorkspaceUpdated,
+		onStartupTaskUpdated,
 		autoReconnect = true,
 		reconnectDelay = 3000,
 	} = options;
@@ -54,6 +61,7 @@ export function useProjectEvents(options: UseProjectEventsOptions = {}) {
 	// Store callbacks and options in refs so they don't cause reconnection when changed
 	const onSessionUpdatedRef = useRef(onSessionUpdated);
 	const onWorkspaceUpdatedRef = useRef(onWorkspaceUpdated);
+	const onStartupTaskUpdatedRef = useRef(onStartupTaskUpdated);
 	const autoReconnectRef = useRef(autoReconnect);
 	const reconnectDelayRef = useRef(reconnectDelay);
 
@@ -65,6 +73,10 @@ export function useProjectEvents(options: UseProjectEventsOptions = {}) {
 	useEffect(() => {
 		onWorkspaceUpdatedRef.current = onWorkspaceUpdated;
 	}, [onWorkspaceUpdated]);
+
+	useEffect(() => {
+		onStartupTaskUpdatedRef.current = onStartupTaskUpdated;
+	}, [onStartupTaskUpdated]);
 
 	useEffect(() => {
 		autoReconnectRef.current = autoReconnect;
@@ -158,6 +170,17 @@ export function useProjectEvents(options: UseProjectEventsOptions = {}) {
 				onWorkspaceUpdatedRef.current?.(workspaceData);
 			} catch (err) {
 				console.error("[SSE] Failed to parse workspace_updated event:", err);
+			}
+		});
+
+		// Handle startup_task_updated events
+		eventSource.addEventListener("startup_task_updated", (event) => {
+			try {
+				const payload: ProjectEvent = JSON.parse(event.data);
+				const taskData = payload.data as StartupTask;
+				onStartupTaskUpdatedRef.current?.(taskData);
+			} catch (err) {
+				console.error("[SSE] Failed to parse startup_task_updated event:", err);
 			}
 		});
 	}, []); // No dependencies - uses refs for all dynamic values

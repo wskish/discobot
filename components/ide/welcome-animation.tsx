@@ -12,6 +12,7 @@ import {
 	Sparkles,
 	Terminal,
 } from "lucide-react";
+import { DiscobotLogo } from "@/components/ide/discobot-logo";
 import { IconRenderer } from "@/components/ide/icon-renderer";
 import { WorkspaceDisplay } from "@/components/ide/workspace-display";
 import { Button } from "@/components/ui/button";
@@ -56,9 +57,7 @@ export function WelcomeHeader({
 			<div className="flex flex-col items-center py-12 px-6 max-w-2xl mx-auto">
 				<div className="text-center space-y-6">
 					{/* Icon with gradient background */}
-					<div className="relative mx-auto w-20 h-20 rounded-2xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center">
-						<Sparkles className="h-10 w-10 text-primary" />
-					</div>
+					<DiscobotLogo size={64} className="text-purple-500 mx-auto" />
 
 					{/* Title and description */}
 					<div className="space-y-3">

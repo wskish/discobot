@@ -1,4 +1,4 @@
-import { useStartupStatus } from "../lib/hooks/use-startup-status";
+import { useStartupStatus } from "../lib/contexts/startup-status-context";
 
 /**
  * StartupStatusBar displays ongoing startup tasks (VZ image download, Docker pull, etc.)
