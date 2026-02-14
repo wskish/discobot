@@ -105,6 +105,10 @@ type Config struct {
 	DebugDocker     bool // Expose Docker API proxy for VZ VMs (default: false)
 	DebugDockerPort int  // Port for debug Docker proxy (default: 2375)
 
+	// Process lifecycle
+	LogFile        string // Redirect stdout/stderr to this file (Unix only)
+	StdinKeepalive bool   // Exit when stdin is closed (for parent process death detection)
+
 	// Tauri mode settings
 	TauriMode   bool   // Running inside Tauri app (TAURI=true)
 	TauriSecret string // Shared secret for Tauri auth (DISCOBOT_SECRET)
@@ -217,6 +221,10 @@ func Load() (*Config, error) {
 	// Debug settings
 	cfg.DebugDocker = getEnvBool("DEBUG_DOCKER", false)
 	cfg.DebugDockerPort = getEnvInt("DEBUG_DOCKER_PORT", 2375)
+
+	// Process lifecycle
+	cfg.LogFile = getEnv("LOG_FILE", "")
+	cfg.StdinKeepalive = getEnvBool("STDIN_KEEPALIVE", false)
 
 	// Tauri mode settings
 	cfg.TauriMode = getEnvBool("TAURI", false)

@@ -24,6 +24,7 @@ import (
 	"github.com/obot-platform/discobot/server/internal/git"
 	"github.com/obot-platform/discobot/server/internal/handler"
 	"github.com/obot-platform/discobot/server/internal/jobs"
+	"github.com/obot-platform/discobot/server/internal/logfile"
 	"github.com/obot-platform/discobot/server/internal/middleware"
 	"github.com/obot-platform/discobot/server/internal/model"
 	"github.com/obot-platform/discobot/server/internal/routes"
@@ -48,6 +49,16 @@ func main() {
 	cfg, err := config.Load()
 	if err != nil {
 		log.Fatalf("Failed to load configuration: %v", err)
+	}
+
+	// Redirect stdout/stderr to log file if configured (must be before any logging)
+	if cfg.LogFile != "" {
+		if err := logfile.Truncate(cfg.LogFile); err != nil {
+			log.Printf("Warning: failed to truncate log file: %v", err)
+		}
+		if err := logfile.RedirectStdoutStderr(cfg.LogFile); err != nil {
+			log.Printf("Warning: failed to redirect output to %s: %v", cfg.LogFile, err)
+		}
 	}
 
 	// Log version
@@ -1340,10 +1351,33 @@ func main() {
 		}
 	}()
 
-	// Wait for interrupt signal
+	// Wait for interrupt signal or stdin close
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+
+	if cfg.StdinKeepalive {
+		go func() {
+			// Block reading stdin; when the parent process dies, the pipe
+			// breaks and Read returns. Send SIGTERM to trigger graceful shutdown.
+			buf := make([]byte, 1)
+			for {
+				if _, err := os.Stdin.Read(buf); err != nil {
+					log.Println("Stdin closed, shutting down (parent process died)")
+					quit <- syscall.SIGTERM
+					return
+				}
+			}
+		}()
+	}
+
 	<-quit
+
+	// Hard deadline: if graceful shutdown takes longer than 10s, force exit.
+	go func() {
+		time.Sleep(10 * time.Second)
+		log.Println("Graceful shutdown timed out, forcing exit")
+		os.Exit(1)
+	}()
 
 	log.Println("Shutting down server...")
 
