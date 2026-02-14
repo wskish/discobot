@@ -28,17 +28,26 @@ describe("Git user configuration via headers", () => {
 	const testDir = join(tmpdir(), `agent-api-git-config-test-${Date.now()}`);
 	let app: ReturnType<typeof createApp>["app"];
 	let originalHome: string | undefined;
+	let originalGitConfigGlobal: string | undefined;
+	let originalGitConfigNosystem: string | undefined;
 
 	before(async () => {
-		// Save original HOME
+		// Save original environment
 		originalHome = process.env.HOME;
+		originalGitConfigGlobal = process.env.GIT_CONFIG_GLOBAL;
+		originalGitConfigNosystem = process.env.GIT_CONFIG_NOSYSTEM;
 
 		// Create isolated test directory for git config
 		await mkdir(testDir, { recursive: true });
 
-		// Set HOME to test directory so git config --global writes there
+		// Redirect git global config to test directory.
+		// GIT_CONFIG_GLOBAL is the authoritative override — even if HOME gets
+		// restored before a background `git config --global` finishes, git will
+		// still write to this file instead of ~/.gitconfig.
 		process.env.HOME = testDir;
 		process.env.XDG_CONFIG_HOME = testDir;
+		process.env.GIT_CONFIG_GLOBAL = join(testDir, ".gitconfig");
+		process.env.GIT_CONFIG_NOSYSTEM = "1";
 
 		// Initialize a git repo in test directory for the agent
 		await git(testDir, "init");
@@ -61,11 +70,21 @@ describe("Git user configuration via headers", () => {
 	});
 
 	after(async () => {
-		// Restore original HOME
+		// Restore original environment
 		if (originalHome !== undefined) {
 			process.env.HOME = originalHome;
 		} else {
 			delete process.env.HOME;
+		}
+		if (originalGitConfigGlobal !== undefined) {
+			process.env.GIT_CONFIG_GLOBAL = originalGitConfigGlobal;
+		} else {
+			delete process.env.GIT_CONFIG_GLOBAL;
+		}
+		if (originalGitConfigNosystem !== undefined) {
+			process.env.GIT_CONFIG_NOSYSTEM = originalGitConfigNosystem;
+		} else {
+			delete process.env.GIT_CONFIG_NOSYSTEM;
 		}
 		delete process.env.XDG_CONFIG_HOME;
 
