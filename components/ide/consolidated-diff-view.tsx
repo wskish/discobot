@@ -128,15 +128,34 @@ function FileDiffSection({
 		content: string;
 	} | null>(null);
 
+	// Track the previous diff patch to detect when diff data refreshes
+	const prevPatchRef = React.useRef<string | undefined>(undefined);
+
+	// Clear cache when we detect the patch is changing (likely due to save)
+	// This ensures we recalculate with fresh, synchronized data
+	React.useEffect(() => {
+		const currentPatch = diff?.patch;
+		if (
+			prevPatchRef.current !== undefined &&
+			prevPatchRef.current !== currentPatch
+		) {
+			// Patch changed - clear cache to force recalculation with new data
+			setCachedOriginal(null);
+		}
+		prevPatchRef.current = currentPatch;
+	}, [diff?.patch]);
+
 	// Reconstruct original content from current content and patch
 	React.useEffect(() => {
 		if (!diff?.patch || !isExpanded) return;
+
 		// Only use cached version if BOTH file path AND patch match
 		if (
 			cachedOriginal?.filePath === filePath &&
 			cachedOriginal?.patch === diff.patch
-		)
+		) {
 			return;
+		}
 
 		let original = "";
 
@@ -165,13 +184,22 @@ function FileDiffSection({
 				}
 				original = contentLines.join("\n");
 			}
-		} else if (currentContent) {
+		} else if (currentContent !== undefined) {
 			// For non-deleted files, reconstruct from current content and patch
+			// Wait until currentContent is loaded to avoid reconstructing with stale data
+			if (isContentLoading) return;
 			original = reconstructOriginalFromPatch(currentContent, diff.patch);
+		} else {
+			// Content not available yet
+			return;
 		}
 
-		if (original) {
-			setCachedOriginal({ filePath, patch: diff.patch, content: original });
+		if (original || original === "") {
+			setCachedOriginal({
+				filePath,
+				patch: diff.patch,
+				content: original,
+			});
 		}
 	}, [
 		currentContent,
@@ -181,6 +209,7 @@ function FileDiffSection({
 		diff,
 		filePath,
 		isExpanded,
+		isContentLoading,
 		cachedOriginal,
 	]);
 
