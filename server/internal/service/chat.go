@@ -338,16 +338,20 @@ func (c *ChatService) ReadFileFromBase(ctx context.Context, projectID, sessionID
 		return nil, fmt.Errorf("failed to get workspace: %w", err)
 	}
 
-	// Use base commit from session if available, otherwise use workspace commit
+	// Use base commit from session if available, otherwise fetch current git HEAD
 	var baseCommit string
 	if session.BaseCommit != nil {
 		baseCommit = *session.BaseCommit
-	} else if workspace.Commit != nil {
-		baseCommit = *workspace.Commit
-	}
-
-	if baseCommit == "" {
-		return nil, fmt.Errorf("no base commit available")
+	} else {
+		// Fetch current git HEAD as the base commit
+		gitStatus, err := c.gitService.Status(ctx, workspace.ID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get workspace git status: %w", err)
+		}
+		if gitStatus.Commit == "" {
+			return nil, fmt.Errorf("workspace has no commit")
+		}
+		baseCommit = gitStatus.Commit
 	}
 
 	// Read file from git at base commit

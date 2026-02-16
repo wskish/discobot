@@ -53,7 +53,6 @@ import {
 	DIFF_HARD_LIMIT,
 	DIFF_WARNING_THRESHOLD,
 	getLanguageFromPath,
-	reconstructOriginalFromPatch,
 } from "@/lib/utils/diff-utils";
 
 type DiffStyle = "split" | "unified";
@@ -73,6 +72,7 @@ interface FileDiffSectionProps {
 	filePath: string;
 	sessionId: string;
 	isExpanded: boolean;
+	patchHash: string | null;
 	currentPatchHash: string | null;
 	diffStyle: DiffStyle;
 	onToggleExpand: () => void;
@@ -87,6 +87,7 @@ function FileDiffSection({
 	filePath,
 	sessionId,
 	isExpanded,
+	patchHash,
 	currentPatchHash,
 	diffStyle,
 	onToggleExpand,
@@ -110,110 +111,47 @@ function FileDiffSection({
 			isExpanded && diff?.status !== "deleted" ? filePath : null,
 		);
 
-	// For deleted files, load the original content from base commit
+	// Load the original content from base commit (git) for modified/deleted files
+	// For added files, there's no base content (file didn't exist in git)
 	const {
 		content: baseContent,
 		isLoading: isBaseContentLoading,
 		error: baseContentError,
 	} = useSessionFileContent(
 		sessionId,
-		isExpanded && diff?.status === "deleted" ? filePath : null,
+		isExpanded && diff?.status !== "added" ? filePath : null,
 		{ fromBase: true },
 	);
 
-	// Cache the original content - only recalculate when file path or patch changes
-	const [cachedOriginal, setCachedOriginal] = React.useState<{
-		filePath: string;
-		patch: string;
-		content: string;
-	} | null>(null);
+	// Determine original content based on file status
+	const originalContent = React.useMemo(() => {
+		if (!isExpanded) return "";
 
-	// Track the previous diff patch to detect when diff data refreshes
-	const prevPatchRef = React.useRef<string | undefined>(undefined);
+		// For added files, there's no original content (file is new)
+		if (diff?.status === "added") return "";
 
-	// Clear cache when we detect the patch is changing (likely due to save)
-	// This ensures we recalculate with fresh, synchronized data
-	React.useEffect(() => {
-		const currentPatch = diff?.patch;
-		if (
-			prevPatchRef.current !== undefined &&
-			prevPatchRef.current !== currentPatch
-		) {
-			// Patch changed - clear cache to force recalculation with new data
-			setCachedOriginal(null);
-		}
-		prevPatchRef.current = currentPatch;
-	}, [diff?.patch]);
+		// For other files, use base content from git
+		if (isBaseContentLoading) return "";
 
-	// Reconstruct original content from current content and patch
-	React.useEffect(() => {
-		if (!diff?.patch || !isExpanded) return;
-
-		// Only use cached version if BOTH file path AND patch match
-		if (
-			cachedOriginal?.filePath === filePath &&
-			cachedOriginal?.patch === diff.patch
-		) {
-			return;
-		}
-
-		let original = "";
-
-		if (diff.status === "deleted") {
-			// For deleted files, try to use the base content from git
-			if (baseContent) {
-				original = baseContent;
-			} else if (baseContentError || (!isBaseContentLoading && !baseContent)) {
-				// Fallback: reconstruct from patch if base content fails or isn't available
-				// Extract all deletion lines from the patch
-				const lines = diff.patch.split("\n");
-				const contentLines: string[] = [];
-				for (const line of lines) {
-					// Skip diff headers (---, +++, @@)
-					if (
-						line.startsWith("---") ||
-						line.startsWith("+++") ||
-						line.startsWith("@@")
-					) {
-						continue;
-					}
-					// Extract deletion lines (but not added lines)
-					if (line.startsWith("-")) {
-						contentLines.push(line.substring(1)); // Remove the '-' prefix
-					}
-				}
-				original = contentLines.join("\n");
+		// If base content fetch failed (e.g., file doesn't exist at base commit),
+		// treat as added file with empty original. This handles cases where:
+		// - Diff status is incorrect (should be "added" not "modified")
+		// - Base commit doesn't have the file for some reason
+		if (baseContentError) {
+			// Don't log for 404s - file just doesn't exist at base
+			if (!baseContentError.message?.includes("not found")) {
+				console.error("Failed to load base content:", baseContentError);
 			}
-		} else if (currentContent !== undefined) {
-			// For non-deleted files, reconstruct from current content and patch
-			// Wait until currentContent is loaded to avoid reconstructing with stale data
-			if (isContentLoading) return;
-			original = reconstructOriginalFromPatch(currentContent, diff.patch);
-		} else {
-			// Content not available yet
-			return;
+			return "";
 		}
-
-		if (original || original === "") {
-			setCachedOriginal({
-				filePath,
-				patch: diff.patch,
-				content: original,
-			});
-		}
+		return baseContent || "";
 	}, [
-		currentContent,
-		baseContent,
-		baseContentError,
-		isBaseContentLoading,
-		diff,
-		filePath,
 		isExpanded,
-		isContentLoading,
-		cachedOriginal,
+		diff?.status,
+		isBaseContentLoading,
+		baseContentError,
+		baseContent,
 	]);
-
-	const originalContent = cachedOriginal?.content || "";
 
 	// Detect language for syntax highlighting
 	const language = React.useMemo(
@@ -236,16 +174,6 @@ function FileDiffSection({
 		fileEditRef.current = fileEdit;
 	}, [fileEdit]);
 
-	// Compute hash of current patch
-	const [patchHash, setPatchHash] = React.useState<string | null>(null);
-	React.useEffect(() => {
-		if (diff?.patch) {
-			hashString(diff.patch).then(setPatchHash);
-		} else {
-			setPatchHash(null);
-		}
-	}, [diff?.patch]);
-
 	// File is reviewed if the stored hash matches the current patch hash
 	const isReviewed = patchHash !== null && patchHash === currentPatchHash;
 
@@ -267,17 +195,6 @@ function FileDiffSection({
 
 	// Track conflict dialog state
 	const [showConflictDialog, setShowConflictDialog] = React.useState(false);
-
-	// Track previous file path to detect changes
-	const prevFilePathRef = React.useRef(filePath);
-
-	// Reset force load when file changes
-	React.useEffect(() => {
-		if (prevFilePathRef.current !== filePath) {
-			setForceLoadLargeDiff(false);
-			prevFilePathRef.current = filePath;
-		}
-	});
 
 	// Auto-unmark as reviewed when user makes edits
 	React.useEffect(() => {
@@ -670,6 +587,53 @@ export function ConsolidatedDiffView() {
 		false,
 	);
 
+	// Compute patch hashes for all files to use as React keys
+	// This ensures components are recreated when diff content changes
+	const [filePatchHashes, setFilePatchHashes] = React.useState<
+		Map<string, string>
+	>(new Map());
+
+	// Refetch patch hashes whenever session or diff entries change
+	React.useEffect(() => {
+		if (!selectedSessionId || diffEntries.length === 0) {
+			setFilePatchHashes(new Map());
+			return;
+		}
+
+		let cancelled = false;
+
+		// Fetch all diffs and compute hashes
+		const fetchHashes = async () => {
+			const hashMap = new Map<string, string>();
+
+			await Promise.all(
+				diffEntries.map(async (file) => {
+					try {
+						const diffData = await api.getSessionDiff(selectedSessionId, {
+							path: file.path,
+						});
+						if ("patch" in diffData && diffData.patch) {
+							const hash = await hashString(diffData.patch);
+							hashMap.set(file.path, hash);
+						}
+					} catch (error) {
+						console.error(`Failed to fetch diff for ${file.path}:`, error);
+					}
+				}),
+			);
+
+			if (!cancelled) {
+				setFilePatchHashes(hashMap);
+			}
+		};
+
+		fetchHashes();
+
+		return () => {
+			cancelled = true;
+		};
+	}, [selectedSessionId, diffEntries]);
+
 	// Track collapsed files (not persisted - always start with all collapsed)
 	// Initialize with all files collapsed
 	const [collapsedFiles, setCollapsedFiles] = React.useState<string[]>(() =>
@@ -903,19 +867,28 @@ export function ConsolidatedDiffView() {
 
 			{/* File diffs list */}
 			<div className="flex-1 flex flex-col overflow-y-auto">
-				{diffEntries.map((file) => (
-					<FileDiffSection
-						key={file.path}
-						filePath={file.path}
-						sessionId={selectedSessionId}
-						isExpanded={!collapsedFilesSet.has(file.path)}
-						currentPatchHash={sessionReviewedFiles.get(file.path) || null}
-						diffStyle={diffStyle}
-						onToggleExpand={() => toggleExpanded(file.path)}
-						onToggleReview={(hash) => toggleReviewed(file.path, hash)}
-						onEdit={() => handleEditFile(file.path)}
-					/>
-				))}
+				{diffEntries.map((file) => {
+					// Use patch hash in key to force remount when diff content changes
+					const patchHash = filePatchHashes.get(file.path) || null;
+					const componentKey = patchHash
+						? `${file.path}-${patchHash}`
+						: file.path;
+
+					return (
+						<FileDiffSection
+							key={componentKey}
+							filePath={file.path}
+							sessionId={selectedSessionId}
+							isExpanded={!collapsedFilesSet.has(file.path)}
+							patchHash={patchHash}
+							currentPatchHash={sessionReviewedFiles.get(file.path) || null}
+							diffStyle={diffStyle}
+							onToggleExpand={() => toggleExpanded(file.path)}
+							onToggleReview={(hash) => toggleReviewed(file.path, hash)}
+							onEdit={() => handleEditFile(file.path)}
+						/>
+					);
+				})}
 			</div>
 		</div>
 	);

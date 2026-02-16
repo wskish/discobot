@@ -123,17 +123,17 @@ func (db *DB) Migrate() error {
 	// other tables have foreign key constraints referencing agents. Temporarily
 	// disable foreign key enforcement during the migration.
 	obsoleteAgentCols := []string{"name", "description", "system_prompt"}
-	var colsToDrop []string
+	var agentColsToDrop []string
 	for _, col := range obsoleteAgentCols {
 		if migrator.HasColumn(&model.Agent{}, col) {
-			colsToDrop = append(colsToDrop, col)
+			agentColsToDrop = append(agentColsToDrop, col)
 		}
 	}
-	if len(colsToDrop) > 0 {
+	if len(agentColsToDrop) > 0 {
 		if db.IsSQLite() {
 			db.Exec("PRAGMA foreign_keys = OFF")
 		}
-		for _, col := range colsToDrop {
+		for _, col := range agentColsToDrop {
 			log.Printf("Dropping obsolete Agent.%s column...\n", col)
 			if err := migrator.DropColumn(&model.Agent{}, col); err != nil {
 				if db.IsSQLite() {
@@ -146,6 +146,9 @@ func (db *DB) Migrate() error {
 			db.Exec("PRAGMA foreign_keys = ON")
 		}
 	}
+
+	// Note: workspace.commit column is no longer in the model and will be ignored by GORM.
+	// We don't need to drop it - leaving it in the database is harmless.
 
 	return nil
 }

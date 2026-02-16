@@ -37,7 +37,6 @@ type Workspace struct {
 	Provider     string     `json:"provider,omitempty"`
 	Status       string     `json:"status"`
 	ErrorMessage string     `json:"errorMessage,omitempty"`
-	Commit       string     `json:"commit,omitempty"`
 	WorkDir      string     `json:"workDir,omitempty"`
 	Sessions     []*Session `json:"sessions"`
 }
@@ -162,9 +161,6 @@ func (s *WorkspaceService) mapWorkspace(ctx context.Context, ws *model.Workspace
 	if ws.ErrorMessage != nil {
 		result.ErrorMessage = *ws.ErrorMessage
 	}
-	if ws.Commit != nil {
-		result.Commit = *ws.Commit
-	}
 	// Get working directory path from git provider if available
 	if s.gitProvider != nil {
 		result.WorkDir = s.gitProvider.GetWorkDir(ctx, ws.ID)
@@ -231,8 +227,7 @@ func (s *WorkspaceService) Initialize(ctx context.Context, workspaceID string) e
 		return fmt.Errorf("workspace initialization failed: %w", err)
 	}
 
-	// Update workspace with commit and ready status
-	ws.Commit = &commit
+	// Update workspace to ready status
 	ws.Status = model.WorkspaceStatusReady
 	ws.ErrorMessage = nil
 	if err := s.store.UpdateWorkspace(ctx, ws); err != nil {

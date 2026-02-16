@@ -154,7 +154,6 @@ func (e *testEnv) createTestWorkspace(t *testing.T, projectID string) (*model.Wo
 		Path:       wsPath,
 		SourceType: "local",
 		Status:     model.WorkspaceStatusReady,
-		Commit:     ptrString(commit),
 	}
 	if err := e.store.CreateWorkspace(context.Background(), workspace); err != nil {
 		t.Fatalf("Failed to create workspace: %v", err)
@@ -411,12 +410,6 @@ func TestPerformCommit_WorkspaceChangedWithPatches(t *testing.T) {
 	// Add a new commit to the workspace (simulating external change)
 	newCommit := env.addCommitToWorkspace(t, workspace.Path, "external.txt", "external content\n")
 
-	// Update workspace in DB to reflect the new commit
-	workspace.Commit = ptrString(newCommit)
-	if err := env.store.UpdateWorkspace(context.Background(), workspace); err != nil {
-		t.Fatalf("Failed to update workspace: %v", err)
-	}
-
 	// Set up mock handler with patches available (simulating agent already has work done)
 	handler := newMockHandler()
 	handler.commitsResponse = &sandboxapi.CommitsResponse{
@@ -513,12 +506,6 @@ func TestPerformCommit_WorkspaceChangedNoPatches(t *testing.T) {
 
 	// Add a new commit to the workspace
 	newCommit := env.addCommitToWorkspace(t, workspace.Path, "external.txt", "external content\n")
-
-	// Update workspace in DB
-	workspace.Commit = ptrString(newCommit)
-	if err := env.store.UpdateWorkspace(context.Background(), workspace); err != nil {
-		t.Fatalf("Failed to update workspace: %v", err)
-	}
 
 	// Track request order
 	var requestOrder []string
@@ -645,13 +632,7 @@ func TestPerformCommit_WorkspaceChangedGetCommitsError(t *testing.T) {
 	session := env.createTestSession(t, project.ID, workspace.ID, agent.ID, initialCommit)
 
 	// Add a new commit to the workspace
-	newCommit := env.addCommitToWorkspace(t, workspace.Path, "external.txt", "external content\n")
-
-	// Update workspace in DB
-	workspace.Commit = ptrString(newCommit)
-	if err := env.store.UpdateWorkspace(context.Background(), workspace); err != nil {
-		t.Fatalf("Failed to update workspace: %v", err)
-	}
+	_ = env.addCommitToWorkspace(t, workspace.Path, "external.txt", "external content\n")
 
 	callCount := 0
 	var mu sync.Mutex
