@@ -67,7 +67,12 @@ func New(cfg *config.Config) (*DB, error) {
 
 		db, err = gorm.Open(sqlite.Open(sqliteDSN), gormConfig)
 		if err == nil {
-			// Enable foreign keys after connection
+			// WAL mode allows concurrent readers while a writer is active,
+			// preventing connection starvation with multiple goroutines.
+			db.Exec("PRAGMA journal_mode=WAL")
+			// busy_timeout makes SQLite wait (up to 5s) when the DB is locked
+			// instead of immediately returning SQLITE_BUSY.
+			db.Exec("PRAGMA busy_timeout = 5000")
 			db.Exec("PRAGMA foreign_keys = ON")
 		}
 	default:
@@ -86,11 +91,11 @@ func New(cfg *config.Config) (*DB, error) {
 
 	// Configure connection pool based on driver
 	if driver == "sqlite" {
-		// SQLite has limited concurrent write support and can have visibility issues
-		// between connections. Using a single connection ensures all operations
-		// see each other's changes immediately.
-		sqlDB.SetMaxOpenConns(1)
-		sqlDB.SetMaxIdleConns(1)
+		// With WAL mode, SQLite supports concurrent readers alongside a single
+		// writer. Allow multiple connections so read-heavy polling goroutines
+		// don't block behind writes (or each other).
+		sqlDB.SetMaxOpenConns(4)
+		sqlDB.SetMaxIdleConns(4)
 	} else {
 		// PostgreSQL handles connection pooling well
 		sqlDB.SetMaxOpenConns(25)
