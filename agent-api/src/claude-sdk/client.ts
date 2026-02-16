@@ -18,6 +18,7 @@ import { DiskBackedSession } from "./disk-backed-session.js";
 import {
 	type ClaudeSessionInfo,
 	discoverSessions,
+	getLastMessageError,
 	loadFullSessionData,
 	type SessionData,
 } from "./persistence.js";
@@ -309,6 +310,33 @@ export class ClaudeSDKClient implements Agent {
 			};
 		})();
 
+		// Helper function to check last message for errors and create error chunks
+		const checkLastMessageError = async (): Promise<{
+			errorMessage: string | null;
+			chunks: UIMessageChunk[];
+		}> => {
+			if (!ctx.claudeSessionId) {
+				return { errorMessage: null, chunks: [] };
+			}
+
+			const errorMessage = await getLastMessageError(
+				ctx.claudeSessionId,
+				this.options.cwd,
+			);
+
+			if (!errorMessage) {
+				return { errorMessage: null, chunks: [] };
+			}
+
+			// Create error chunks
+			const chunks: UIMessageChunk[] = [
+				{ type: "error", errorText: errorMessage } as UIMessageChunk,
+				{ type: "finish", finishReason: "error" } as UIMessageChunk,
+			];
+
+			return { errorMessage, chunks };
+		};
+
 		// Start query and yield chunks
 		const q = query({ prompt: promptGenerator, options: sdkOptions });
 
@@ -319,6 +347,43 @@ export class ClaudeSDKClient implements Agent {
 					yield chunk;
 				}
 			}
+
+			// After the query completes successfully, check if Claude process crashed
+			// and wrote an error to the messages file (edge case where SDK doesn't throw)
+			const { errorMessage, chunks } = await checkLastMessageError();
+			if (errorMessage) {
+				console.error(`[SDK] Detected error in last message: ${errorMessage}`);
+				// Yield error chunks
+				for (const chunk of chunks) {
+					yield chunk;
+				}
+				throw new Error(errorMessage);
+			}
+		} catch (error) {
+			// Check if this is a process exit error - if so, try to get the user-friendly
+			// error message from the last message on disk instead of the generic exit code
+			if (
+				error instanceof Error &&
+				error.message.includes("process exited with code")
+			) {
+				console.log(
+					`[SDK] Claude process exited, checking last message for user-friendly error...`,
+				);
+
+				const { errorMessage, chunks } = await checkLastMessageError();
+				if (errorMessage) {
+					console.log(`[SDK] Found user-friendly error: ${errorMessage}`);
+					// Yield error chunks
+					for (const chunk of chunks) {
+						yield chunk;
+					}
+					// Throw the user-friendly error instead of the generic process exit error
+					throw new Error(errorMessage);
+				}
+			}
+
+			// Re-throw the original error if we couldn't find a better message
+			throw error;
 		} finally {
 			this.activeAbortController = null;
 			// Reload messages from disk after prompt completes

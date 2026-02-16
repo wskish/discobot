@@ -979,4 +979,185 @@ describe("ClaudeSDKClient session restoration after restart", () => {
 			"New default session should have no messages",
 		);
 	});
+
+	describe("prompt error handling", () => {
+		// These tests verify the error detection logic when Claude process exits
+		// We test this by creating session files with errors and checking detection
+
+		it("detects and returns user-friendly error when session file has API error", async () => {
+			const SESSION_ID = "error-test-session";
+			const CLAUDE_SESSION_ID = "claude-error-session-123";
+
+			// Create session file with API error (simulating what SDK writes on crash)
+			await createClaudeSessionFile(CLAUDE_SESSION_ID, [
+				{
+					type: "user",
+					uuid: "user-msg-error",
+					message: {
+						role: "user",
+						content: "test message",
+					},
+				},
+				{
+					type: "assistant",
+					uuid: "asst-msg-error",
+					error: "authentication_failed",
+					isApiErrorMessage: true,
+					message: {
+						id: "asst-msg-error",
+						role: "assistant",
+						content: [
+							{
+								type: "text",
+								text: "Invalid API key · Fix external API key",
+							},
+						],
+					},
+				} as any,
+			]);
+
+			// Save session mapping
+			await saveSession({
+				sessionId: SESSION_ID,
+				cwd: TEST_CWD,
+				createdAt: new Date().toISOString(),
+				claudeSessionId: CLAUDE_SESSION_ID,
+			});
+
+			const client = new ClaudeSDKClient({ cwd: TEST_CWD });
+			await client.ensureSession(SESSION_ID);
+
+			// Test that getLastMessageError detects the error
+			const { getLastMessageError } = await import("./persistence.js");
+			const error = await getLastMessageError(CLAUDE_SESSION_ID, TEST_CWD);
+
+			assert.strictEqual(
+				error,
+				"Invalid API key · Fix external API key",
+				"Should detect user-friendly error message",
+			);
+		});
+
+		it("detects error with only error field and content text", async () => {
+			const CLAUDE_SESSION_ID = "error-only-field-123";
+
+			await createClaudeSessionFile(CLAUDE_SESSION_ID, [
+				{
+					type: "assistant",
+					uuid: "asst-error-only",
+					error: "rate_limit_exceeded",
+					message: {
+						id: "asst-error-only",
+						role: "assistant",
+						content: [
+							{
+								type: "text",
+								text: "Rate limit exceeded. Please try again later.",
+							},
+						],
+					},
+				} as any,
+			]);
+
+			const { getLastMessageError } = await import("./persistence.js");
+			const error = await getLastMessageError(CLAUDE_SESSION_ID, TEST_CWD);
+
+			assert.strictEqual(
+				error,
+				"Rate limit exceeded. Please try again later.",
+				"Should extract user-friendly text when error field present",
+			);
+		});
+
+		it("detects error patterns in content without explicit error field", async () => {
+			const CLAUDE_SESSION_ID = "error-pattern-123";
+
+			await createClaudeSessionFile(CLAUDE_SESSION_ID, [
+				{
+					type: "assistant",
+					uuid: "asst-pattern",
+					message: {
+						id: "asst-pattern",
+						role: "assistant",
+						content: [
+							{
+								type: "text",
+								text: "Error: Connection timeout occurred while processing request",
+							},
+						],
+					},
+				},
+			]);
+
+			const { getLastMessageError } = await import("./persistence.js");
+			const error = await getLastMessageError(CLAUDE_SESSION_ID, TEST_CWD);
+
+			assert.strictEqual(
+				error,
+				"Error: Connection timeout occurred while processing request",
+				"Should detect error pattern in text content",
+			);
+		});
+
+		it("returns null when no error is present in session", async () => {
+			const CLAUDE_SESSION_ID = "no-error-123";
+
+			await createClaudeSessionFile(CLAUDE_SESSION_ID, [
+				{
+					type: "user",
+					uuid: "user-normal",
+					message: {
+						role: "user",
+						content: "hello",
+					},
+				},
+				{
+					type: "assistant",
+					uuid: "asst-normal",
+					message: {
+						id: "asst-normal",
+						role: "assistant",
+						content: [
+							{
+								type: "text",
+								text: "Hello! How can I help you today?",
+							},
+						],
+					},
+				},
+			]);
+
+			const { getLastMessageError } = await import("./persistence.js");
+			const error = await getLastMessageError(CLAUDE_SESSION_ID, TEST_CWD);
+
+			assert.strictEqual(error, null, "Should return null for normal messages");
+		});
+
+		it("falls back to error code when no content text available", async () => {
+			const CLAUDE_SESSION_ID = "error-no-content-123";
+
+			await createClaudeSessionFile(CLAUDE_SESSION_ID, [
+				{
+					type: "assistant",
+					uuid: "asst-no-content",
+					error: "internal_server_error",
+					isApiErrorMessage: true,
+					message: {
+						id: "asst-no-content",
+						role: "assistant",
+						content: [], // Empty content array
+					},
+				} as any,
+			]);
+
+			const { getLastMessageError } = await import("./persistence.js");
+			const error = await getLastMessageError(CLAUDE_SESSION_ID, TEST_CWD);
+
+			assert.strictEqual(
+				error,
+				"internal_server_error",
+				"Should fall back to error code when no content text",
+			);
+		});
+	});
 });

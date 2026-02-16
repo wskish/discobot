@@ -16,7 +16,10 @@ import type {
 	SDKMessage,
 	SDKUserMessage,
 } from "@anthropic-ai/claude-agent-sdk";
-import type { BetaContentBlock } from "@anthropic-ai/sdk/resources/beta/messages/messages";
+import type {
+	BetaContentBlock,
+	BetaTextBlock,
+} from "@anthropic-ai/sdk/resources/beta/messages/messages";
 import type { DynamicToolUIPart, UIMessage } from "ai";
 
 // ============================================================================
@@ -564,6 +567,113 @@ export async function getSessionMetadata(
 			messageCount: lines.length,
 		};
 	} catch {
+		return null;
+	}
+}
+
+/**
+ * Check if the last message in a session file contains an error.
+ * Returns the error message if found, or null if no error.
+ *
+ * This is used to detect when the Claude process crashed and wrote
+ * an error to the messages file instead of throwing an exception.
+ */
+export async function getLastMessageError(
+	sessionId: string,
+	cwd: string,
+): Promise<string | null> {
+	const sessionDir = getSessionDirectoryForCwd(cwd);
+	const filePath = join(sessionDir, `${sessionId}.jsonl`);
+
+	try {
+		const content = await readFile(filePath, "utf-8");
+		const lines = content.trim().split("\n");
+
+		if (lines.length === 0) {
+			return null;
+		}
+
+		// Get the last line
+		const lastLine = lines[lines.length - 1];
+		if (!lastLine.trim()) {
+			return null;
+		}
+
+		// Parse the last message
+		const lastMessage = JSON.parse(lastLine) as SDKMessage;
+
+		// Check for error fields at the top level
+		const msgWithError = lastMessage as unknown as {
+			error?: string;
+			errorMessage?: string;
+			isApiErrorMessage?: boolean;
+			message?: {
+				error?: string;
+				content?: unknown;
+			};
+		};
+
+		// If this is an API error message, prefer the user-friendly text from content
+		// Only process errors for assistant messages (SDK writes errors as assistant messages)
+		if (
+			(msgWithError.error || msgWithError.isApiErrorMessage) &&
+			lastMessage.type === "assistant"
+		) {
+			// First try to get user-friendly error text from content
+			const msg = lastMessage as SDKAssistantMessage;
+			if (msg.message?.content && Array.isArray(msg.message.content)) {
+				for (const block of msg.message.content) {
+					if (block.type === "text") {
+						const text = (block as BetaTextBlock).text;
+						// Return the user-friendly error text
+						return text;
+					}
+				}
+			}
+
+			// Fall back to error code if no content text found
+			if (msgWithError.error) {
+				return msgWithError.error;
+			}
+		}
+
+		// Check if the assistant message contains error text in content
+		// (for cases where error field is not set but content indicates error)
+		if (lastMessage.type === "assistant") {
+			const msg = lastMessage as SDKAssistantMessage;
+			if (msg.message?.content && Array.isArray(msg.message.content)) {
+				for (const block of msg.message.content) {
+					if (block.type === "text") {
+						const text = (block as BetaTextBlock).text;
+						// Look for error patterns in the text
+						const lowerText = text.toLowerCase();
+						if (
+							lowerText.includes("error:") ||
+							lowerText.includes("exception:") ||
+							lowerText.includes("failed:") ||
+							lowerText.includes("crash") ||
+							lowerText.includes("invalid api key")
+						) {
+							return text;
+						}
+					}
+				}
+			}
+		}
+
+		// Check other error fields (only for assistant messages)
+		if (lastMessage.type === "assistant") {
+			if (msgWithError.errorMessage) {
+				return msgWithError.errorMessage;
+			}
+			if (msgWithError.message?.error) {
+				return msgWithError.message.error;
+			}
+		}
+
+		return null;
+	} catch (error) {
+		console.warn(`Failed to read last message from ${filePath}:`, error);
 		return null;
 	}
 }
