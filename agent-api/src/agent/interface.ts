@@ -1,4 +1,5 @@
 import type { UIMessage, UIMessageChunk } from "ai";
+import type { ModelInfo } from "../api/types.js";
 import type { Session } from "./session.js";
 
 /**
@@ -28,10 +29,14 @@ export interface Agent {
 	 * Returns an async generator that yields chunks as they arrive.
 	 * @param message - The user message to send
 	 * @param sessionId - Optional session ID to send prompt to. If not provided, uses default session.
+	 * @param model - Optional model to use for this request. If not provided, uses agent's default.
+	 * @param reasoning - Extended thinking: "enabled", "disabled", or undefined for default
 	 */
 	prompt(
 		message: UIMessage,
 		sessionId?: string,
+		model?: string,
+		reasoning?: "enabled" | "disabled" | "",
 	): AsyncGenerator<UIMessageChunk, void, unknown>;
 
 	/**
@@ -59,6 +64,12 @@ export interface Agent {
 	 * Get current environment variables.
 	 */
 	getEnvironment(): Record<string, string>;
+
+	/**
+	 * List available models from the Claude API.
+	 * This calls the real Anthropic API to get current model availability.
+	 */
+	listModels(): Promise<ModelInfo[]>;
 
 	// Session management methods
 	/**

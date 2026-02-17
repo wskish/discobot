@@ -56,6 +56,8 @@ type NewSessionRequest struct {
 	ProjectID   string
 	WorkspaceID string
 	AgentID     string
+	Model       string
+	Reasoning   string
 	// Messages is the raw UIMessage array - passed through without parsing
 	Messages json.RawMessage
 }
@@ -99,7 +101,7 @@ func (c *ChatService) NewSession(ctx context.Context, req NewSessionRequest) (st
 	name := deriveSessionName(req.Messages)
 
 	// Use SessionService to create the session with client-provided ID
-	sess, err := c.sessionService.CreateSessionWithID(ctx, req.SessionID, req.ProjectID, req.WorkspaceID, name, req.AgentID)
+	sess, err := c.sessionService.CreateSessionWithID(ctx, req.SessionID, req.ProjectID, req.WorkspaceID, name, req.AgentID, req.Model, req.Reasoning)
 	if err != nil {
 		return "", fmt.Errorf("failed to create session: %w", err)
 	}
@@ -134,6 +136,19 @@ func (c *ChatService) GetSession(ctx context.Context, projectID, sessionID strin
 // Use this when you need to check existence before validating project ownership.
 func (c *ChatService) GetSessionByID(ctx context.Context, sessionID string) (*model.Session, error) {
 	return c.store.GetSessionByID(ctx, sessionID)
+}
+
+// UpdateSessionModel updates the model for a session and broadcasts a session_updated event.
+func (c *ChatService) UpdateSessionModel(ctx context.Context, sessionID, modelID string) error {
+	session, err := c.store.GetSessionByID(ctx, sessionID)
+	if err != nil {
+		return fmt.Errorf("session not found: %w", err)
+	}
+	session.Model = &modelID
+	if err := c.store.UpdateSession(ctx, session); err != nil {
+		return err
+	}
+	return c.eventBroker.PublishSessionUpdated(ctx, session.ProjectID, sessionID, string(session.Status), string(session.CommitStatus))
 }
 
 // ValidateSessionResources validates that a session's workspace and agent belong to the project.
@@ -182,10 +197,33 @@ func (c *ChatService) getGitConfig(ctx context.Context) (name, email string) {
 // Credentials for the project are automatically included in the request header.
 // Git user configuration is automatically included in request headers (cached on first use).
 // If the sandbox is not running or doesn't exist, it will be reconciled on-demand.
-func (c *ChatService) SendToSandbox(ctx context.Context, projectID, sessionID string, messages json.RawMessage) (<-chan SSELine, error) {
-	// Validate session belongs to project
-	if _, err := c.GetSession(ctx, projectID, sessionID); err != nil {
+// reasoning can be "enabled", "disabled", or "" for default behavior.
+func (c *ChatService) SendToSandbox(ctx context.Context, projectID, sessionID string, messages json.RawMessage, requestModel string, reasoning string) (<-chan SSELine, error) {
+	// Validate session belongs to project and get session for model
+	session, err := c.GetSession(ctx, projectID, sessionID)
+	if err != nil {
 		return nil, err
+	}
+
+	// If a model is provided in the request, update the session's model
+	if requestModel != "" {
+		session.Model = &requestModel
+		if err := c.store.UpdateSession(ctx, session); err != nil {
+			log.Printf("Warning: failed to update session model for %s: %v", sessionID, err)
+		}
+	}
+
+	// If reasoning is provided in the request, update the session's reasoning
+	// Otherwise, use the session's saved reasoning (if any)
+	effectiveReasoning := reasoning
+	if reasoning != "" {
+		session.Reasoning = &reasoning
+		if err := c.store.UpdateSession(ctx, session); err != nil {
+			log.Printf("Warning: failed to update session reasoning for %s: %v", sessionID, err)
+		}
+	} else if session.Reasoning != nil {
+		// Use session's saved reasoning if no reasoning provided in request
+		effectiveReasoning = *session.Reasoning
 	}
 
 	if c.sandboxService == nil {
@@ -210,9 +248,17 @@ func (c *ChatService) SendToSandbox(ctx context.Context, projectID, sessionID st
 	opts := &RequestOptions{
 		GitUserName:  gitName,
 		GitUserEmail: gitEmail,
+		Reasoning:    effectiveReasoning, // Pass effective reasoning flag to sandbox
 	}
 
-	return client.SendMessages(ctx, messages, opts)
+	// Use the model from the session (which may have just been updated)
+	// Dereference model pointer; use empty string if nil (agent will use default)
+	modelID := ""
+	if session.Model != nil {
+		modelID = *session.Model
+	}
+
+	return client.SendMessages(ctx, messages, modelID, opts)
 }
 
 // GetStream returns a channel of SSE events for an in-progress completion.

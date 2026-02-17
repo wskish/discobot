@@ -1,4 +1,10 @@
 import { Info, Key, Settings } from "lucide-react";
+import * as React from "react";
+import {
+	createModelVariants,
+	deduplicateModels,
+	sortModelVariants,
+} from "@/components/ide/model-selector";
 import { Button } from "@/components/ui/button";
 import {
 	DropdownMenu,
@@ -20,6 +26,9 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { useDialogContext } from "@/lib/contexts/dialog-context";
 import { useMainContentContext } from "@/lib/contexts/main-content-context";
+import { useAgents } from "@/lib/hooks/use-agents";
+import { useAgentModels } from "@/lib/hooks/use-models";
+import { PREFERENCE_KEYS, usePreferences } from "@/lib/hooks/use-preferences";
 import { useThemeCustomization } from "@/lib/hooks/use-theme-customization";
 
 interface SettingsMenuProps {
@@ -40,6 +49,40 @@ export function SettingsMenu({ className }: SettingsMenuProps) {
 		mounted: themeMounted,
 	} = useThemeCustomization();
 
+	// User preferences
+	const { getPreference, setPreference } = usePreferences();
+	const defaultModelPref = getPreference(PREFERENCE_KEYS.DEFAULT_MODEL);
+
+	// Get default agent to fetch its models
+	const { agents } = useAgents();
+	const defaultAgent = React.useMemo(
+		() => agents.find((a) => a.isDefault) || agents[0],
+		[agents],
+	);
+
+	// Fetch models for the default agent
+	const { models: rawModels } = useAgentModels(defaultAgent?.id || null);
+
+	// Process models (deduplicate and create variants)
+	const modelVariants = React.useMemo(() => {
+		const deduplicated = deduplicateModels(rawModels);
+		const variants = createModelVariants(deduplicated);
+		return sortModelVariants(variants);
+	}, [rawModels]);
+
+	// Handle default model change
+	const handleDefaultModelChange = React.useCallback(
+		async (value: string) => {
+			if (value === "none") {
+				// Clear the preference
+				await setPreference(PREFERENCE_KEYS.DEFAULT_MODEL, "");
+			} else {
+				await setPreference(PREFERENCE_KEYS.DEFAULT_MODEL, value);
+			}
+		},
+		[setPreference],
+	);
+
 	return (
 		<DropdownMenu>
 			<DropdownMenuTrigger asChild>
@@ -53,7 +96,11 @@ export function SettingsMenu({ className }: SettingsMenuProps) {
 					<span className="sr-only">Settings</span>
 				</Button>
 			</DropdownMenuTrigger>
-			<DropdownMenuContent align="end" className="w-80">
+			<DropdownMenuContent
+				align="end"
+				className="w-80 max-h-[80vh] overflow-y-auto"
+				sideOffset={5}
+			>
 				{themeMounted && (
 					<>
 						<DropdownMenuLabel>Appearance</DropdownMenuLabel>
@@ -189,20 +236,56 @@ export function SettingsMenu({ className }: SettingsMenuProps) {
 				)}
 
 				<DropdownMenuLabel>Chat</DropdownMenuLabel>
-				<div className="flex items-center justify-between px-2 py-2">
-					<Label
-						htmlFor="chat-full-width-toggle"
-						className="text-sm font-normal cursor-pointer"
-					>
-						Full width
-					</Label>
-					<Switch
-						id="chat-full-width-toggle"
-						checked={chatWidthMode === "full"}
-						onCheckedChange={(checked) =>
-							setChatWidthMode(checked ? "full" : "constrained")
-						}
-					/>
+				<div className="px-2 py-2 space-y-4">
+					{/* Default model selector */}
+					<div className="space-y-2">
+						<Label className="text-xs text-muted-foreground">
+							Default model
+						</Label>
+						<Select
+							value={defaultModelPref || "none"}
+							onValueChange={handleDefaultModelChange}
+						>
+							<SelectTrigger className="w-full">
+								<SelectValue placeholder="Auto-select">
+									{defaultModelPref
+										? modelVariants.find((v) => v.id === defaultModelPref)
+												?.displayName || defaultModelPref
+										: "Auto-select"}
+								</SelectValue>
+							</SelectTrigger>
+							<SelectContent className="max-h-[300px] z-[70]">
+								<SelectItem value="none">Auto-select</SelectItem>
+								{modelVariants.length > 0 && (
+									<div className="px-2 py-1.5">
+										<div className="h-px bg-border" />
+									</div>
+								)}
+								{modelVariants.map((variant) => (
+									<SelectItem key={variant.id} value={variant.id}>
+										{variant.displayName}
+									</SelectItem>
+								))}
+							</SelectContent>
+						</Select>
+					</div>
+
+					{/* Full width toggle */}
+					<div className="flex items-center justify-between">
+						<Label
+							htmlFor="chat-full-width-toggle"
+							className="text-sm font-normal cursor-pointer"
+						>
+							Full width
+						</Label>
+						<Switch
+							id="chat-full-width-toggle"
+							checked={chatWidthMode === "full"}
+							onCheckedChange={(checked) =>
+								setChatWidthMode(checked ? "full" : "constrained")
+							}
+						/>
+					</div>
 				</div>
 
 				<DropdownMenuSeparator />

@@ -64,9 +64,9 @@ func isSandboxUnavailableError(err error) bool {
 }
 
 // SendMessages sends messages to the sandbox.
-func (c *SessionClient) SendMessages(ctx context.Context, messages json.RawMessage, opts *RequestOptions) (<-chan SSELine, error) {
+func (c *SessionClient) SendMessages(ctx context.Context, messages json.RawMessage, model string, opts *RequestOptions) (<-chan SSELine, error) {
 	return withReconciliation(ctx, c, func() (<-chan SSELine, error) {
-		return c.inner.SendMessages(ctx, c.sessionID, messages, opts)
+		return c.inner.SendMessages(ctx, c.sessionID, messages, model, opts)
 	})
 }
 
@@ -137,6 +137,13 @@ func (c *SessionClient) GetCommits(ctx context.Context, parentCommit string) (*s
 func (c *SessionClient) GetUserInfo(ctx context.Context) (*sandboxapi.UserResponse, error) {
 	return withReconciliation(ctx, c, func() (*sandboxapi.UserResponse, error) {
 		return c.inner.GetUserInfo(ctx, c.sessionID)
+	})
+}
+
+// GetModels retrieves available models from the Claude API via the sandbox.
+func (c *SessionClient) GetModels(ctx context.Context) (*sandboxapi.ModelsResponse, error) {
+	return withReconciliation(ctx, c, func() (*sandboxapi.ModelsResponse, error) {
+		return c.inner.GetModels(ctx, c.sessionID)
 	})
 }
 

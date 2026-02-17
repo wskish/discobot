@@ -59,6 +59,9 @@ export const STORAGE_KEYS = {
 	LAST_WORKSPACE_PATH: "discobot:lastWorkspacePath",
 	SELECTED_WORKSPACE_ID: "discobot:selectedWorkspaceId",
 	SELECTED_AGENT_ID: "discobot:selectedAgentId",
+	SELECTED_MODEL_ID: "discobot:selectedModelId",
+	// Session visibility
+	SHOW_CLOSED_SESSIONS: "discobot:showClosedSessions",
 	// Per-session state (sessionStorage)
 	ACTIVE_VIEW: "discobot:activeView",
 	OPEN_FILE_PATHS: "discobot:openFilePaths",

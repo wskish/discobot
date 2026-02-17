@@ -29,6 +29,9 @@ export type { UIMessage, UIMessageChunk };
  */
 export interface ChatRequest {
 	messages: UIMessage[];
+	model?: string;
+	/** Extended thinking: "enabled", "disabled", or undefined for default */
+	reasoning?: "enabled" | "disabled" | "";
 }
 
 // ============================================================================
@@ -118,6 +121,26 @@ export interface ChatStatusResponse {
 	completionId: string | null;
 	startedAt: string | null;
 	error: string | null;
+}
+
+/**
+ * Model information from Anthropic API
+ */
+export interface ModelInfo {
+	id: string;
+	display_name: string;
+	provider: string;
+	created_at: string;
+	type: string;
+	/** Whether this model supports extended thinking/reasoning */
+	reasoning: boolean;
+}
+
+/**
+ * GET /models response - list available models from Claude API
+ */
+export interface ModelsResponse {
+	models: ModelInfo[];
 }
 
 /**

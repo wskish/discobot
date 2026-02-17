@@ -70,6 +70,8 @@ export interface Session {
 	files: FileNode[];
 	workspaceId?: string;
 	agentId?: string;
+	model?: string;
+	reasoning?: string;
 }
 
 // Workspace status values representing the lifecycle of a workspace
@@ -157,6 +159,12 @@ export interface AgentModel {
 	name: string;
 	provider?: string;
 	description?: string;
+	/** Whether this model supports extended thinking/reasoning */
+	reasoning?: boolean;
+}
+
+export interface ModelsResponse {
+	models: AgentModel[];
 }
 
 // ChatMessage is re-exported from AI SDK for convenience

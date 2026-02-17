@@ -159,6 +159,9 @@ type RequestOptions struct {
 
 	// GitUserEmail is the git user.email to use for commits (optional).
 	GitUserEmail string
+
+	// Reasoning controls extended thinking: "enabled", "disabled", or "" for default.
+	Reasoning string
 }
 
 // applyRequestAuth sets Authorization and credentials headers on a request.
@@ -203,9 +206,17 @@ func (c *SandboxChatClient) applyRequestAuth(ctx context.Context, req *http.Requ
 // The sandbox is expected to respond with SSE events in AI SDK UIMessage Stream format.
 // Messages and responses are passed through without parsing.
 // Retries with exponential backoff on connection errors and 5xx responses.
-func (c *SandboxChatClient) SendMessages(ctx context.Context, sessionID string, messages json.RawMessage, opts *RequestOptions) (<-chan SSELine, error) {
+func (c *SandboxChatClient) SendMessages(ctx context.Context, sessionID string, messages json.RawMessage, model string, opts *RequestOptions) (<-chan SSELine, error) {
 	// Build the request body once - pass messages through as-is
-	reqBody := sandboxapi.ChatRequest{Messages: messages}
+	reasoning := ""
+	if opts != nil {
+		reasoning = opts.Reasoning
+	}
+	reqBody := sandboxapi.ChatRequest{
+		Messages:  messages,
+		Model:     model,
+		Reasoning: reasoning,
+	}
 	bodyBytes, err := json.Marshal(reqBody)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
@@ -677,6 +688,50 @@ func (c *SandboxChatClient) GetUserInfo(ctx context.Context, sessionID string) (
 	}
 
 	var result sandboxapi.UserResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	return &result, nil
+}
+
+// GetModels retrieves available models from the Claude API via the sandbox.
+// This calls the actual Anthropic API through the Agent API to get current model availability.
+// Retries with exponential backoff on connection errors and 5xx responses.
+func (c *SandboxChatClient) GetModels(ctx context.Context, sessionID string) (*sandboxapi.ModelsResponse, error) {
+	resp, err := retryWithBackoff(ctx, func() (*http.Response, int, error) {
+		client, err := c.getHTTPClient(ctx, sessionID)
+		if err != nil {
+			return nil, 0, err
+		}
+
+		req, err := http.NewRequestWithContext(ctx, "GET", "http://sandbox/models", nil)
+		if err != nil {
+			return nil, 0, fmt.Errorf("failed to create request: %w", err)
+		}
+
+		if err := c.applyRequestAuth(ctx, req, sessionID, nil); err != nil {
+			return nil, 0, err
+		}
+
+		resp, err := client.Do(req)
+		if err != nil {
+			return nil, 0, err
+		}
+
+		return resp, resp.StatusCode, nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get models: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("sandbox returned status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var result sandboxapi.ModelsResponse
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}

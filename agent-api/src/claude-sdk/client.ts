@@ -4,9 +4,11 @@ import {
 	query,
 	type SDKMessage,
 } from "@anthropic-ai/claude-agent-sdk";
+import Anthropic from "@anthropic-ai/sdk";
 import type { UIMessage, UIMessageChunk } from "ai";
 import type { Agent } from "../agent/interface.js";
 import type { Session } from "../agent/session.js";
+import type { ModelInfo } from "../api/types.js";
 import {
 	clearSession as clearStoredSession,
 	getSessionData,
@@ -250,6 +252,8 @@ export class ClaudeSDKClient implements Agent {
 	async *prompt(
 		message: UIMessage,
 		sessionId?: string,
+		model?: string,
+		reasoning?: "enabled" | "disabled" | "",
 	): AsyncGenerator<UIMessageChunk, void, unknown> {
 		const sid = await this.ensureSession(sessionId);
 		const ctx = this.sessions.get(sid);
@@ -272,17 +276,56 @@ export class ClaudeSDKClient implements Agent {
 		// Create abort controller for this prompt
 		this.activeAbortController = new AbortController();
 
+		// Trim "anthropic:" prefix from model if present (models are stored as provider:model-id)
+		let sdkModel = model || this.options.model;
+		if (sdkModel?.startsWith("anthropic:")) {
+			sdkModel = sdkModel.substring("anthropic:".length);
+		}
+
+		// Determine if we should use the new adaptive thinking API (Opus 4.6+)
+		const isOpus46 = sdkModel === "claude-opus-4-6";
+
+		// Configure thinking options based on model and reasoning parameter
+		let thinkingOptions = {};
+		if (reasoning === "enabled") {
+			if (isOpus46) {
+				// Opus 4.6: use adaptive thinking API
+				thinkingOptions = {
+					thinking: { type: "adaptive" },
+					// Use high effort level for extended thinking
+					outputConfig: { effort: "high" },
+				};
+			} else {
+				// Older models: use deprecated maxThinkingTokens API
+				thinkingOptions = { maxThinkingTokens: 10000 };
+			}
+		}
+
+		// Log prompt dispatch details for debugging
+		const textPreview = contentBlocks
+			.filter((b): b is { type: "text"; text: string } => b.type === "text")
+			.map((b) => b.text)
+			.join("")
+			.slice(0, 100);
+		console.log("[SDK] prompt →", {
+			model: sdkModel ?? "(default)",
+			reasoning,
+			thinkingOptions,
+			text: textPreview + (textPreview.length === 100 ? "…" : ""),
+		});
+
 		// Configure SDK options
 		const sdkOptions: Options = {
 			cwd: this.options.cwd,
-			model: this.options.model,
+			model: sdkModel,
 			resume: ctx.claudeSessionId || undefined,
 			env: this.env,
 			includePartialMessages: true,
 			tools: { type: "preset", preset: "claude_code" },
 			systemPrompt: { type: "preset", preset: "claude_code" },
 			settingSources: ["user", "project"], // Load user settings from ~/.claude and CLAUDE.md files
-			maxThinkingTokens: 10000, // Enable extended thinking with reasonable token limit
+			// Apply thinking options (adaptive for Opus 4.6, maxThinkingTokens for older models)
+			...thinkingOptions,
 			// Use the discovered Claude CLI path from connect()
 			pathToClaudeCodeExecutable: this.claudeCliPath ?? "",
 			// Pass abort controller to SDK for proper cancellation
@@ -496,6 +539,96 @@ export class ClaudeSDKClient implements Agent {
 
 	getEnvironment(): Record<string, string> {
 		return { ...this.env };
+	}
+
+	/**
+	 * Determine if a model supports extended thinking/reasoning based on its ID.
+	 * Models that support extended thinking:
+	 * - Claude Opus 4.x (claude-opus-4*)
+	 * - Claude Sonnet 4.x (claude-sonnet-4*)
+	 * - Models with "thinking" in the name
+	 * Models that do NOT support it:
+	 * - Claude Haiku (all versions)
+	 * - Claude Sonnet 3.x and earlier
+	 */
+	private supportsReasoning(modelId: string): boolean {
+		const lowerModelId = modelId.toLowerCase();
+
+		// Haiku never supports extended thinking
+		if (lowerModelId.includes("haiku")) {
+			return false;
+		}
+
+		// Models with "thinking" in the name support it
+		if (lowerModelId.includes("thinking")) {
+			return true;
+		}
+
+		// Claude Opus 4.x supports extended thinking
+		if (lowerModelId.includes("opus") && lowerModelId.includes("4")) {
+			return true;
+		}
+
+		// Claude Sonnet 4.x supports extended thinking (but not 3.x)
+		if (lowerModelId.includes("sonnet")) {
+			// Check for version 4 or higher (4.0, 4.5, etc.)
+			const match = lowerModelId.match(/sonnet[- ]?(\d+)/);
+			if (match) {
+				const version = Number.parseInt(match[1], 10);
+				return version >= 4;
+			}
+		}
+
+		// Default to false for unknown models
+		return false;
+	}
+
+	async listModels(): Promise<ModelInfo[]> {
+		// Check for OAuth token vs API key
+		const oauthToken = this.env.CLAUDE_CODE_OAUTH_TOKEN;
+		const apiKey = this.env.ANTHROPIC_API_KEY;
+
+		if (!oauthToken && !apiKey) {
+			throw new Error(
+				"ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN not configured",
+			);
+		}
+
+		// Create Anthropic client with proper authentication
+		const clientOptions: ConstructorParameters<typeof Anthropic>[0] = {};
+
+		if (oauthToken) {
+			// OAuth: Use Bearer authentication (authToken)
+			clientOptions.authToken = oauthToken;
+		} else {
+			// API Key: Use x-api-key authentication
+			clientOptions.apiKey = apiKey;
+		}
+
+		const client = new Anthropic(clientOptions);
+
+		try {
+			// Call the models API
+			// Use beta.models.list() with betas param for OAuth, regular models.list() for API keys
+			const response = oauthToken
+				? await client.beta.models.list({
+						betas: ["oauth-2025-04-20"],
+					})
+				: await client.models.list();
+
+			// Map to our ModelInfo type with "anthropic:" prefix and reasoning detection
+			return response.data.map((model) => ({
+				id: `anthropic:${model.id}`,
+				display_name: model.display_name || model.id,
+				provider: "Anthropic",
+				created_at: model.created_at,
+				type: model.type,
+				reasoning: this.supportsReasoning(model.id),
+			}));
+		} catch (error) {
+			console.error("Failed to list models from Anthropic API:", error);
+			throw error;
+		}
 	}
 
 	/**

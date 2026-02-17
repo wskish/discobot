@@ -10,6 +10,8 @@ export const PREFERENCE_KEYS = {
 	// Theme preferences (per mode)
 	THEME_COLOR_SCHEME_LIGHT: "theme.colorScheme.light",
 	THEME_COLOR_SCHEME_DARK: "theme.colorScheme.dark",
+	// Default model for new chats
+	DEFAULT_MODEL: "chat.defaultModel",
 } as const;
 
 export function usePreferences() {

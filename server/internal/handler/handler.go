@@ -33,6 +33,7 @@ type Handler struct {
 	sessionService      *service.SessionService
 	chatService         *service.ChatService
 	agentService        *service.AgentService
+	modelsService       *service.ModelsService
 	workspaceService    *service.WorkspaceService
 	projectService      *service.ProjectService
 	preferenceService   *service.PreferenceService
@@ -84,6 +85,16 @@ func New(s *store.Store, cfg *config.Config, gitProvider git.Provider, sandboxPr
 	projectSvc := service.NewProjectService(s, sandboxProvider)
 	preferenceSvc := service.NewPreferenceService(s)
 
+	// Convert agentTypes for models service
+	serviceAgentTypes := make([]service.AgentType, len(agentTypes))
+	for i, at := range agentTypes {
+		serviceAgentTypes[i] = service.AgentType{
+			ID:                     at.ID,
+			SupportedAuthProviders: at.SupportedAuthProviders,
+		}
+	}
+	modelsSvc := service.NewModelsService(s, agentSvc, credSvc, sandboxSvc, serviceAgentTypes)
+
 	h := &Handler{
 		store:             s,
 		cfg:               cfg,
@@ -97,6 +108,7 @@ func New(s *store.Store, cfg *config.Config, gitProvider git.Provider, sandboxPr
 		sessionService:    sessionSvc,
 		chatService:       chatSvc,
 		agentService:      agentSvc,
+		modelsService:     modelsSvc,
 		workspaceService:  workspaceSvc,
 		projectService:    projectSvc,
 		preferenceService: preferenceSvc,

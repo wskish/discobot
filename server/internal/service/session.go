@@ -58,6 +58,8 @@ type Session struct {
 	Files           []FileNode `json:"files"`
 	WorkspaceID     string     `json:"workspaceId,omitempty"`
 	AgentID         string     `json:"agentId,omitempty"`
+	Model           string     `json:"model,omitempty"`
+	Reasoning       string     `json:"reasoning,omitempty"`
 	WorkspacePath   string     `json:"workspacePath,omitempty"`
 	WorkspaceCommit string     `json:"workspaceCommit,omitempty"`
 }
@@ -156,10 +158,20 @@ func (s *SessionService) CreateSession(ctx context.Context, projectID, workspace
 }
 
 // CreateSessionWithID creates a new session with the provided client ID.
-func (s *SessionService) CreateSessionWithID(ctx context.Context, sessionID, projectID, workspaceID, name, agentID string) (*Session, error) {
+func (s *SessionService) CreateSessionWithID(ctx context.Context, sessionID, projectID, workspaceID, name, agentID, modelID, reasoning string) (*Session, error) {
 	var aidPtr *string
 	if agentID != "" {
 		aidPtr = &agentID
+	}
+
+	var modelPtr *string
+	if modelID != "" {
+		modelPtr = &modelID
+	}
+
+	var reasoningPtr *string
+	if reasoning != "" {
+		reasoningPtr = &reasoning
 	}
 
 	sess := &model.Session{
@@ -167,6 +179,8 @@ func (s *SessionService) CreateSessionWithID(ctx context.Context, sessionID, pro
 		ProjectID:   projectID,
 		WorkspaceID: workspaceID,
 		AgentID:     aidPtr,
+		Model:       modelPtr,
+		Reasoning:   reasoningPtr,
 		Name:        name,
 		Description: nil,
 		Status:      model.SessionStatusInitializing,
@@ -517,6 +531,16 @@ func (s *SessionService) mapSession(sess *model.Session) *Session {
 		workspaceCommit = *sess.WorkspaceCommit
 	}
 
+	model := ""
+	if sess.Model != nil {
+		model = *sess.Model
+	}
+
+	reasoning := ""
+	if sess.Reasoning != nil {
+		reasoning = *sess.Reasoning
+	}
+
 	timestamp := sess.UpdatedAt.Format(time.RFC3339)
 	if sess.UpdatedAt.IsZero() {
 		timestamp = time.Now().Format(time.RFC3339)
@@ -538,6 +562,8 @@ func (s *SessionService) mapSession(sess *model.Session) *Session {
 		Files:           []FileNode{},
 		WorkspaceID:     sess.WorkspaceID,
 		AgentID:         agentID,
+		Model:           model,
+		Reasoning:       reasoning,
 		WorkspacePath:   workspacePath,
 		WorkspaceCommit: workspaceCommit,
 	}
@@ -976,7 +1002,13 @@ func (s *SessionService) sendCommitPrompt(ctx context.Context, projectID string,
 		return nil
 	}
 
-	streamCh, err := client.SendMessages(ctx, messages, opts)
+	// Dereference model pointer; use empty string if nil (agent will use default)
+	modelID := ""
+	if sess.Model != nil {
+		modelID = *sess.Model
+	}
+
+	streamCh, err := client.SendMessages(ctx, messages, modelID, opts)
 	if err != nil {
 		s.setCommitFailed(ctx, projectID, workspace, sess, fmt.Sprintf("Failed to send commit message to agent: %v", err))
 		return nil

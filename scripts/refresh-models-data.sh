@@ -16,7 +16,7 @@ echo "Refreshing models.dev data..."
 
 # Download api.json to server/static/models-dev-api.json
 echo "Downloading models.dev API data..."
-curl -s "https://models.dev/api.json" -o "$API_OUTPUT"
+curl -s "https://models.dev/api.json" | jq --sort-keys '.' > "$API_OUTPUT"
 echo "  Saved models-dev-api.json ($(wc -c < "$API_OUTPUT" | tr -d ' ') bytes)"
 
 # Show summary

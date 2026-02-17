@@ -24,6 +24,11 @@ type ChatRequest struct {
 	// Kept as raw JSON to pass through without requiring Go to understand
 	// the full UIMessage structure from the AI SDK.
 	Messages json.RawMessage `json:"messages"`
+	// Model is the optional model to use for this chat request.
+	Model string `json:"model,omitempty"`
+	// Reasoning controls extended thinking: "enabled", "disabled", or "" for default.
+	// Empty string means use the model's default behavior.
+	Reasoning string `json:"reasoning,omitempty"`
 }
 
 // ============================================================================
@@ -47,6 +52,21 @@ type UserResponse struct {
 	Username string `json:"username"`
 	UID      int    `json:"uid"`
 	GID      int    `json:"gid"`
+}
+
+// ModelInfo represents a model from the Claude API.
+type ModelInfo struct {
+	ID          string `json:"id"`
+	DisplayName string `json:"display_name"`
+	Provider    string `json:"provider"`
+	CreatedAt   string `json:"created_at"`
+	Type        string `json:"type"`
+	Reasoning   bool   `json:"reasoning"` // Whether this model supports extended thinking
+}
+
+// ModelsResponse is the GET /models response.
+type ModelsResponse struct {
+	Models []ModelInfo `json:"models"`
 }
 
 // GetMessagesResponse is the GET /chat response.

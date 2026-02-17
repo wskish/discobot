@@ -44,8 +44,10 @@ interface PromptInputWithHistoryProps {
 	textareaClassName?: string;
 	/** Whether submit button should be disabled */
 	submitDisabled?: boolean;
-	/** Optional queue button to render in footer (before attachment button) */
+	/** Optional queue button to render in footer (before submit button) */
 	queueButton?: React.ReactNode;
+	/** Optional model selector to render in tools (after attachment button) */
+	modelSelector?: React.ReactNode;
 }
 
 // Attachments preview component
@@ -94,6 +96,7 @@ export const PromptInputWithHistory = React.memo(
 				textareaClassName,
 				submitDisabled = false,
 				queueButton,
+				modelSelector,
 			},
 			ref,
 		) {
@@ -173,6 +176,8 @@ export const PromptInputWithHistory = React.memo(
 										<PromptInputActionAddAttachments />
 									</PromptInputActionMenuContent>
 								</PromptInputActionMenu>
+								{/* Model selector (if provided) */}
+								{modelSelector}
 							</PromptInputTools>
 							<div className="flex items-center gap-2">
 								{/* Queue button (if provided) */}

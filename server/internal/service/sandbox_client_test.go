@@ -140,7 +140,7 @@ func TestSandboxChatClient_SendMessages_Returns202ThenStreams(t *testing.T) {
 	defer cancel()
 
 	messages := json.RawMessage(`[{"role":"user","content":"hello"}]`)
-	ch, err := client.SendMessages(ctx, "test-session", messages, nil)
+	ch, err := client.SendMessages(ctx, "test-session", messages, "", nil)
 	if err != nil {
 		t.Fatalf("SendMessages failed: %v", err)
 	}
@@ -192,7 +192,7 @@ func TestSandboxChatClient_SendMessages_Non202Error(t *testing.T) {
 	defer cancel()
 
 	messages := json.RawMessage(`[]`)
-	_, err := client.SendMessages(ctx, "test-session", messages, nil)
+	_, err := client.SendMessages(ctx, "test-session", messages, "", nil)
 	if err == nil {
 		t.Fatal("Expected error for 400 response")
 	}
@@ -225,7 +225,7 @@ func TestSandboxChatClient_SendMessages_409Conflict(t *testing.T) {
 	defer cancel()
 
 	messages := json.RawMessage(`[{"role":"user","content":"hello"}]`)
-	_, err := client.SendMessages(ctx, "test-session", messages, nil)
+	_, err := client.SendMessages(ctx, "test-session", messages, "", nil)
 	if err == nil {
 		t.Fatal("Expected error for 409 response")
 	}
@@ -305,7 +305,7 @@ func TestSandboxChatClient_SendMessages_WithCredentials(t *testing.T) {
 	messages := json.RawMessage(`[{"role":"user","content":"hello"}]`)
 
 	// Credentials are automatically fetched by the client
-	ch, err := client.SendMessages(ctx, "test-session", messages, nil)
+	ch, err := client.SendMessages(ctx, "test-session", messages, "", nil)
 	if err != nil {
 		t.Fatalf("SendMessages failed: %v", err)
 	}
@@ -352,7 +352,7 @@ func TestSandboxChatClient_SendMessages_WithAuthorization(t *testing.T) {
 	defer cancel()
 
 	messages := json.RawMessage(`[{"role":"user","content":"hello"}]`)
-	ch, err := client.SendMessages(ctx, "test-session", messages, nil)
+	ch, err := client.SendMessages(ctx, "test-session", messages, "", nil)
 	if err != nil {
 		t.Fatalf("SendMessages failed: %v", err)
 	}
@@ -386,7 +386,7 @@ func TestSandboxChatClient_SendMessages_RetriesOnEOF(t *testing.T) {
 	defer cancel()
 
 	messages := json.RawMessage(`[{"role":"user","content":"hello"}]`)
-	ch, err := client.SendMessages(ctx, "test-session", messages, nil)
+	ch, err := client.SendMessages(ctx, "test-session", messages, "", nil)
 	if err != nil {
 		t.Fatalf("SendMessages failed: %v", err)
 	}
@@ -549,7 +549,7 @@ func TestSandboxChatClient_SendMessages_WithGitConfig(t *testing.T) {
 		GitUserName:  "Test User",
 		GitUserEmail: "test@example.com",
 	}
-	ch, err := client.SendMessages(ctx, "test-session", messages, opts)
+	ch, err := client.SendMessages(ctx, "test-session", messages, "", opts)
 	if err != nil {
 		t.Fatalf("SendMessages failed: %v", err)
 	}
@@ -602,7 +602,7 @@ func TestSandboxChatClient_SendMessages_WithPartialGitConfig(t *testing.T) {
 	opts := &RequestOptions{
 		GitUserName: "Name Only User",
 	}
-	ch, err := client.SendMessages(ctx, "test-session", messages, opts)
+	ch, err := client.SendMessages(ctx, "test-session", messages, "", opts)
 	if err != nil {
 		t.Fatalf("SendMessages failed: %v", err)
 	}

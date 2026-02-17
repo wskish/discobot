@@ -16,6 +16,7 @@ import type {
 	HealthResponse,
 	ListFilesResponse,
 	ListServicesResponse,
+	ModelsResponse,
 	ReadFileResponse,
 	RootResponse,
 	ServiceAlreadyRunningResponse,
@@ -33,6 +34,7 @@ import type {
 } from "../api/types.js";
 import { authMiddleware } from "../auth/middleware.js";
 import { ClaudeSDKClient } from "../claude-sdk/client.js";
+import { checkCredentialsChanged } from "../credentials/credentials.js";
 import {
 	getManagedService,
 	getService,
@@ -96,6 +98,30 @@ export function createApp(options: AppOptions) {
 			healthy: true,
 			connected: agent.isConnected,
 		});
+	});
+
+	// GET /models - List available models from Claude API
+	app.get("/models", async (c) => {
+		try {
+			// Update agent credentials if they changed (same pattern as /chat)
+			const credentialsHeader = c.req.header(CREDENTIALS_HEADER) || null;
+			const { changed, env: credentialEnv } =
+				checkCredentialsChanged(credentialsHeader);
+			if (changed) {
+				await agent.updateEnvironment(credentialEnv);
+			}
+
+			const models = await agent.listModels();
+			return c.json<ModelsResponse>({ models });
+		} catch (error) {
+			console.error("Failed to list models:", error);
+			return c.json<ErrorResponse>(
+				{
+					error: `Failed to list models: ${error instanceof Error ? error.message : String(error)}`,
+				},
+				500,
+			);
+		}
 	});
 
 	// GET /user - Return current user info for terminal sessions
@@ -198,6 +224,8 @@ export function createApp(options: AppOptions) {
 			credentialsHeader,
 			gitUserName,
 			gitUserEmail,
+			body.model,
+			body.reasoning,
 			sessionId,
 		);
 		return c.json(result.response, result.status);

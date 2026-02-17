@@ -45,6 +45,8 @@ export function tryStartCompletion(
 	credentialsHeader: string | null,
 	gitUserName: string | null,
 	gitUserEmail: string | null,
+	model: string | undefined,
+	reasoning: "enabled" | "disabled" | "" | undefined,
 	sessionId?: string,
 ): StartCompletionResult {
 	const completionId = crypto.randomUUID().slice(0, 8);
@@ -123,6 +125,8 @@ export function tryStartCompletion(
 		credentialEnv,
 		gitUserName,
 		gitUserEmail,
+		model,
+		reasoning,
 		log,
 		sessionId,
 		currentAbortController.signal,
@@ -214,6 +218,8 @@ function runCompletion(
 	credentialEnv: Record<string, string>,
 	gitUserName: string | null,
 	gitUserEmail: string | null,
+	model: string | undefined,
+	reasoning: "enabled" | "disabled" | "" | undefined,
 	log: (data: Record<string, unknown>) => void,
 	sessionId: string | undefined,
 	abortSignal: AbortSignal,
@@ -260,7 +266,12 @@ function runCompletion(
 
 			// Stream chunks from the agent's prompt generator with cancellation checking
 			// The SDK emits start (via message_start) and finish (via result) events
-			for await (const chunk of agent.prompt(userMessage, sessionId)) {
+			for await (const chunk of agent.prompt(
+				userMessage,
+				sessionId,
+				model,
+				reasoning,
+			)) {
 				// Check if cancelled during iteration
 				if (abortSignal.aborted) {
 					// Send finish event with stop reason instead of error

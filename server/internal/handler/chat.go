@@ -30,6 +30,10 @@ type ChatRequest struct {
 	WorkspaceID string `json:"workspaceId,omitempty"`
 	// AgentID is required for new sessions
 	AgentID string `json:"agentId,omitempty"`
+	// Model is optional, if not provided uses agent's default model
+	Model string `json:"model,omitempty"`
+	// Reasoning controls extended thinking: "enabled", "disabled", or "" for default
+	Reasoning string `json:"reasoning,omitempty"`
 }
 
 // Chat handles AI chat streaming.
@@ -91,6 +95,8 @@ func (h *Handler) Chat(w http.ResponseWriter, r *http.Request) {
 			ProjectID:   projectID,
 			WorkspaceID: req.WorkspaceID,
 			AgentID:     req.AgentID,
+			Model:       req.Model,
+			Reasoning:   req.Reasoning,
 			Messages:    req.Messages,
 		})
 		if err != nil {
@@ -108,7 +114,8 @@ func (h *Handler) Chat(w http.ResponseWriter, r *http.Request) {
 
 	// Send messages to sandbox and get raw SSE stream
 	// ChatService handles session state reconciliation (starting stopped containers, etc.)
-	sseCh, err := h.chatService.SendToSandbox(ctx, projectID, sessionID, req.Messages)
+	// Pass the model and reasoning flag from the request
+	sseCh, err := h.chatService.SendToSandbox(ctx, projectID, sessionID, req.Messages, req.Model, req.Reasoning)
 	if err != nil {
 		writeSSEErrorAndDone(w, err.Error())
 		return
@@ -153,6 +160,26 @@ func (h *Handler) Chat(w http.ResponseWriter, r *http.Request) {
 			// Log error events for debugging
 			if strings.Contains(line.Data, `"type":"error"`) {
 				log.Printf("[Chat] Passing through error event: %s", line.Data)
+			}
+			// Check for 'start' event — may carry messageMetadata.model (the actual model used)
+			if strings.Contains(line.Data, `"type":"start"`) {
+				var startEvent struct {
+					Type            string `json:"type"`
+					MessageMetadata *struct {
+						Model string `json:"model"`
+					} `json:"messageMetadata"`
+				}
+				if err := json.Unmarshal([]byte(line.Data), &startEvent); err == nil &&
+					startEvent.MessageMetadata != nil && startEvent.MessageMetadata.Model != "" {
+					modelID := startEvent.MessageMetadata.Model
+					go func() {
+						if err := h.chatService.UpdateSessionModel(ctx, sessionID, modelID); err != nil {
+							log.Printf("[Chat] Warning: failed to update session model for %s: %v", sessionID, err)
+						} else {
+							log.Printf("[Chat] Updated session %s with actual model: %s", sessionID, modelID)
+						}
+					}()
+				}
 			}
 			// Pass through raw data line without parsing
 			_, _ = fmt.Fprintf(w, "data: %s\n\n", line.Data)

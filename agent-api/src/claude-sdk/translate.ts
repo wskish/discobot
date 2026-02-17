@@ -417,11 +417,20 @@ function handleMessageStart(
 	const messageId = event.message.id;
 	state.messageUuid = messageId;
 
+	// Extract the actual model used from the message
+	const modelUsed = event.message.model;
+
 	if (!state.hasEmittedStart) {
 		// First message_start in the agentic loop - emit 'start' for the overall response
 		state.hasEmittedStart = true;
 		state.responseMessageId = messageId;
-		chunks.push({ type: "start", messageId });
+		chunks.push({
+			type: "start",
+			messageId,
+			...(modelUsed
+				? { messageMetadata: { model: `anthropic:${modelUsed}` } }
+				: {}),
+		});
 	} else {
 		// Subsequent message_start (after tool use) - emit 'start-step' for this API call
 		// Use the original response messageId for consistency

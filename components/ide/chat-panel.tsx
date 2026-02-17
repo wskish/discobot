@@ -10,6 +10,7 @@ import {
 	QueueButton,
 	QueuePanel,
 } from "@/components/ide/chat-plan-queue";
+import { ModelSelector } from "@/components/ide/model-selector";
 import { PromptInputWithHistory } from "@/components/ide/prompt-input-with-history";
 import { api } from "@/lib/api-client";
 import { appendAuthToken, getApiBase } from "@/lib/api-config";
@@ -18,6 +19,8 @@ import {
 	SessionStatus as SessionStatusConstants,
 } from "@/lib/api-constants";
 import { useMainContentContext } from "@/lib/contexts/main-content-context";
+import { useAgentModels, useSessionModels } from "@/lib/hooks/use-models";
+import { PREFERENCE_KEYS, usePreferences } from "@/lib/hooks/use-preferences";
 import { useSession } from "@/lib/hooks/use-sessions";
 import { useThrottle } from "@/lib/hooks/use-throttle";
 import {
@@ -105,10 +108,13 @@ export function ChatPanel({
 	const resume = initialMessages !== undefined;
 
 	// State for new session workspace selection
-	// Agent selection is managed entirely within ChatNewContent via persistent storage
+	// Agent and model selection is managed entirely within ChatNewContent via persistent storage
 	const [localSelectedWorkspaceId, setLocalSelectedWorkspaceId] =
 		React.useState<string | null>(null);
 	const [localSelectedAgentId, setLocalSelectedAgentId] = React.useState<
+		string | null
+	>(null);
+	const [localSelectedModelId, setLocalSelectedModelId] = React.useState<
 		string | null
 	>(null);
 
@@ -132,25 +138,65 @@ export function ChatPanel({
 	// Fetch session data to check if session exists (only for existing sessions)
 	const { session } = useSession(resume ? sessionId : null);
 
+	// Fetch available models - use agent models for new chats, session models for existing chats
+	const { models: agentModels } = useAgentModels(
+		!resume ? localSelectedAgentId : null,
+	);
+	const { models: sessionModels } = useSessionModels(resume ? sessionId : null);
+	const models = resume ? sessionModels : agentModels;
+
 	// Get chat width mode from main content context
 	const { chatWidthMode } = useMainContentContext();
+
+	// Get default model preference
+	const { getPreference } = usePreferences();
+	const defaultModelPref = getPreference(PREFERENCE_KEYS.DEFAULT_MODEL);
 
 	// Use refs to store the latest selection values for use in fetch
 	// This ensures sendMessage always uses current values even if useChat caches the transport
 	const selectionRef = React.useRef({
 		workspaceId: localSelectedWorkspaceId,
 		agentId: localSelectedAgentId,
+		modelId: localSelectedModelId,
 		resume,
 	});
+
+	// Apply default model preference for new chats
+	React.useEffect(() => {
+		if (!resume && localSelectedAgentId && !localSelectedModelId) {
+			// For new chats, use the default model preference if available
+			if (defaultModelPref) {
+				setLocalSelectedModelId(defaultModelPref);
+			}
+		}
+	}, [resume, localSelectedAgentId, localSelectedModelId, defaultModelPref]);
+
+	// Sync model state with session's saved model when resuming
+	React.useEffect(() => {
+		if (resume && session?.model && !localSelectedModelId) {
+			// Restore the exact reasoning mode from the session
+			if (session.reasoning === "enabled") {
+				setLocalSelectedModelId(`${session.model}:thinking`);
+			} else {
+				setLocalSelectedModelId(session.model);
+			}
+		}
+	}, [resume, session?.model, session?.reasoning, localSelectedModelId]);
 
 	// Keep refs in sync with state
 	React.useEffect(() => {
 		selectionRef.current = {
 			workspaceId: localSelectedWorkspaceId,
 			agentId: localSelectedAgentId,
+			modelId: localSelectedModelId,
 			resume,
 		};
-	}, [localSelectedWorkspaceId, localSelectedAgentId, resume]);
+	}, [
+		localSelectedWorkspaceId,
+		localSelectedAgentId,
+		localSelectedModelId,
+		resume,
+	]);
 
 	// Create transport with custom fetch that always uses latest selection values
 	const transport = React.useMemo(
@@ -159,7 +205,26 @@ export function ChatPanel({
 				api: `${getApiBase()}/chat`,
 				// Use custom fetch to inject latest workspace/agent IDs for new sessions
 				fetch: (async (url, options) => {
-					const { resume, workspaceId, agentId } = selectionRef.current;
+					const { resume, workspaceId, agentId, modelId } =
+						selectionRef.current;
+
+					// Parse model variant to extract actual model ID and reasoning mode
+					// Format: "modelId" or "modelId:thinking" or null
+					let actualModelId: string | undefined;
+					let reasoning: "enabled" | "disabled" | "" = "";
+
+					if (modelId) {
+						if (modelId.endsWith(":thinking")) {
+							// Model with thinking enabled
+							actualModelId = modelId.slice(0, -9); // Remove ":thinking" suffix
+							reasoning = "enabled";
+						} else {
+							// Model with thinking disabled (or model doesn't support thinking)
+							actualModelId = modelId;
+							reasoning = "disabled";
+						}
+					}
+					// If modelId is null, reasoning stays as "" (empty string for default)
 
 					// Create abort controller for this request
 					const controller = new AbortController();
@@ -170,6 +235,10 @@ export function ChatPanel({
 						const body = JSON.parse(options.body as string);
 						body.workspaceId = workspaceId;
 						body.agentId = agentId;
+						if (actualModelId) {
+							body.model = actualModelId;
+						}
+						body.reasoning = reasoning;
 
 						const authUrl = appendAuthToken(url as string);
 						const response = await fetch(authUrl, {
@@ -187,6 +256,21 @@ export function ChatPanel({
 						}
 
 						return response;
+					}
+
+					// For resumed sessions, also inject reasoning and model flags
+					if (resume && options?.body) {
+						const body = JSON.parse(options.body as string);
+						if (actualModelId) {
+							body.model = actualModelId;
+						}
+						body.reasoning = reasoning;
+
+						return fetch(appendAuthToken(url as string), {
+							...options,
+							body: JSON.stringify(body),
+							signal: controller.signal,
+						});
 					}
 
 					return fetch(appendAuthToken(url as string), {
@@ -414,6 +498,16 @@ export function ChatPanel({
 							)}
 							submitDisabled={false}
 							queueButton={<QueueButton />}
+							modelSelector={
+								models.length > 0 ? (
+									<ModelSelector
+										models={models}
+										selectedModelId={localSelectedModelId}
+										onSelectModel={setLocalSelectedModelId}
+										compact
+									/>
+								) : undefined
+							}
 						/>
 					</div>
 				</ChatPlanQueue>

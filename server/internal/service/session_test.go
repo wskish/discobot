@@ -1,8 +1,11 @@
 package service
 
 import (
+	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/obot-platform/discobot/server/internal/model"
 )
 
 func TestValidateSessionID(t *testing.T) {
@@ -116,5 +119,140 @@ func TestSessionIDMaxLength(t *testing.T) {
 	// Verify the constant is set to 65
 	if SessionIDMaxLength != 65 {
 		t.Errorf("SessionIDMaxLength = %d, want 65", SessionIDMaxLength)
+	}
+}
+
+// TestMapSessionFieldCoverage ensures all model.Session fields are properly mapped to service.Session.
+// This test uses reflection to verify complete field mapping and will fail if:
+// 1. A field exists in model.Session but not in service.Session
+// 2. A field exists but is not populated in mapSession
+// This prevents bugs where new fields are added to the model but forgotten in the mapping.
+func TestMapSessionFieldCoverage(t *testing.T) {
+	// Create a fully populated model.Session with non-nil values
+	strPtr := func(s string) *string { return &s }
+
+	modelSession := &model.Session{
+		ID:              "test-id",
+		ProjectID:       "test-project",
+		WorkspaceID:     "test-workspace",
+		AgentID:         strPtr("test-agent"),
+		Name:            "test-name",
+		DisplayName:     strPtr("Test Display"),
+		Description:     strPtr("Test Description"),
+		Status:          "ready",
+		CommitStatus:    "committed",
+		CommitError:     strPtr("commit error"),
+		BaseCommit:      strPtr("base123"),
+		AppliedCommit:   strPtr("applied456"),
+		ErrorMessage:    strPtr("error message"),
+		WorkspacePath:   strPtr("/path/to/workspace"),
+		WorkspaceCommit: strPtr("commit789"),
+		Model:           strPtr("claude-opus-4-6"),
+		Reasoning:       strPtr("enabled"),
+	}
+
+	// Create a mock SessionService (nil is fine since mapSession doesn't use it)
+	svc := &SessionService{}
+
+	// Map the session
+	result := svc.mapSession(modelSession)
+
+	// Define field mappings: model field -> service field
+	// This map documents the expected mapping between model and service layer
+	fieldMappings := map[string]string{
+		"ID":              "ID",
+		"ProjectID":       "ProjectID",
+		"WorkspaceID":     "WorkspaceID",
+		"AgentID":         "AgentID",
+		"Name":            "Name",
+		"DisplayName":     "DisplayName",
+		"Description":     "Description",
+		"Status":          "Status",
+		"CommitStatus":    "CommitStatus",
+		"CommitError":     "CommitError",
+		"BaseCommit":      "BaseCommit",
+		"AppliedCommit":   "AppliedCommit",
+		"ErrorMessage":    "ErrorMessage",
+		"WorkspacePath":   "WorkspacePath",
+		"WorkspaceCommit": "WorkspaceCommit",
+		"Model":           "Model",
+		"Reasoning":       "Reasoning",
+		// Excluded fields (not part of API response):
+		// - CreatedAt, UpdatedAt: mapped to Timestamp
+		// - Project, Workspace, Agent, Messages: relationships, not serialized
+		// - Files: always initialized as empty array in mapSession
+	}
+
+	// Use reflection to verify all documented fields are mapped
+	modelType := reflect.TypeOf(*modelSession)
+	serviceType := reflect.TypeOf(*result)
+
+	// Check all model fields
+	for i := 0; i < modelType.NumField(); i++ {
+		modelField := modelType.Field(i)
+		modelFieldName := modelField.Name
+
+		// Skip GORM metadata fields and relationship fields
+		if modelFieldName == "CreatedAt" || modelFieldName == "UpdatedAt" ||
+			modelFieldName == "Project" || modelFieldName == "Workspace" ||
+			modelFieldName == "Agent" || modelFieldName == "Messages" {
+			continue
+		}
+
+		// Check if field is documented in fieldMappings
+		serviceFieldName, mapped := fieldMappings[modelFieldName]
+		if !mapped {
+			t.Errorf("Model field %s is not documented in fieldMappings - add it or document why it's excluded", modelFieldName)
+			continue
+		}
+
+		// Verify service type has the corresponding field
+		serviceField, found := serviceType.FieldByName(serviceFieldName)
+		if !found {
+			t.Errorf("Service.Session missing field %s (maps from model.Session.%s)", serviceFieldName, modelFieldName)
+			continue
+		}
+
+		// Verify the field was actually populated (not zero value)
+		resultValue := reflect.ValueOf(*result)
+		serviceValue := resultValue.FieldByName(serviceFieldName)
+
+		// Special case for Files which is always initialized as empty array
+		if serviceFieldName == "Files" {
+			continue
+		}
+
+		// For string fields that come from pointers, verify they're not empty
+		// (since we populated all pointers with non-empty values)
+		if serviceField.Type.Kind() == reflect.String {
+			if modelField.Type.Kind() == reflect.Ptr {
+				// This field comes from a pointer, should be populated
+				if serviceValue.String() == "" {
+					t.Errorf("Field %s is empty but model.%s was set to a non-nil pointer", serviceFieldName, modelFieldName)
+				}
+			}
+		}
+	}
+
+	// Verify specific field values to ensure mapping is correct
+	if result.ID != "test-id" {
+		t.Errorf("ID = %q, want %q", result.ID, "test-id")
+	}
+	if result.Model != "claude-opus-4-6" {
+		t.Errorf("Model = %q, want %q", result.Model, "claude-opus-4-6")
+	}
+	if result.Reasoning != "enabled" {
+		t.Errorf("Reasoning = %q, want %q", result.Reasoning, "enabled")
+	}
+	if result.DisplayName != "Test Display" {
+		t.Errorf("DisplayName = %q, want %q", result.DisplayName, "Test Display")
+	}
+	if result.AgentID != "test-agent" {
+		t.Errorf("AgentID = %q, want %q", result.AgentID, "test-agent")
+	}
+
+	// Verify Files is initialized (not nil)
+	if result.Files == nil {
+		t.Error("Files should be initialized to empty array, got nil")
 	}
 }

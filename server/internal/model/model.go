@@ -226,6 +226,8 @@ type Session struct {
 	ErrorMessage    *string   `gorm:"column:error_message;type:text" json:"errorMessage,omitempty"`
 	WorkspacePath   *string   `gorm:"column:workspace_path;type:text" json:"workspacePath,omitempty"`
 	WorkspaceCommit *string   `gorm:"column:workspace_commit;type:text" json:"workspaceCommit,omitempty"`
+	Model           *string   `gorm:"column:model;type:text" json:"model,omitempty"`
+	Reasoning       *string   `gorm:"column:reasoning;type:text" json:"reasoning,omitempty"`
 	CreatedAt       time.Time `gorm:"autoCreateTime" json:"createdAt"`
 	UpdatedAt       time.Time `gorm:"autoUpdateTime" json:"updatedAt"`
 

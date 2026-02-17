@@ -30,6 +30,7 @@ import type {
 	GitHubCopilotPollResponse,
 	ListServicesResponse,
 	ListSessionFilesResponse,
+	ModelsResponse,
 	OAuthAuthorizeResponse,
 	OAuthExchangeRequest,
 	OAuthExchangeResponse,
@@ -348,6 +349,14 @@ class ApiClient {
 			method: "POST",
 			body: JSON.stringify({ agentId: id }),
 		});
+	}
+
+	async getAgentModels(agentId: string): Promise<ModelsResponse> {
+		return this.fetch<ModelsResponse>(`/agents/${agentId}/models`);
+	}
+
+	async getSessionModels(sessionId: string): Promise<ModelsResponse> {
+		return this.fetch<ModelsResponse>(`/sessions/${sessionId}/models`);
 	}
 
 	async getAgentTypes(): Promise<{ agentTypes: SupportedAgentType[] }> {

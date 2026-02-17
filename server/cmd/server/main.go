@@ -1054,6 +1054,16 @@ func main() {
 						Params:      []routes.Param{{Name: "projectId", Example: "local"}, {Name: "sessionId", Example: "abc123"}, {Name: "serviceId", Example: "my-server"}},
 					},
 				})
+
+				sessReg.Register(r, routes.Route{
+					Method: "GET", Pattern: "/{sessionId}/models",
+					Handler: h.GetSessionModels,
+					Meta: routes.Meta{
+						Group:       "Sessions",
+						Description: "Get available models for session",
+						Params:      []routes.Param{{Name: "projectId", Example: "local"}, {Name: "sessionId", Example: "abc123"}},
+					},
+				})
 			})
 
 			// Agents
@@ -1140,6 +1150,16 @@ func main() {
 						Group:       "Agents",
 						Description: "Delete agent",
 						Params:      []routes.Param{{Name: "projectId", Example: "local"}},
+					},
+				})
+
+				agentReg.Register(r, routes.Route{
+					Method: "GET", Pattern: "/{agentId}/models",
+					Handler: h.GetAgentModels,
+					Meta: routes.Meta{
+						Group:       "Agents",
+						Description: "Get available models for agent",
+						Params:      []routes.Param{{Name: "projectId", Example: "local"}, {Name: "agentId", Example: ""}},
 					},
 				})
 			})
