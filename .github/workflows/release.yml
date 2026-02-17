@@ -186,7 +186,7 @@ jobs:
           releaseBody: 'See the assets below for download links.'
           releaseDraft: true
           prerelease: false
-          updaterJsonPath: latest.json
+          includeUpdaterJson: true
           updaterJsonKeepUniversal: true
           args: >-
             --target ${{ matrix.target }}
