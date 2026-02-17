@@ -2,6 +2,10 @@
 
 Discobot is a coding agent session manager. It lets you run, monitor, and manage AI coding agents across isolated sandboxed sessions.
 
+## Demo
+
+[![Discobot Demo](https://img.youtube.com/vi/y_hRj_BMY_E/maxresdefault.jpg)](https://youtu.be/y_hRj_BMY_E)
+
 ## Features
 
 - **Multiple Coding Agents** — Register and switch between coding agents (Claude Code supported today; [open an issue](https://github.com/obot-platform/discobot/issues/new) for others)
