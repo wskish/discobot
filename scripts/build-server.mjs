@@ -45,13 +45,38 @@ const ext = targetTriple.includes("windows") ? ".exe" : "";
 const outputName = `discobot-server-${targetTriple}${ext}`;
 const outputPath = join(binariesDir, outputName);
 
-console.log(`Building discobot-server ${version} for ${targetTriple}...`);
+// Map target triple to Go cross-compilation env vars
+function getGoEnv(triple) {
+	const archMap = {
+		x86_64: "amd64",
+		aarch64: "arm64",
+	};
+	const osMap = {
+		"apple-darwin": "darwin",
+		"unknown-linux-gnu": "linux",
+		"pc-windows-msvc": "windows",
+	};
+
+	const [cpu, ...rest] = triple.split("-");
+	const osKey = rest.join("-");
+
+	return {
+		GOARCH: archMap[cpu],
+		GOOS: osMap[osKey],
+	};
+}
+
+const goEnv = getGoEnv(targetTriple);
+console.log(
+	`Building discobot-server ${version} for ${targetTriple} (GOOS=${goEnv.GOOS}, GOARCH=${goEnv.GOARCH})...`,
+);
 
 // Build with version injected via ldflags
 const ldflags = `-X github.com/obot-platform/discobot/server/internal/version.Version=${version}`;
 execSync(`go build -ldflags "${ldflags}" -o "${outputPath}" ./cmd/server`, {
 	cwd: serverDir,
 	stdio: "inherit",
+	env: { ...process.env, ...goEnv },
 });
 
 console.log(`Built: ${outputPath} (version: ${version})`);
