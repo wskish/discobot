@@ -67,7 +67,7 @@ type JSONLRecord = SDKMessage & {
  * Handles both / (Unix) and \ (Windows) separators.
  */
 function encodePathForClaude(path: string): string {
-	return path.replace(/[/\\]/g, "-");
+	return path.replace(/[/\\:]/g, "-");
 }
 
 /**

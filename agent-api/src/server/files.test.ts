@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { mkdir, rm, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { after, before, describe, it } from "node:test";
 import {
 	isTextFile,
@@ -15,31 +15,31 @@ describe("validatePath", () => {
 
 	describe("valid paths", () => {
 		it("allows empty path (root)", () => {
-			assert.equal(validatePath("", workspaceRoot), "/workspace");
+			assert.equal(validatePath("", workspaceRoot), resolve(workspaceRoot));
 		});
 
 		it("allows dot path (root)", () => {
-			assert.equal(validatePath(".", workspaceRoot), "/workspace");
+			assert.equal(validatePath(".", workspaceRoot), resolve(workspaceRoot));
 		});
 
 		it("allows simple relative path", () => {
 			assert.equal(
 				validatePath("src/index.ts", workspaceRoot),
-				"/workspace/src/index.ts",
+				resolve(workspaceRoot, "src/index.ts"),
 			);
 		});
 
 		it("allows nested relative path", () => {
 			assert.equal(
 				validatePath("src/components/Button.tsx", workspaceRoot),
-				"/workspace/src/components/Button.tsx",
+				resolve(workspaceRoot, "src/components/Button.tsx"),
 			);
 		});
 
 		it("allows path with ./  prefix", () => {
 			assert.equal(
 				validatePath("./src/index.ts", workspaceRoot),
-				"/workspace/src/index.ts",
+				resolve(workspaceRoot, "src/index.ts"),
 			);
 		});
 	});
@@ -60,7 +60,7 @@ describe("validatePath", () => {
 		it("allows .. that stays within workspace", () => {
 			assert.equal(
 				validatePath("src/../lib/utils.ts", workspaceRoot),
-				"/workspace/lib/utils.ts",
+				resolve(workspaceRoot, "lib/utils.ts"),
 			);
 		});
 	});
@@ -433,7 +433,7 @@ describe("writeFile", () => {
 		);
 
 		assert.ok(!("error" in result));
-		assert.equal(result.path, "deep/nested/path/file.txt");
+		assert.equal(result.path, join("deep", "nested", "path", "file.txt"));
 
 		// Verify file was written
 		const readResult = await readFile("deep/nested/path/file.txt", {
