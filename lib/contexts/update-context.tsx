@@ -107,9 +107,7 @@ export function UpdateProvider({ children }: { children: React.ReactNode }) {
 			console.error("Failed to check for updates:", checkError);
 			setStatus("error");
 			setError(
-				checkError instanceof Error
-					? checkError.message
-					: String(checkError),
+				checkError instanceof Error ? checkError.message : String(checkError),
 			);
 		} finally {
 			checkingRef.current = false;
