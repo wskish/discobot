@@ -190,7 +190,7 @@ const (
 	SessionStatusInitializing    = "initializing"     // Session just created, starting setup
 	SessionStatusReinitializing  = "reinitializing"   // Recreating sandbox after it was deleted
 	SessionStatusCloning         = "cloning"          // Cloning git repository
-	SessionStatusPullingImage    = "pulling_image"    // Pulling sandbox Docker image
+	SessionStatusPullingImage    = "pulling_image"    // Pulling runtime image
 	SessionStatusCreatingSandbox = "creating_sandbox" // Creating sandbox environment
 	SessionStatusReady           = "ready"            // Session is ready for use
 	SessionStatusRunning         = "running"          // Session has an active chat completion in progress

@@ -1,7 +1,7 @@
 import { useStartupStatus } from "../lib/contexts/startup-status-context";
 
 /**
- * StartupStatusBar displays ongoing startup tasks (VZ image download, Docker pull, etc.)
+ * StartupStatusBar displays ongoing startup tasks (VZ image download, runtime image pull, etc.)
  * at the top of the application. It automatically hides when all tasks are complete.
  */
 export function StartupStatusBar() {

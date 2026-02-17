@@ -539,7 +539,7 @@ func (p *Provider) doEnsureImage() {
 
 	// Image needs to be pulled — register startup task for UI progress
 	if p.systemManager != nil {
-		p.systemManager.RegisterTask("docker-pull", fmt.Sprintf("Pulling Docker sandbox image: %s", image))
+		p.systemManager.RegisterTask("docker-pull", fmt.Sprintf("Pulling runtime image: %s", image))
 		p.systemManager.StartTask("docker-pull")
 	}
 

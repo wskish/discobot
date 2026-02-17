@@ -532,7 +532,7 @@ func (p *Provider) ensureImageInVM(ctx context.Context, dockerProv *docker.Provi
 
 	// Register system manager task for UI progress
 	if p.systemManager != nil {
-		p.systemManager.RegisterTask("docker-load", fmt.Sprintf("Loading Docker image into VM: %s", image[:19]))
+		p.systemManager.RegisterTask("docker-load", fmt.Sprintf("Loading runtime image: %s", image[:19]))
 		p.systemManager.StartTask("docker-load")
 	}
 

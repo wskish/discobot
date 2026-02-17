@@ -57,7 +57,7 @@ This separation allows a session to be `ready` and `committing` at the same time
 | `initializing` | Session just created, starting setup process |
 | `reinitializing` | Recreating sandbox after it was deleted |
 | `cloning` | Cloning git repository for the workspace |
-| `pulling_image` | Pulling the sandbox Docker image |
+| `pulling_image` | Pulling the runtime image |
 | `creating_sandbox` | Creating the sandbox container environment |
 | `ready` | Session is ready for use. Sandbox is running. |
 | `stopped` | Sandbox is stopped. Will restart on demand. |
