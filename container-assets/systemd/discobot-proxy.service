@@ -1,0 +1,16 @@
+[Unit]
+Description=Discobot MITM Proxy
+After=discobot-init.service
+Requires=discobot-init.service
+
+[Service]
+Type=simple
+EnvironmentFile=-/run/discobot/env
+ExecStart=/opt/discobot/bin/proxy -config /.data/proxy/config.yaml
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal+console
+StandardError=journal+console
+
+[Install]
+WantedBy=multi-user.target

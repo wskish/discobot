@@ -343,6 +343,12 @@ func (p *Provider) Create(ctx context.Context, sessionID string, opts sandbox.Cr
 				Source: dataVolName,
 				Target: dataVolumePath,
 			},
+			// Mount cgroupfs for systemd (PID 1) inside the container
+			{
+				Type:   mount.TypeBind,
+				Source: "/sys/fs/cgroup",
+				Target: "/sys/fs/cgroup",
+			},
 		},
 		// CAP_SYS_ADMIN is required for FUSE mounts (agentfs)
 		CapAdd: []string{"SYS_ADMIN"},
@@ -356,6 +362,13 @@ func (p *Provider) Create(ctx context.Context, sessionID string, opts sandbox.Cr
 				},
 			},
 		},
+		// tmpfs mounts for systemd runtime directories
+		Tmpfs: map[string]string{
+			"/run":      "exec,nosuid,nodev",
+			"/run/lock": "exec,nosuid,nodev",
+		},
+		// Use host cgroup namespace so systemd can manage cgroups on cgroup v2
+		CgroupnsMode: containerTypes.CgroupnsModeHost,
 	}
 
 	// Apply resource limits

@@ -1,0 +1,16 @@
+[Unit]
+Description=Discobot Container Initialization
+DefaultDependencies=no
+After=local-fs.target
+Before=discobot-proxy.service docker.service discobot-agent-api.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+EnvironmentFile=-/run/discobot/container-env
+ExecStart=/opt/discobot/bin/discobot-agent --setup-only
+StandardOutput=journal+console
+StandardError=journal+console
+
+[Install]
+WantedBy=multi-user.target

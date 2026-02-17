@@ -118,6 +118,7 @@ LABEL io.discobot.sandbox-image=true
 # docker-buildx is needed for multi-arch builds and advanced build features
 # iptables is needed by dockerd for network management
 # rsync is needed for agentfs to overlayfs migration
+# systemd is the init system (PID 1) for service management inside the container
 # Copy the extracted CLI version from version-extractor stage
 COPY --from=version-extractor /cli-version /tmp/cli-version
 
@@ -140,6 +141,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
     rsync \
     socat \
     sqlite3 \
+    systemd \
+    systemd-sysv \
     vim \
     && curl -fsSL https://deb.nodesource.com/setup_25.x | bash - \
     && sed -i 's|http://|https://|g' /etc/apt/sources.list.d/nodesource.list 2>/dev/null || true \
@@ -198,6 +201,45 @@ COPY --from=proxy-builder /proxy /opt/discobot/bin/proxy
 COPY --from=agent-builder /discobot-agent /opt/discobot/bin/discobot-agent
 RUN chmod +x /opt/discobot/bin/*
 
+# Copy container entrypoint (captures Docker env vars before exec'ing systemd)
+COPY container-assets/systemd/container-entrypoint.sh /opt/discobot/bin/
+RUN chmod +x /opt/discobot/bin/container-entrypoint.sh
+
+# Copy systemd service units for container services
+COPY container-assets/systemd/discobot-init.service /etc/systemd/system/
+COPY container-assets/systemd/discobot-proxy.service /etc/systemd/system/
+COPY container-assets/systemd/discobot-agent-api.service /etc/systemd/system/
+COPY container-assets/systemd/docker.service.d/ /etc/systemd/system/docker.service.d/
+
+# Configure systemd for container environment
+RUN set -ex \
+    # Mask unnecessary services that don't apply to containers
+    && systemctl mask \
+        getty@.service \
+        serial-getty@.service \
+        systemd-resolved.service \
+        systemd-timesyncd.service \
+        systemd-networkd.service \
+        systemd-logind.service \
+        systemd-udevd.service \
+        dev-hugepages.mount \
+        sys-fs-fuse-connections.mount \
+        sys-kernel-config.mount \
+        sys-kernel-debug.mount \
+    # Disable CPU/memory accounting to reduce cgroup overhead in containers
+    && mkdir -p /etc/systemd/system.conf.d \
+    && printf '[Manager]\nDefaultCPUAccounting=no\nDefaultMemoryAccounting=no\n' \
+        > /etc/systemd/system.conf.d/container.conf \
+    # Enable discobot services and Docker
+    && systemctl enable \
+        discobot-init.service \
+        discobot-proxy.service \
+        discobot-agent-api.service \
+        docker.service
+
+# systemd does not respond to SIGTERM; it needs SIGRTMIN+3 for graceful shutdown
+STOPSIGNAL SIGRTMIN+3
+
 # Add discobot binaries and npm global bin to PATH
 # Also set NPM_CONFIG_PREFIX for non-login shell contexts
 # Set PNPM_HOME to use persistent storage for pnpm cache/store
@@ -211,10 +253,10 @@ WORKDIR /workspace
 
 EXPOSE 3002
 
-# Use discobot-agent as PID 1 init process
-# It handles signal forwarding, process reaping, and user switching
-# Container starts as root; discobot-agent switches to discobot user for the API
-CMD ["/opt/discobot/bin/discobot-agent"]
+# Use systemd as PID 1 via entrypoint that captures Docker env vars first.
+# systemd handles process supervision, zombie reaping, and signal forwarding.
+# Services: discobot-init (oneshot setup) -> discobot-proxy, docker, discobot-agent-api
+CMD ["/opt/discobot/bin/container-entrypoint.sh"]
 
 # Stage 5: VZ root filesystem builder with systemd and Docker
 # Build with: docker build --target vz-image --output type=local,dest=. .

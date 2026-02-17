@@ -1,0 +1,20 @@
+[Unit]
+Description=Discobot Agent API
+After=discobot-init.service discobot-proxy.service docker.service
+Requires=discobot-init.service
+Wants=discobot-proxy.service docker.service
+
+[Service]
+Type=simple
+User=discobot
+Group=discobot
+WorkingDirectory=/home/discobot/workspace
+EnvironmentFile=/run/discobot/env
+ExecStart=/opt/discobot/bin/discobot-agent-api
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal+console
+StandardError=journal+console
+
+[Install]
+WantedBy=multi-user.target
