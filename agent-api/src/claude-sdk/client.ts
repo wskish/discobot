@@ -282,23 +282,11 @@ export class ClaudeSDKClient implements Agent {
 			sdkModel = sdkModel.substring("anthropic:".length);
 		}
 
-		// Determine if we should use the new adaptive thinking API (Opus 4.6+)
-		const isOpus46 = sdkModel === "claude-opus-4-6";
-
-		// Configure thinking options based on model and reasoning parameter
+		// Configure thinking options based on reasoning parameter
+		// The Claude Agent SDK uses maxThinkingTokens (not the raw API's adaptive thinking format)
 		let thinkingOptions = {};
 		if (reasoning === "enabled") {
-			if (isOpus46) {
-				// Opus 4.6: use adaptive thinking API
-				thinkingOptions = {
-					thinking: { type: "adaptive" },
-					// Use high effort level for extended thinking
-					outputConfig: { effort: "high" },
-				};
-			} else {
-				// Older models: use deprecated maxThinkingTokens API
-				thinkingOptions = { maxThinkingTokens: 10000 };
-			}
+			thinkingOptions = { maxThinkingTokens: 10000 };
 		}
 
 		// Log prompt dispatch details for debugging
