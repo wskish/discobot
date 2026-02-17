@@ -63,7 +63,7 @@ jobs:
       matrix:
         include:
           # macOS x64 (Intel)
-          - platform: depot-macos-15
+          - platform: darrens-imba
             target: x86_64-apple-darwin
             vz-arch: amd64
           # macOS ARM64 (Apple Silicon)
