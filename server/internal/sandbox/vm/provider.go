@@ -303,7 +303,8 @@ func (p *Provider) HTTPClient(ctx context.Context, sessionID string) (*http.Clie
 
 	return &http.Client{
 		Transport: &http.Transport{
-			DialContext: pvm.PortDialer(hostPort),
+			DisableKeepAlives: true,
+			DialContext:       pvm.PortDialer(hostPort),
 		},
 	}, nil
 }

@@ -565,6 +565,7 @@ func (p *Provider) HTTPClient(_ context.Context, sessionID string) (*http.Client
 	// Create HTTP client that connects to localhost:port
 	client := &http.Client{
 		Transport: &http.Transport{
+			DisableKeepAlives: true,
 			DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
 				return (&net.Dialer{
 					Timeout:   30 * time.Second,
