@@ -13,11 +13,11 @@ import { afterEach, describe, test } from "node:test";
 import { cleanup, render } from "@testing-library/react";
 import type * as React from "react";
 import type { Workspace } from "../../lib/api-types.js";
+import { TooltipProvider } from "../ui/tooltip.js";
 import { WorkspaceDisplay } from "./workspace-display.js";
 
-// Mock TooltipProvider for testing
 function TestWrapper({ children }: { children: React.ReactNode }) {
-	return <div>{children}</div>;
+	return <TooltipProvider>{children}</TooltipProvider>;
 }
 
 describe("WorkspaceDisplay Component", () => {

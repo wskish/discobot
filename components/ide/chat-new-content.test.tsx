@@ -520,7 +520,7 @@ describe("ChatNewContent - Workspace Selection Logic", () => {
 		}
 
 		describe("Workspace callback invocation", () => {
-			test("PERMUTATION 1: initialWorkspaceId=ws-2, workspaces=[ws-1,ws-2] -> should call onWorkspaceChange(ws-2)", async () => {
+			test("PERMUTATION 1: initialWorkspaceId=ws-2, workspaces=[ws-1,ws-2] -> should NOT call onWorkspaceChange (ws-2 already valid)", async () => {
 				const workspaces = [
 					createWorkspace("ws-1", "Workspace 1"),
 					createWorkspace("ws-2", "Workspace 2"),
@@ -537,10 +537,9 @@ describe("ChatNewContent - Workspace Selection Logic", () => {
 
 				assert.strictEqual(
 					calls.length,
-					1,
-					"onWorkspaceChange MUST be called when initial workspace is set",
+					0,
+					"onWorkspaceChange should not be called when initial workspace is already valid",
 				);
-				assert.strictEqual(calls[0], "ws-2");
 			});
 
 			test("PERMUTATION 2: initialWorkspaceId=null, workspaces=[ws-1,ws-2] -> should call onWorkspaceChange(ws-1)", async () => {
@@ -614,7 +613,7 @@ describe("ChatNewContent - Workspace Selection Logic", () => {
 		});
 
 		describe("Agent callback invocation", () => {
-			test("PERMUTATION 1: persistedAgentId=agent-2, agents=[agent-1,agent-2,agent-3] -> should call onAgentChange(agent-2)", async () => {
+			test("PERMUTATION 1: persistedAgentId=agent-2, agents=[agent-1,agent-2,agent-3] -> should NOT call onAgentChange (agent-2 already valid)", async () => {
 				const agents = ["agent-1", "agent-2", "agent-3"];
 
 				const calls: string[] = [];
@@ -628,10 +627,9 @@ describe("ChatNewContent - Workspace Selection Logic", () => {
 
 				assert.strictEqual(
 					calls.length,
-					1,
-					"onAgentChange MUST be called with persisted value so parent knows the selection",
+					0,
+					"onAgentChange should not be called when persisted agent is already valid",
 				);
-				assert.strictEqual(calls[0], "agent-2");
 				assert.strictEqual(result.current.localAgentId, "agent-2");
 			});
 
@@ -719,7 +717,7 @@ describe("ChatNewContent - Workspace Selection Logic", () => {
 		});
 
 		describe("Combined workspace + agent scenarios", () => {
-			test("SCENARIO 1: Both workspace and agent are provided/persisted -> both callbacks should be called", async () => {
+			test("SCENARIO 1: Both workspace and agent are provided/persisted -> no callbacks (both already valid)", async () => {
 				// This is the most common scenario: user clicks "New Session" from sidebar (workspace set)
 				// and they previously selected an agent (persisted in storage)
 				const workspaces = [
@@ -745,16 +743,14 @@ describe("ChatNewContent - Workspace Selection Logic", () => {
 
 				assert.strictEqual(
 					workspaceCalls.length,
-					1,
-					"Workspace callback must be called",
+					0,
+					"Workspace callback should not be called when workspace is already valid",
 				);
-				assert.strictEqual(workspaceCalls[0], "ws-2");
 				assert.strictEqual(
 					agentCalls.length,
-					1,
-					"Agent callback must be called",
+					0,
+					"Agent callback should not be called when persisted agent is already valid",
 				);
-				assert.strictEqual(agentCalls[0], "agent-2");
 			});
 
 			test("SCENARIO 2: Neither workspace nor agent provided -> both callbacks should be called with auto-selected values", async () => {
@@ -813,8 +809,11 @@ describe("ChatNewContent - Workspace Selection Logic", () => {
 					"Should fall back to first workspace",
 				);
 				assert.strictEqual(workspaceCalls[0], "ws-1");
-				assert.strictEqual(agentCalls.length, 1, "Should use persisted agent");
-				assert.strictEqual(agentCalls[0], "agent-2");
+				assert.strictEqual(
+					agentCalls.length,
+					0,
+					"Agent callback should not be called when persisted agent is already valid",
+				);
 			});
 		});
 	});

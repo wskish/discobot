@@ -1,8 +1,14 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
 import { render, screen } from "@testing-library/react";
+import type * as React from "react";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import type { Session } from "@/lib/api-types";
 import { getSessionDisplayName, SessionName } from "./session-name";
+
+function TestWrapper({ children }: { children: React.ReactNode }) {
+	return <TooltipProvider>{children}</TooltipProvider>;
+}
 
 // Mock session data
 const createMockSession = (name: string, displayName?: string): Session => ({
@@ -42,7 +48,11 @@ describe("getSessionDisplayName", () => {
 describe("SessionName", () => {
 	it("should render original name when displayName is not set", () => {
 		const session = createMockSession("Original session name");
-		render(<SessionName session={session} />);
+		render(
+			<TestWrapper>
+				<SessionName session={session} />
+			</TestWrapper>,
+		);
 
 		const nameElement = screen.getByText("Original session name");
 		assert.ok(nameElement);
@@ -53,7 +63,11 @@ describe("SessionName", () => {
 			"Original session name",
 			"Custom Display Name",
 		);
-		render(<SessionName session={session} />);
+		render(
+			<TestWrapper>
+				<SessionName session={session} />
+			</TestWrapper>,
+		);
 
 		const nameElement = screen.getByText("Custom Display Name");
 		assert.ok(nameElement);
@@ -64,23 +78,26 @@ describe("SessionName", () => {
 			"Original session name",
 			"Custom Display Name",
 		);
-		render(<SessionName session={session} />);
+		const { container } = render(
+			<TestWrapper>
+				<SessionName session={session} />
+			</TestWrapper>,
+		);
 
-		// The original name should not be directly visible (it's in a tooltip)
-		const originalNameElements = screen.queryAllByText("Original session name");
-		// It might appear in tooltip, but shouldn't be the main displayed text
+		// The original name should not appear in the primary component container
+		// (it only appears in the Radix tooltip portal which renders into document.body)
 		assert.ok(
-			originalNameElements.length === 0 ||
-				originalNameElements.every(
-					(el) => el.closest('[role="tooltip"]') !== null,
-				),
+			!container.textContent?.includes("Original session name"),
+			"Original session name should not appear in the component container",
 		);
 	});
 
 	it("should apply custom className", () => {
 		const session = createMockSession("Test session");
 		const { container } = render(
-			<SessionName session={session} className="custom-class" />,
+			<TestWrapper>
+				<SessionName session={session} className="custom-class" />
+			</TestWrapper>,
 		);
 
 		const element = container.querySelector(".custom-class");
@@ -90,7 +107,9 @@ describe("SessionName", () => {
 	it("should apply custom textClassName", () => {
 		const session = createMockSession("Test session");
 		const { container } = render(
-			<SessionName session={session} textClassName="custom-text-class" />,
+			<TestWrapper>
+				<SessionName session={session} textClassName="custom-text-class" />
+			</TestWrapper>,
 		);
 
 		const element = container.querySelector(".custom-text-class");
@@ -99,7 +118,11 @@ describe("SessionName", () => {
 
 	it("should render with icon when showIcon is true", () => {
 		const session = createMockSession("Test session");
-		const { container } = render(<SessionName session={session} showIcon />);
+		const { container } = render(
+			<TestWrapper>
+				<SessionName session={session} showIcon />
+			</TestWrapper>,
+		);
 
 		// Check that there's an icon container
 		const spans = container.querySelectorAll("span");
@@ -110,7 +133,9 @@ describe("SessionName", () => {
 	it("should not render icon when showIcon is false", () => {
 		const session = createMockSession("Test session");
 		const { container } = render(
-			<SessionName session={session} showIcon={false} />,
+			<TestWrapper>
+				<SessionName session={session} showIcon={false} />
+			</TestWrapper>,
 		);
 
 		// Without icon, should have fewer span elements
@@ -122,7 +147,11 @@ describe("SessionName", () => {
 	it("should handle long names correctly", () => {
 		const longName = "A".repeat(100);
 		const session = createMockSession(longName);
-		render(<SessionName session={session} />);
+		render(
+			<TestWrapper>
+				<SessionName session={session} />
+			</TestWrapper>,
+		);
 
 		const nameElement = screen.getByText(longName);
 		assert.ok(nameElement);
@@ -131,7 +160,11 @@ describe("SessionName", () => {
 	it("should handle special characters in names", () => {
 		const specialName = "Test <>&\"' Session";
 		const session = createMockSession(specialName);
-		render(<SessionName session={session} />);
+		render(
+			<TestWrapper>
+				<SessionName session={session} />
+			</TestWrapper>,
+		);
 
 		const nameElement = screen.getByText(specialName);
 		assert.ok(nameElement);
