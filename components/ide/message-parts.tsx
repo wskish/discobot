@@ -1,5 +1,5 @@
 import type { UIMessage } from "ai";
-import { memo, useState } from "react";
+import { lazy, memo, Suspense, useState } from "react";
 import { ImageAttachment } from "@/components/ai-elements/image-attachment";
 import { MessageResponse } from "@/components/ai-elements/message";
 import {
@@ -14,6 +14,11 @@ import {
 	hasOptimizedRenderer,
 	OptimizedToolRenderer,
 } from "@/components/ai-elements/tool-renderers";
+
+const AskUserQuestionTool = lazy(
+	() =>
+		import("@/components/ai-elements/tool-renderers/ask-user-question-tool"),
+);
 
 interface MessagePartsProps {
 	/** The message containing parts to render */
@@ -39,6 +44,19 @@ function OptimizedToolWrapper({
 	const [showRaw, setShowRaw] = useState(false);
 	const isOptimized = hasOptimizedRenderer(part.toolName);
 	const title = getToolTitle(part);
+
+	// Special handling for AskUserQuestion — render inline question wizard
+	if (part.toolName === "AskUserQuestion") {
+		return (
+			<Suspense
+				fallback={
+					<div className="animate-pulse bg-muted/50 rounded-md p-4 h-24" />
+				}
+			>
+				<AskUserQuestionTool part={part} />
+			</Suspense>
+		);
+	}
 
 	return (
 		<Tool key={part.toolCallId}>

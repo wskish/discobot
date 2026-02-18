@@ -200,6 +200,19 @@ export function getToolTitle(toolPart: DynamicToolUIPart): string | undefined {
 			}
 			break;
 		}
+		case "AskUserQuestion": {
+			const questions = safeInput.questions;
+			if (Array.isArray(questions) && questions.length > 0) {
+				const first = questions[0] as Record<string, unknown>;
+				const header = typeof first.header === "string" ? first.header : null;
+				if (header) {
+					return questions.length > 1
+						? `Question: ${header} (+${questions.length - 1} more)`
+						: `Question: ${header}`;
+				}
+			}
+			return "Agent Question";
+		}
 	}
 
 	// Fallback to tool name

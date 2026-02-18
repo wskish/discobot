@@ -35,10 +35,18 @@ export const CompactMessageParts = React.memo(function CompactMessageParts({
 }: CompactMessagePartsProps) {
 	const totalParts = message.parts.length;
 
+	// Don't collapse if any part is awaiting approval (user needs to interact)
+	const hasActiveApproval = message.parts.some(
+		(part) =>
+			part.type === "dynamic-tool" && part.state === "approval-requested",
+	);
+
 	// Don't use compact view if:
 	// 1. Message is still streaming (avoid premature summary)
 	// 2. There are 0-1 parts (no benefit to compacting)
-	const shouldUseCompactView = !isStreaming && totalParts >= 2;
+	// 3. Any part needs user approval (keep it visible)
+	const shouldUseCompactView =
+		!isStreaming && !hasActiveApproval && totalParts >= 2;
 
 	// If not using compact view, render all parts normally
 	if (!shouldUseCompactView) {

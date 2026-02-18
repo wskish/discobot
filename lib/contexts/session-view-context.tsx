@@ -73,6 +73,12 @@ export interface SessionViewContextValue {
 	/** Register the chat's resumeStream function for use after commit starts */
 	registerChatResumeStream: (fn: (() => Promise<void>) | null) => void;
 
+	// Tool approval (hoisted from useChat for use in message part renderers)
+	addToolApprovalResponse: (args: { id: string; approved: boolean }) => void;
+	registerAddToolApprovalResponse: (
+		fn: ((args: { id: string; approved: boolean }) => void) | null,
+	) => void;
+
 	// Right sidebar controls (managed internally)
 	rightSidebarOpen: boolean;
 	changedFilesCount: number;
@@ -268,6 +274,25 @@ export function SessionViewProvider({
 		[],
 	);
 
+	// Tool approval — hoisted from useChat so message part renderers can call it
+	const addToolApprovalResponseRef = React.useRef<
+		((args: { id: string; approved: boolean }) => void) | null
+	>(null);
+
+	const registerAddToolApprovalResponse = React.useCallback(
+		(fn: ((args: { id: string; approved: boolean }) => void) | null) => {
+			addToolApprovalResponseRef.current = fn;
+		},
+		[],
+	);
+
+	const addToolApprovalResponse = React.useCallback(
+		(args: { id: string; approved: boolean }) => {
+			addToolApprovalResponseRef.current?.(args);
+		},
+		[],
+	);
+
 	const handleCommit = React.useCallback(async () => {
 		if (!selectedSessionId || isCommitting) return;
 
@@ -334,6 +359,8 @@ export function SessionViewProvider({
 			isCommitting,
 			handleCommit,
 			registerChatResumeStream,
+			addToolApprovalResponse,
+			registerAddToolApprovalResponse,
 			rightSidebarOpen,
 			changedFilesCount,
 			onToggleRightSidebar,
@@ -362,6 +389,8 @@ export function SessionViewProvider({
 			isCommitting,
 			handleCommit,
 			registerChatResumeStream,
+			addToolApprovalResponse,
+			registerAddToolApprovalResponse,
 			rightSidebarOpen,
 			changedFilesCount,
 			onToggleRightSidebar,

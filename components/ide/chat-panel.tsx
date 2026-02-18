@@ -19,6 +19,7 @@ import {
 	SessionStatus as SessionStatusConstants,
 } from "@/lib/api-constants";
 import { useMainContentContext } from "@/lib/contexts/main-content-context";
+import { useSessionViewContext } from "@/lib/contexts/session-view-context";
 import { useAgentModels, useSessionModels } from "@/lib/hooks/use-models";
 import { PREFERENCE_KEYS, usePreferences } from "@/lib/hooks/use-preferences";
 import { useSession } from "@/lib/hooks/use-sessions";
@@ -306,6 +307,7 @@ export function ChatPanel({
 		messages,
 		sendMessage,
 		resumeStream,
+		addToolApprovalResponse,
 		status: chatStatus,
 		error: chatError,
 	} = useChat({
@@ -338,6 +340,16 @@ export function ChatPanel({
 			onRegisterResumeStream?.(null);
 		};
 	}, [resumeStream, onRegisterResumeStream]);
+
+	// Register addToolApprovalResponse into SessionViewContext
+	// so message part renderers can call it
+	const { registerAddToolApprovalResponse } = useSessionViewContext();
+	React.useEffect(() => {
+		registerAddToolApprovalResponse(addToolApprovalResponse);
+		return () => {
+			registerAddToolApprovalResponse(null);
+		};
+	}, [addToolApprovalResponse, registerAddToolApprovalResponse]);
 
 	// Derive loading state from chat status
 	const isLoading = chatStatus === "streaming" || chatStatus === "submitted";
