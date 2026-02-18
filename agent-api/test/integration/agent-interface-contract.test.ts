@@ -12,7 +12,7 @@
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, it } from "node:test";
 import type { Agent } from "../../src/agent/interface.js";
-import type { UIMessageChunk } from "../../src/api/types.js";
+import type { ModelInfo, UIMessageChunk } from "../../src/api/types.js";
 import { getProvider } from "./agent-provider-registry.js";
 
 const PROVIDER_NAME = process.env.PROVIDER || "claude-sdk";
@@ -414,6 +414,90 @@ describe(`Agent Interface Contract: ${provider.name}`, () => {
 
 		it("updateEnvironment with empty object is safe", async () => {
 			await assert.doesNotReject(async () => await agent.updateEnvironment({}));
+		});
+	});
+
+	// ==========================================================================
+	// MODEL LISTING
+	// ==========================================================================
+
+	describe("Model Listing", () => {
+		beforeEach(async () => {
+			await agent.connect();
+		});
+
+		it("listModels returns an array", async () => {
+			const models = await agent.listModels();
+			assert.ok(Array.isArray(models));
+		});
+
+		it("listModels returns non-empty list", async () => {
+			const models = await agent.listModels();
+			assert.ok(models.length > 0, "Should return at least one model");
+		});
+
+		it("models have required fields", async () => {
+			const models = await agent.listModels();
+
+			for (const model of models) {
+				assert.ok(typeof model.id === "string", "id should be a string");
+				assert.ok(model.id.length > 0, "id should not be empty");
+				assert.ok(
+					typeof model.display_name === "string",
+					"display_name should be a string",
+				);
+				assert.ok(
+					model.display_name.length > 0,
+					"display_name should not be empty",
+				);
+				assert.ok(
+					typeof model.provider === "string",
+					"provider should be a string",
+				);
+				assert.ok(model.provider.length > 0, "provider should not be empty");
+				assert.ok(
+					typeof model.created_at === "string",
+					"created_at should be a string",
+				);
+				assert.ok(typeof model.type === "string", "type should be a string");
+				assert.ok(
+					typeof model.reasoning === "boolean",
+					"reasoning should be a boolean",
+				);
+			}
+		});
+
+		it("model IDs include provider prefix", async () => {
+			const models = await agent.listModels();
+
+			for (const model of models) {
+				assert.ok(
+					model.id.includes(":"),
+					`Model ID "${model.id}" should include a provider prefix (e.g. "anthropic:")`,
+				);
+			}
+		});
+
+		it("returns consistent results on repeated calls", async () => {
+			const models1 = await agent.listModels();
+			const models2 = await agent.listModels();
+
+			assert.equal(
+				models1.length,
+				models2.length,
+				"Should return the same number of models",
+			);
+
+			const ids1 = models1.map((m: ModelInfo) => m.id).sort();
+			const ids2 = models2.map((m: ModelInfo) => m.id).sort();
+			assert.deepEqual(ids1, ids2, "Should return the same model IDs");
+		});
+
+		it("does not require a session", async () => {
+			// listModels should work without creating a session first
+			const models = await agent.listModels();
+			assert.ok(Array.isArray(models));
+			assert.ok(models.length > 0);
 		});
 	});
 
