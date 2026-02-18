@@ -62,27 +62,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # macOS x64 (Intel)
-          - platform: darrens-imba
-            target: x86_64-apple-darwin
-            vz-arch: amd64
           # macOS ARM64 (Apple Silicon)
           - platform: depot-macos-15
             target: aarch64-apple-darwin
             vz-arch: arm64
-          # Windows x64
-          - platform: depot-windows-latest
-            target: x86_64-pc-windows-msvc
-          # Windows ARM64 (GitHub native runner - no Depot ARM64 Windows)
-          - platform: windows-11-arm
-            target: aarch64-pc-windows-msvc
-          # Linux x64
-          - platform: depot-ubuntu-24.04
-            target: x86_64-unknown-linux-gnu
-          # Linux ARM64 (skip AppImage - linuxdeploy issues on ARM64)
-          - platform: depot-ubuntu-24.04-arm
-            target: aarch64-unknown-linux-gnu
-            bundles: deb,rpm
 
     runs-on: ${{ matrix.platform }}
 
@@ -110,14 +93,6 @@ jobs:
         uses: actions/setup-go@v6
         with:
           go-version: '1.25'
-
-      # Linux dependencies
-      - name: Install Linux dependencies
-        if: contains(matrix.platform, 'ubuntu')
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf \
-            xdg-utils desktop-file-utils libglib2.0-bin fakeroot rpm
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
