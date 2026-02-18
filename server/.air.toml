@@ -5,14 +5,14 @@ tmp_dir = "build"
 [build]
   args_bin = []
   entrypoint = "./build/discobot"
-  cmd = "go build -o ./build/discobot ./cmd/server && if [ \"$(uname)\" = \"Darwin\" ]; then codesign --entitlements discobot-server.entitlements --force --sign - ./build/discobot; fi"
+  cmd = "go build -gcflags=\"all=-N -l\" -o ./build/discobot ./cmd/server && if [ \"$(uname)\" = \"Darwin\" ]; then codesign --entitlements discobot-server.entitlements --force --sign - ./build/discobot; fi"
   delay = 1000
   exclude_dir = ["assets", "buid", "vendor", "testdata", "node_modules", "workspaces"]
   exclude_file = []
   exclude_regex = ["_test.go"]
   exclude_unchanged = false
   follow_symlink = false
-  full_bin = ""
+  full_bin = "go tool dlv exec --headless --continue --listen=:2345 --api-version=2 --accept-multiclient --log ./build/discobot"
   include_dir = []
   include_ext = ["go", "tpl", "tmpl", "html", "sql"]
   include_file = [".env"]
