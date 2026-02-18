@@ -53,6 +53,7 @@ type Config struct {
 	// Sandbox runtime settings
 	SandboxImage       string        // Default sandbox image
 	SandboxIdleTimeout time.Duration // Auto-stop sandboxes after idle period
+	IdleCheckInterval  time.Duration // How often to check for idle sessions
 
 	// Docker-specific settings
 	DockerHost    string // Docker socket/host (default: unix:///var/run/docker.sock)
@@ -166,6 +167,7 @@ func Load() (*Config, error) {
 	// Sandbox runtime settings
 	cfg.SandboxImage = getEnv("SANDBOX_IMAGE", DefaultSandboxImage())
 	cfg.SandboxIdleTimeout = getEnvDuration("SANDBOX_IDLE_TIMEOUT", 30*time.Minute)
+	cfg.IdleCheckInterval = getEnvDuration("IDLE_CHECK_INTERVAL", 5*time.Minute)
 
 	// Docker-specific settings
 	// Empty default lets the Docker SDK auto-detect (works on Linux, macOS, and Windows)

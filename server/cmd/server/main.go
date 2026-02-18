@@ -259,6 +259,7 @@ func main() {
 	var disp *dispatcher.Service
 	var sessionSvc *service.SessionService
 	var dispSandboxSvc *service.SandboxService
+	var sandboxIdleMonitor *service.SandboxIdleMonitor
 	if cfg.DispatcherEnabled {
 		disp = dispatcher.NewService(s, cfg, eventBroker)
 
@@ -284,6 +285,21 @@ func main() {
 
 		disp.Start(context.Background())
 		log.Printf("Job dispatcher started (server ID: %s)", disp.ServerID())
+
+		// Start sandbox idle monitor to auto-stop idle sessions
+		if sandboxProvider != nil && sessionSvc != nil && cfg.SandboxIdleTimeout > 0 {
+			sandboxIdleMonitor = service.NewSandboxIdleMonitor(
+				s,
+				dispSandboxSvc,
+				sessionSvc,
+				slog.Default(),
+				cfg.SandboxIdleTimeout,
+				cfg.IdleCheckInterval,
+			)
+			sandboxIdleMonitor.Start(context.Background())
+			log.Printf("Sandbox idle monitor started (timeout: %s, check interval: %s)",
+				cfg.SandboxIdleTimeout, cfg.IdleCheckInterval)
+		}
 
 		// Start all reconciliation in background after dispatcher is ready
 		// This ensures all reconciliation can properly enqueue jobs if needed
@@ -1423,6 +1439,15 @@ func main() {
 		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
 		if err := sessionStatusPoller.Shutdown(shutdownCtx); err != nil {
 			log.Printf("Warning: failed to stop session status poller: %v", err)
+		}
+		shutdownCancel()
+	}
+
+	// Stop sandbox idle monitor
+	if sandboxIdleMonitor != nil {
+		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
+		if err := sandboxIdleMonitor.Shutdown(shutdownCtx); err != nil {
+			log.Printf("Warning: failed to stop sandbox idle monitor: %v", err)
 		}
 		shutdownCancel()
 	}

@@ -22,16 +22,22 @@ type SessionInitializer interface {
 // It removes the need to pass sessionID on every call and automatically
 // reconciles the sandbox on unavailability errors.
 type SessionClient struct {
-	sessionID  string
-	inner      *SandboxChatClient
-	sandboxSvc *SandboxService
+	sessionID       string
+	inner           *SandboxChatClient
+	sandboxSvc      *SandboxService
+	activityTracker func(string)
 }
 
 // withReconciliation wraps a sandbox operation with error handling that
 // triggers reconciliation on sandbox unavailable errors, then retries once.
+// On successful operations, it records activity for idle timeout tracking.
 func withReconciliation[T any](ctx context.Context, c *SessionClient, operation func() (T, error)) (T, error) {
 	result, err := operation()
 	if err == nil {
+		// Record activity on successful operation
+		if c.activityTracker != nil {
+			c.activityTracker(c.sessionID)
+		}
 		return result, nil
 	}
 
@@ -43,7 +49,13 @@ func withReconciliation[T any](ctx context.Context, c *SessionClient, operation 
 			return zero, fmt.Errorf("sandbox unavailable and failed to reconcile: %w", reconcileErr)
 		}
 
-		return operation()
+		// Retry the operation after reconciliation
+		result, err = operation()
+		if err == nil && c.activityTracker != nil {
+			// Record activity on successful retry
+			c.activityTracker(c.sessionID)
+		}
+		return result, err
 	}
 
 	var zero T

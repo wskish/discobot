@@ -18,7 +18,8 @@ import (
 // Only Get, GetSecret, and HTTPClient are used by SandboxChatClient.
 type mockSandboxProvider struct {
 	secret  string
-	handler http.Handler // Handler for HTTPClient to use
+	handler http.Handler           // Handler for HTTPClient to use
+	onStop  func(sessionID string) // Callback when Stop is called
 }
 
 func (m *mockSandboxProvider) ImageExists(_ context.Context) bool {
@@ -43,7 +44,10 @@ func (m *mockSandboxProvider) Start(_ context.Context, _ string) error {
 	return nil
 }
 
-func (m *mockSandboxProvider) Stop(_ context.Context, _ string, _ time.Duration) error {
+func (m *mockSandboxProvider) Stop(_ context.Context, sessionID string, _ time.Duration) error {
+	if m.onStop != nil {
+		m.onStop(sessionID)
+	}
 	return nil
 }
 

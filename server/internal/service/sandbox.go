@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"sync"
 	"time"
 
 	"github.com/obot-platform/discobot/server/internal/config"
@@ -26,6 +27,10 @@ type SandboxService struct {
 	eventBroker        *events.Broker
 	jobEnqueuer        JobEnqueuer
 	sessionInitializer SessionInitializer
+
+	// Activity tracking for idle timeout
+	lastActivityMap map[string]time.Time
+	lastActivityMu  sync.RWMutex
 }
 
 // NewSandboxService creates a new sandbox service.
@@ -37,6 +42,7 @@ func NewSandboxService(s *store.Store, p sandbox.Provider, cfg *config.Config, c
 		credentialFetcher: credFetcher,
 		eventBroker:       eventBroker,
 		jobEnqueuer:       jobEnqueuer,
+		lastActivityMap:   make(map[string]time.Time),
 	}
 }
 
@@ -53,9 +59,10 @@ func (s *SandboxService) GetClient(ctx context.Context, sessionID string) (*Sess
 
 	inner := NewSandboxChatClient(s.provider, s.credentialFetcher)
 	return &SessionClient{
-		sessionID:  sessionID,
-		inner:      inner,
-		sandboxSvc: s,
+		sessionID:       sessionID,
+		inner:           inner,
+		sandboxSvc:      s,
+		activityTracker: s.RecordActivity,
 	}, nil
 }
 
@@ -539,4 +546,20 @@ func (s *SandboxService) GetEndpoint(ctx context.Context, sessionID string) (*Sa
 		Port:   port,
 		Secret: secret,
 	}, nil
+}
+
+// RecordActivity updates the last activity time for a session.
+// This is called automatically by SessionClient on successful operations.
+func (s *SandboxService) RecordActivity(sessionID string) {
+	s.lastActivityMu.Lock()
+	s.lastActivityMap[sessionID] = time.Now()
+	s.lastActivityMu.Unlock()
+}
+
+// GetLastActivity returns the last activity time for a session.
+// Returns zero time if the session has no recorded activity.
+func (s *SandboxService) GetLastActivity(sessionID string) time.Time {
+	s.lastActivityMu.RLock()
+	defer s.lastActivityMu.RUnlock()
+	return s.lastActivityMap[sessionID]
 }
