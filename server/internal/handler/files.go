@@ -264,6 +264,90 @@ func (h *Handler) WriteSessionFile(w http.ResponseWriter, r *http.Request) {
 	h.JSON(w, http.StatusOK, result)
 }
 
+// DeleteSessionFile deletes a file or directory in a session's workspace.
+// POST /api/projects/{projectId}/sessions/{sessionId}/files/delete
+func (h *Handler) DeleteSessionFile(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	projectID := middleware.GetProjectID(ctx)
+	sessionID := chi.URLParam(r, "sessionId")
+
+	if sessionID == "" {
+		h.Error(w, http.StatusBadRequest, "sessionId is required")
+		return
+	}
+
+	var req sandboxapi.DeleteFileRequest
+	if err := h.DecodeJSON(r, &req); err != nil {
+		h.Error(w, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+
+	if req.Path == "" {
+		h.Error(w, http.StatusBadRequest, "path is required")
+		return
+	}
+
+	result, err := h.chatService.DeleteFile(ctx, projectID, sessionID, &req)
+	if err != nil {
+		status := http.StatusInternalServerError
+		if strings.Contains(err.Error(), "not found") {
+			status = http.StatusNotFound
+		} else if strings.Contains(err.Error(), "Invalid path") {
+			status = http.StatusBadRequest
+		} else if strings.Contains(err.Error(), "Permission denied") {
+			status = http.StatusForbidden
+		}
+		h.Error(w, status, err.Error())
+		return
+	}
+
+	h.JSON(w, http.StatusOK, result)
+}
+
+// RenameSessionFile renames/moves a file or directory in a session's workspace.
+// POST /api/projects/{projectId}/sessions/{sessionId}/files/rename
+func (h *Handler) RenameSessionFile(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	projectID := middleware.GetProjectID(ctx)
+	sessionID := chi.URLParam(r, "sessionId")
+
+	if sessionID == "" {
+		h.Error(w, http.StatusBadRequest, "sessionId is required")
+		return
+	}
+
+	var req sandboxapi.RenameFileRequest
+	if err := h.DecodeJSON(r, &req); err != nil {
+		h.Error(w, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+
+	if req.OldPath == "" {
+		h.Error(w, http.StatusBadRequest, "oldPath is required")
+		return
+	}
+	if req.NewPath == "" {
+		h.Error(w, http.StatusBadRequest, "newPath is required")
+		return
+	}
+
+	result, err := h.chatService.RenameFile(ctx, projectID, sessionID, &req)
+	if err != nil {
+		status := http.StatusInternalServerError
+		if strings.Contains(err.Error(), "not found") {
+			status = http.StatusNotFound
+		} else if strings.Contains(err.Error(), "Invalid path") || strings.Contains(err.Error(), "Invalid source path") || strings.Contains(err.Error(), "Invalid destination path") {
+			status = http.StatusBadRequest
+		} else if strings.Contains(err.Error(), "Permission denied") {
+			status = http.StatusForbidden
+		}
+		h.Error(w, status, err.Error())
+		return
+	}
+
+	h.JSON(w, http.StatusOK, result)
+}
+
 // GetSessionDiff returns diff information for a session's workspace.
 // GET /api/projects/{projectId}/sessions/{sessionId}/diff?format=files&path=...
 func (h *Handler) GetSessionDiff(w http.ResponseWriter, r *http.Request) {

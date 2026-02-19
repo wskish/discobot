@@ -144,6 +144,29 @@ type WriteFileResponse struct {
 	Size int64  `json:"size"`
 }
 
+// DeleteFileRequest is the POST /files/delete request body.
+type DeleteFileRequest struct {
+	Path string `json:"path"`
+}
+
+// DeleteFileResponse is the POST /files/delete response.
+type DeleteFileResponse struct {
+	Path string `json:"path"`
+	Type string `json:"type"` // "file" or "directory"
+}
+
+// RenameFileRequest is the POST /files/rename request body.
+type RenameFileRequest struct {
+	OldPath string `json:"oldPath"`
+	NewPath string `json:"newPath"`
+}
+
+// RenameFileResponse is the POST /files/rename response.
+type RenameFileResponse struct {
+	OldPath string `json:"oldPath"`
+	NewPath string `json:"newPath"`
+}
+
 // FileDiffEntry represents a single changed file in the diff.
 type FileDiffEntry struct {
 	Path      string `json:"path"`

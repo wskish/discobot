@@ -146,6 +146,20 @@ func (c *SessionClient) WriteFile(ctx context.Context, req *sandboxapi.WriteFile
 	})
 }
 
+// DeleteFile deletes a file or directory in the sandbox.
+func (c *SessionClient) DeleteFile(ctx context.Context, req *sandboxapi.DeleteFileRequest) (*sandboxapi.DeleteFileResponse, error) {
+	return withReconciliation(ctx, c, func() (*sandboxapi.DeleteFileResponse, error) {
+		return c.inner.DeleteFile(ctx, c.sessionID, req)
+	})
+}
+
+// RenameFile renames/moves a file or directory in the sandbox.
+func (c *SessionClient) RenameFile(ctx context.Context, req *sandboxapi.RenameFileRequest) (*sandboxapi.RenameFileResponse, error) {
+	return withReconciliation(ctx, c, func() (*sandboxapi.RenameFileResponse, error) {
+		return c.inner.RenameFile(ctx, c.sessionID, req)
+	})
+}
+
 // GetDiff retrieves diff information from the sandbox.
 func (c *SessionClient) GetDiff(ctx context.Context, path, format string) (any, error) {
 	return withReconciliation(ctx, c, func() (any, error) {

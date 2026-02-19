@@ -465,6 +465,38 @@ func (c *ChatService) WriteFile(ctx context.Context, projectID, sessionID string
 	return client.WriteFile(ctx, req)
 }
 
+// DeleteFile deletes a file or directory in the sandbox.
+// The sandbox is automatically reconciled if not running.
+func (c *ChatService) DeleteFile(ctx context.Context, projectID, sessionID string, req *sandboxapi.DeleteFileRequest) (*sandboxapi.DeleteFileResponse, error) {
+	if _, err := c.GetSession(ctx, projectID, sessionID); err != nil {
+		return nil, err
+	}
+	if c.sandboxService == nil {
+		return nil, fmt.Errorf("sandbox provider not available")
+	}
+	client, err := c.sandboxService.GetClient(ctx, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	return client.DeleteFile(ctx, req)
+}
+
+// RenameFile renames/moves a file or directory in the sandbox.
+// The sandbox is automatically reconciled if not running.
+func (c *ChatService) RenameFile(ctx context.Context, projectID, sessionID string, req *sandboxapi.RenameFileRequest) (*sandboxapi.RenameFileResponse, error) {
+	if _, err := c.GetSession(ctx, projectID, sessionID); err != nil {
+		return nil, err
+	}
+	if c.sandboxService == nil {
+		return nil, fmt.Errorf("sandbox provider not available")
+	}
+	client, err := c.sandboxService.GetClient(ctx, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	return client.RenameFile(ctx, req)
+}
+
 // GetDiff retrieves diff information from the sandbox.
 // If path is non-empty, returns a single file diff.
 // If format is "files", returns just file paths.

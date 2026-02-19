@@ -9,6 +9,8 @@ import type {
 	ClearSessionResponse,
 	CommitsErrorResponse,
 	CommitsResponse,
+	DeleteFileRequest,
+	DeleteFileResponse,
 	DiffFilesResponse,
 	DiffResponse,
 	ErrorResponse,
@@ -18,6 +20,8 @@ import type {
 	ListServicesResponse,
 	ModelsResponse,
 	ReadFileResponse,
+	RenameFileRequest,
+	RenameFileResponse,
 	RootResponse,
 	ServiceAlreadyRunningResponse,
 	ServiceIsPassiveResponse,
@@ -59,10 +63,12 @@ import {
 	tryStartCompletion,
 } from "./completion.js";
 import {
+	deleteFile,
 	getDiff,
 	isFileError,
 	listDirectory,
 	readFile,
+	renameFile,
 	writeFile,
 } from "./files.js";
 
@@ -454,6 +460,45 @@ export function createApp(options: AppOptions) {
 			return c.json<ErrorResponse>({ error: result.error }, result.status);
 		}
 		return c.json<WriteFileResponse>(result);
+	});
+
+	// POST /files/delete - Delete a file or directory
+	app.post("/files/delete", async (c) => {
+		const body = await c.req.json<DeleteFileRequest>();
+
+		if (!body.path) {
+			return c.json<ErrorResponse>({ error: "path is required" }, 400);
+		}
+
+		const result = await deleteFile(body.path, {
+			workspaceRoot: options.agentCwd,
+		});
+
+		if (isFileError(result)) {
+			return c.json<ErrorResponse>({ error: result.error }, result.status);
+		}
+		return c.json<DeleteFileResponse>(result);
+	});
+
+	// POST /files/rename - Rename/move a file or directory
+	app.post("/files/rename", async (c) => {
+		const body = await c.req.json<RenameFileRequest>();
+
+		if (!body.oldPath) {
+			return c.json<ErrorResponse>({ error: "oldPath is required" }, 400);
+		}
+		if (!body.newPath) {
+			return c.json<ErrorResponse>({ error: "newPath is required" }, 400);
+		}
+
+		const result = await renameFile(body.oldPath, body.newPath, {
+			workspaceRoot: options.agentCwd,
+		});
+
+		if (isFileError(result)) {
+			return c.json<ErrorResponse>({ error: result.error }, result.status);
+		}
+		return c.json<RenameFileResponse>(result);
 	});
 
 	// GET /diff - Get session diff

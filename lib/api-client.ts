@@ -26,6 +26,8 @@ import type {
 	CreateCredentialRequest,
 	CreateWorkspaceRequest,
 	CredentialInfo,
+	DeleteSessionFileRequest,
+	DeleteSessionFileResponse,
 	GitHubCopilotDeviceCodeRequest,
 	GitHubCopilotDeviceCodeResponse,
 	GitHubCopilotPollRequest,
@@ -44,6 +46,8 @@ import type {
 	ProviderStatus,
 	ProvidersResponse,
 	ReadSessionFileResponse,
+	RenameSessionFileRequest,
+	RenameSessionFileResponse,
 	ServerConfig,
 	Session,
 	SessionDiffFilesResponse,
@@ -275,6 +279,42 @@ class ApiClient {
 		}
 
 		return result;
+	}
+
+	/**
+	 * Delete a file or directory in a session's workspace.
+	 * @param sessionId Session ID
+	 * @param data Delete request with file path
+	 */
+	async deleteSessionFile(
+		sessionId: string,
+		data: DeleteSessionFileRequest,
+	): Promise<DeleteSessionFileResponse> {
+		return this.fetch<DeleteSessionFileResponse>(
+			`/sessions/${sessionId}/files/delete`,
+			{
+				method: "POST",
+				body: JSON.stringify(data),
+			},
+		);
+	}
+
+	/**
+	 * Rename/move a file or directory in a session's workspace.
+	 * @param sessionId Session ID
+	 * @param data Rename request with old and new paths
+	 */
+	async renameSessionFile(
+		sessionId: string,
+		data: RenameSessionFileRequest,
+	): Promise<RenameSessionFileResponse> {
+		return this.fetch<RenameSessionFileResponse>(
+			`/sessions/${sessionId}/files/rename`,
+			{
+				method: "POST",
+				body: JSON.stringify(data),
+			},
+		);
 	}
 
 	/**

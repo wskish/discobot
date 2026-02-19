@@ -975,6 +975,34 @@ func main() {
 				})
 
 				sessReg.Register(r, routes.Route{
+					Method: "POST", Pattern: "/{sessionId}/files/delete",
+					Handler: h.DeleteSessionFile,
+					Meta: routes.Meta{
+						Group:       "Files",
+						Description: "Delete session file or directory",
+						Params: []routes.Param{
+							{Name: "projectId", Example: "local"},
+							{Name: "sessionId", Example: "abc123"},
+						},
+						Body: map[string]any{"path": "old-file.txt"},
+					},
+				})
+
+				sessReg.Register(r, routes.Route{
+					Method: "POST", Pattern: "/{sessionId}/files/rename",
+					Handler: h.RenameSessionFile,
+					Meta: routes.Meta{
+						Group:       "Files",
+						Description: "Rename/move session file or directory",
+						Params: []routes.Param{
+							{Name: "projectId", Example: "local"},
+							{Name: "sessionId", Example: "abc123"},
+						},
+						Body: map[string]any{"oldPath": "old-name.txt", "newPath": "new-name.txt"},
+					},
+				})
+
+				sessReg.Register(r, routes.Route{
 					Method: "GET", Pattern: "/{sessionId}/diff",
 					Handler: h.GetSessionDiff,
 					Meta: routes.Meta{

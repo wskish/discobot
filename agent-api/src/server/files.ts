@@ -9,14 +9,17 @@ import { exec } from "node:child_process";
 import {
 	access,
 	readFile as fsReadFile,
+	rename as fsRename,
 	writeFile as fsWriteFile,
 	mkdir,
 	readdir,
+	rm,
 	stat,
 } from "node:fs/promises";
 import { dirname, extname, join, relative, resolve } from "node:path";
 import { promisify } from "node:util";
 import type {
+	DeleteFileResponse,
 	DiffFilesResponse,
 	DiffResponse,
 	DiffStats,
@@ -24,6 +27,7 @@ import type {
 	FileEntry,
 	ListFilesResponse,
 	ReadFileResponse,
+	RenameFileResponse,
 	SingleFileDiffResponse,
 	WriteFileResponse,
 } from "../api/types.js";
@@ -434,6 +438,108 @@ export async function writeFile(
 			size: buffer.length,
 		};
 	} catch (err) {
+		if ((err as NodeJS.ErrnoException).code === "EACCES") {
+			return { error: "Permission denied", status: 403 };
+		}
+		throw err;
+	}
+}
+
+// ============================================================================
+// File Deletion
+// ============================================================================
+
+export interface DeleteOptions {
+	workspaceRoot: string;
+}
+
+/**
+ * Deletes a file or directory.
+ *
+ * @param path - Path relative to workspace root
+ * @param options - Delete options including workspace root
+ * @returns Delete result or error
+ */
+export async function deleteFile(
+	path: string,
+	options: DeleteOptions,
+): Promise<FileResult<DeleteFileResponse>> {
+	const resolved = validatePath(path, options.workspaceRoot);
+	if (!resolved) {
+		return { error: "Invalid path", status: 400 };
+	}
+
+	// Prevent deleting the workspace root
+	if (resolved === options.workspaceRoot) {
+		return { error: "Cannot delete workspace root", status: 400 };
+	}
+
+	try {
+		const stats = await stat(resolved);
+		const type = stats.isDirectory() ? "directory" : "file";
+
+		await rm(resolved, { recursive: true });
+
+		const relativePath = relative(options.workspaceRoot, resolved);
+		return { path: relativePath, type };
+	} catch (err) {
+		if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+			return { error: "File not found", status: 404 };
+		}
+		if ((err as NodeJS.ErrnoException).code === "EACCES") {
+			return { error: "Permission denied", status: 403 };
+		}
+		throw err;
+	}
+}
+
+// ============================================================================
+// File Renaming
+// ============================================================================
+
+export interface RenameOptions {
+	workspaceRoot: string;
+}
+
+/**
+ * Renames (moves) a file or directory.
+ *
+ * @param oldPath - Current path relative to workspace root
+ * @param newPath - New path relative to workspace root
+ * @param options - Rename options including workspace root
+ * @returns Rename result or error
+ */
+export async function renameFile(
+	oldPath: string,
+	newPath: string,
+	options: RenameOptions,
+): Promise<FileResult<RenameFileResponse>> {
+	const resolvedOld = validatePath(oldPath, options.workspaceRoot);
+	if (!resolvedOld) {
+		return { error: "Invalid source path", status: 400 };
+	}
+
+	const resolvedNew = validatePath(newPath, options.workspaceRoot);
+	if (!resolvedNew) {
+		return { error: "Invalid destination path", status: 400 };
+	}
+
+	try {
+		// Verify source exists
+		await stat(resolvedOld);
+
+		// Ensure parent directory of destination exists
+		await mkdir(dirname(resolvedNew), { recursive: true });
+
+		await fsRename(resolvedOld, resolvedNew);
+
+		const relativeOld = relative(options.workspaceRoot, resolvedOld);
+		const relativeNew = relative(options.workspaceRoot, resolvedNew);
+		return { oldPath: relativeOld, newPath: relativeNew };
+	} catch (err) {
+		if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+			return { error: "File not found", status: 404 };
+		}
 		if ((err as NodeJS.ErrnoException).code === "EACCES") {
 			return { error: "Permission denied", status: 403 };
 		}

@@ -1,4 +1,5 @@
 import {
+	Check,
 	ChevronDown,
 	ChevronRight,
 	ChevronsDownUp,
@@ -13,11 +14,22 @@ import {
 	FolderOpen,
 	FolderPlus,
 	Loader2,
+	Pencil,
+	Trash2,
+	X,
 } from "lucide-react";
 import * as React from "react";
 import { Button } from "@/components/ui/button";
+import {
+	ContextMenu,
+	ContextMenuContent,
+	ContextMenuItem,
+	ContextMenuTrigger,
+} from "@/components/ui/context-menu";
+import { api } from "@/lib/api-client";
 import type { FileStatus, SessionDiffFileEntry } from "@/lib/api-types";
 import {
+	invalidateSessionFiles,
 	type LazyFileNode,
 	useSessionFiles,
 } from "@/lib/hooks/use-session-files";
@@ -79,6 +91,7 @@ export function FilePanel({
 		expandAll,
 		collapseAll,
 		isPathLoading,
+		refresh,
 	} = useSessionFiles(sessionId, !showChangedOnly);
 
 	// Filter to show only changed files when in "Changed" mode
@@ -152,6 +165,13 @@ export function FilePanel({
 		}
 		return hasDir(filteredFiles);
 	}, [filteredFiles]);
+
+	const handleRefresh = React.useCallback(() => {
+		if (sessionId) {
+			invalidateSessionFiles(sessionId);
+			refresh();
+		}
+	}, [sessionId, refresh]);
 
 	if (!sessionId) {
 		return (
@@ -229,6 +249,8 @@ export function FilePanel({
 							selectedFilePath={selectedFilePath}
 							isPathLoading={isPathLoading}
 							diffEntries={diffEntries}
+							sessionId={sessionId}
+							onRefresh={handleRefresh}
 						/>
 					))
 				)}
@@ -310,6 +332,8 @@ function FileTreeNode({
 	selectedFilePath,
 	isPathLoading,
 	diffEntries,
+	sessionId,
+	onRefresh,
 }: {
 	node: LazyFileNode;
 	depth: number;
@@ -319,8 +343,21 @@ function FileTreeNode({
 	selectedFilePath: string | null;
 	isPathLoading: (path: string) => boolean;
 	diffEntries: SessionDiffFileEntry[];
+	sessionId: string;
+	onRefresh: () => void;
 }) {
 	const isFolder = node.type === "directory";
+	const [isRenaming, setIsRenaming] = React.useState(false);
+	const [editedName, setEditedName] = React.useState("");
+	const inputRef = React.useRef<HTMLInputElement>(null);
+
+	// Focus input when entering rename mode
+	React.useEffect(() => {
+		if (isRenaming && inputRef.current) {
+			inputRef.current.focus();
+			inputRef.current.select();
+		}
+	}, [isRenaming]);
 
 	// Calculate collapsed folder info for directories
 	const { displayName, finalNode, collapsedPaths } = isFolder
@@ -339,6 +376,7 @@ function FileTreeNode({
 		: undefined;
 
 	const handleClick = () => {
+		if (isRenaming) return;
 		if (isFolder) {
 			// Toggle all collapsed paths together
 			for (const path of collapsedPaths) {
@@ -353,10 +391,64 @@ function FileTreeNode({
 		}
 	};
 
+	const startRename = () => {
+		setEditedName(node.name);
+		setIsRenaming(true);
+	};
+
+	const cancelRename = () => {
+		setIsRenaming(false);
+		setEditedName("");
+	};
+
+	const saveRename = async () => {
+		const trimmed = editedName.trim();
+		if (!trimmed || trimmed === node.name) {
+			cancelRename();
+			return;
+		}
+
+		// Calculate new path by replacing the last segment
+		const parentPath = node.path.includes("/")
+			? node.path.substring(0, node.path.lastIndexOf("/"))
+			: "";
+		const newPath = parentPath ? `${parentPath}/${trimmed}` : trimmed;
+
+		try {
+			await api.renameSessionFile(sessionId, {
+				oldPath: node.path,
+				newPath,
+			});
+			onRefresh();
+		} catch {
+			// Rename failed — stay in rename mode so user can fix the name
+		}
+		setIsRenaming(false);
+	};
+
+	const handleRenameKeyDown = (e: React.KeyboardEvent) => {
+		if (e.key === "Enter") {
+			e.preventDefault();
+			saveRename();
+		} else if (e.key === "Escape") {
+			e.preventDefault();
+			cancelRename();
+		}
+	};
+
+	const handleDelete = async () => {
+		try {
+			await api.deleteSessionFile(sessionId, { path: node.path });
+			onRefresh();
+		} catch {
+			// Delete failed silently
+		}
+	};
+
 	// Use the final node's children for rendering
 	const childrenToRender = finalNode.children;
 
-	return (
+	const nodeContent = (
 		<div>
 			<button
 				type="button"
@@ -421,37 +513,91 @@ function FileTreeNode({
 						)}
 					</>
 				)}
-				<span
-					className={cn(
-						"truncate",
-						(node.status === "deleted" || folderStatus === "deleted") &&
-							"line-through text-muted-foreground",
-					)}
-				>
-					{displayName}
-				</span>
-				{/* File status badges */}
-				{!isFolder && node.status === "added" && (
-					<span className="ml-auto text-xs text-green-500 font-medium">A</span>
-				)}
-				{!isFolder && node.status === "modified" && (
-					<span className="ml-auto text-xs text-yellow-500 font-medium">M</span>
-				)}
-				{!isFolder && node.status === "deleted" && (
-					<span className="ml-auto text-xs text-red-500 font-medium">D</span>
-				)}
-				{!isFolder && node.status === "renamed" && (
-					<span className="ml-auto text-xs text-purple-500 font-medium">R</span>
-				)}
-				{/* Folder status badges */}
-				{isFolder && folderStatus === "added" && (
-					<span className="ml-auto text-xs text-green-500 font-medium">A</span>
-				)}
-				{isFolder && folderStatus === "modified" && (
-					<span className="ml-auto text-xs text-yellow-500 font-medium">M</span>
-				)}
-				{isFolder && folderStatus === "deleted" && (
-					<span className="ml-auto text-xs text-red-500 font-medium">D</span>
+				{isRenaming ? (
+					<>
+						<input
+							ref={inputRef}
+							type="text"
+							value={editedName}
+							onChange={(e) => setEditedName(e.target.value)}
+							onClick={(e) => e.stopPropagation()}
+							onKeyDown={(e) => {
+								e.stopPropagation();
+								handleRenameKeyDown(e);
+							}}
+							onBlur={saveRename}
+							className="flex-1 min-w-0 px-1 py-0 text-sm bg-background border border-border rounded focus:outline-none focus:ring-1 focus:ring-ring"
+						/>
+						<button
+							type="button"
+							onClick={(e) => {
+								e.stopPropagation();
+								saveRename();
+							}}
+							className="p-0.5 hover:bg-muted rounded"
+						>
+							<Check className="h-3 w-3" />
+						</button>
+						<button
+							type="button"
+							onClick={(e) => {
+								e.stopPropagation();
+								cancelRename();
+							}}
+							className="p-0.5 hover:bg-muted rounded"
+						>
+							<X className="h-3 w-3" />
+						</button>
+					</>
+				) : (
+					<>
+						<span
+							className={cn(
+								"truncate",
+								(node.status === "deleted" || folderStatus === "deleted") &&
+									"line-through text-muted-foreground",
+							)}
+						>
+							{displayName}
+						</span>
+						{/* File status badges */}
+						{!isFolder && node.status === "added" && (
+							<span className="ml-auto text-xs text-green-500 font-medium">
+								A
+							</span>
+						)}
+						{!isFolder && node.status === "modified" && (
+							<span className="ml-auto text-xs text-yellow-500 font-medium">
+								M
+							</span>
+						)}
+						{!isFolder && node.status === "deleted" && (
+							<span className="ml-auto text-xs text-red-500 font-medium">
+								D
+							</span>
+						)}
+						{!isFolder && node.status === "renamed" && (
+							<span className="ml-auto text-xs text-purple-500 font-medium">
+								R
+							</span>
+						)}
+						{/* Folder status badges */}
+						{isFolder && folderStatus === "added" && (
+							<span className="ml-auto text-xs text-green-500 font-medium">
+								A
+							</span>
+						)}
+						{isFolder && folderStatus === "modified" && (
+							<span className="ml-auto text-xs text-yellow-500 font-medium">
+								M
+							</span>
+						)}
+						{isFolder && folderStatus === "deleted" && (
+							<span className="ml-auto text-xs text-red-500 font-medium">
+								D
+							</span>
+						)}
+					</>
 				)}
 			</button>
 			{isFolder && isExpanded && childrenToRender && (
@@ -467,10 +613,28 @@ function FileTreeNode({
 							selectedFilePath={selectedFilePath}
 							isPathLoading={isPathLoading}
 							diffEntries={diffEntries}
+							sessionId={sessionId}
+							onRefresh={onRefresh}
 						/>
 					))}
 				</div>
 			)}
 		</div>
+	);
+
+	return (
+		<ContextMenu>
+			<ContextMenuTrigger asChild>{nodeContent}</ContextMenuTrigger>
+			<ContextMenuContent className="w-40">
+				<ContextMenuItem onClick={startRename}>
+					<Pencil className="h-4 w-4" />
+					Rename
+				</ContextMenuItem>
+				<ContextMenuItem variant="destructive" onClick={handleDelete}>
+					<Trash2 className="h-4 w-4" />
+					Delete
+				</ContextMenuItem>
+			</ContextMenuContent>
+		</ContextMenu>
 	);
 }

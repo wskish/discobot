@@ -199,6 +199,37 @@ export interface WriteFileResponse {
 }
 
 /**
+ * POST /files/delete request body
+ */
+export interface DeleteFileRequest {
+	path: string;
+}
+
+/**
+ * POST /files/delete response
+ */
+export interface DeleteFileResponse {
+	path: string;
+	type: "file" | "directory";
+}
+
+/**
+ * POST /files/rename request body
+ */
+export interface RenameFileRequest {
+	oldPath: string;
+	newPath: string;
+}
+
+/**
+ * POST /files/rename response
+ */
+export interface RenameFileResponse {
+	oldPath: string;
+	newPath: string;
+}
+
+/**
  * Single file diff entry
  */
 export interface FileDiffEntry {

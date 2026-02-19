@@ -514,6 +514,29 @@ export interface WriteSessionFileResponse {
 	size: number;
 }
 
+/** Request to delete a session file or directory */
+export interface DeleteSessionFileRequest {
+	path: string;
+}
+
+/** Response from deleting a session file or directory */
+export interface DeleteSessionFileResponse {
+	path: string;
+	type: "file" | "directory";
+}
+
+/** Request to rename/move a session file or directory */
+export interface RenameSessionFileRequest {
+	oldPath: string;
+	newPath: string;
+}
+
+/** Response from renaming a session file or directory */
+export interface RenameSessionFileResponse {
+	oldPath: string;
+	newPath: string;
+}
+
 /** Error response when file content has changed (optimistic locking conflict) */
 export interface WriteSessionFileConflictError {
 	error: "conflict";
