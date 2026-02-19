@@ -166,8 +166,6 @@ type Workspace struct {
 	SourceType   string    `gorm:"column:source_type;not null;type:text" json:"sourceType"`
 	Provider     string    `gorm:"type:text;default:''" json:"provider,omitempty"`
 	Status       string    `gorm:"not null;type:text;default:initializing" json:"status"`
-	CommitStatus string    `gorm:"column:commit_status;type:text;default:''" json:"commitStatus"`
-	CommitError  *string   `gorm:"column:commit_error;type:text" json:"commitError,omitempty"`
 	ErrorMessage *string   `gorm:"column:error_message;type:text" json:"errorMessage,omitempty"`
 	CreatedAt    time.Time `gorm:"autoCreateTime" json:"createdAt"`
 	UpdatedAt    time.Time `gorm:"autoUpdateTime" json:"updatedAt"`

@@ -54,9 +54,8 @@ type SessionUpdatedData struct {
 
 // WorkspaceUpdatedData is the payload for workspace_updated events
 type WorkspaceUpdatedData struct {
-	WorkspaceID  string `json:"workspaceId"`
-	Status       string `json:"status"`
-	CommitStatus string `json:"commitStatus,omitempty"`
+	WorkspaceID string `json:"workspaceId"`
+	Status      string `json:"status"`
 }
 
 // JobCompletedData is the payload for job_completed events
@@ -171,11 +170,10 @@ func (b *Broker) PublishSessionUpdated(ctx context.Context, projectID, sessionID
 }
 
 // PublishWorkspaceUpdated is a convenience method to publish workspace update events.
-func (b *Broker) PublishWorkspaceUpdated(ctx context.Context, projectID, workspaceID, status, commitStatus string) error {
+func (b *Broker) PublishWorkspaceUpdated(ctx context.Context, projectID, workspaceID, status string) error {
 	data := WorkspaceUpdatedData{
-		WorkspaceID:  workspaceID,
-		Status:       status,
-		CommitStatus: commitStatus,
+		WorkspaceID: workspaceID,
+		Status:      status,
 	}
 
 	dataBytes, err := json.Marshal(data)

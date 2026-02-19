@@ -28,6 +28,13 @@ type MaxAttempter interface {
 	MaxAttempts() int
 }
 
+// DuplicateAllower is an optional interface payloads can implement to allow
+// multiple pending/running jobs for the same resource. Jobs are still serialized
+// at execution time (only one runs at a time per resource), but multiple can be queued.
+type DuplicateAllower interface {
+	AllowDuplicates() bool
+}
+
 // SessionInitPayload is the payload for session_init jobs.
 type SessionInitPayload struct {
 	ProjectID   string `json:"projectId"`
@@ -71,4 +78,5 @@ func (p SessionCommitPayload) JobType() JobType { return JobTypeSessionCommit }
 func (p SessionCommitPayload) ResourceKey() (string, string) {
 	return ResourceTypeWorkspace, p.WorkspaceID
 }
-func (p SessionCommitPayload) MaxAttempts() int { return 1 }
+func (p SessionCommitPayload) MaxAttempts() int      { return 1 }
+func (p SessionCommitPayload) AllowDuplicates() bool { return true }

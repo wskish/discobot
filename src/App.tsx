@@ -3,6 +3,7 @@ import { Route, Routes } from "react-router";
 import { AppShell } from "@/components/app-shell";
 import { ResizeObserverFix } from "@/components/resize-observer-fix";
 import { ThemeProvider } from "@/components/theme-provider";
+import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { isTauri } from "@/lib/api-config";
 import { HomePage } from "./pages/HomePage";
@@ -40,6 +41,7 @@ export function App() {
 		>
 			<TooltipProvider delayDuration={700}>
 				<ResizeObserverFix />
+				<Toaster />
 				<MaybeUpdateProvider>
 					<AppShell>
 						<Routes>

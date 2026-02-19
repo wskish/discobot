@@ -281,97 +281,16 @@ func (s *SessionService) DeleteSession(ctx context.Context, projectID, sessionID
 }
 
 // CommitSession initiates async commit of a session.
-// It captures the current workspace commit as baseCommit, sets workspace commitStatus to "pending",
-// emits an SSE event, and enqueues a commit job.
+// It enqueues a commit job unconditionally. Multiple commit jobs can be queued
+// for the same workspace and will be executed sequentially by the job queue.
 func (s *SessionService) CommitSession(ctx context.Context, projectID, sessionID string, jobQueue JobEnqueuer) error {
-	// Get session to verify it exists and check status
+	// Get session to verify it exists and get workspace ID
 	sess, err := s.store.GetSessionByID(ctx, sessionID)
 	if err != nil {
 		return fmt.Errorf("session not found: %w", err)
 	}
 
-	// Get workspace to check and update commit status
-	workspace, err := s.store.GetWorkspaceByID(ctx, sess.WorkspaceID)
-	if err != nil {
-		return fmt.Errorf("workspace not found: %w", err)
-	}
-
-	// Don't allow commit if workspace is already committing
-	if workspace.CommitStatus == model.CommitStatusPending || workspace.CommitStatus == model.CommitStatusCommitting {
-		return fmt.Errorf("commit already in progress for workspace (status: %s)", workspace.CommitStatus)
-	}
-
-	// Don't allow commit if session is already committing or completed
-	if sess.CommitStatus == model.CommitStatusPending || sess.CommitStatus == model.CommitStatusCommitting {
-		return fmt.Errorf("commit already in progress for session (status: %s)", sess.CommitStatus)
-	}
-	if sess.CommitStatus == model.CommitStatusCompleted {
-		return fmt.Errorf("session already committed")
-	}
-
-	// Track whether we've updated state (for cleanup in defer)
-	var workspaceUpdated, sessionUpdated bool
-
-	// Setup defer for cleanup on error
-	defer func() {
-		if err != nil && (workspaceUpdated || sessionUpdated) {
-			log.Printf("CommitSession failed, reverting state (workspace updated: %v, session updated: %v): %v", workspaceUpdated, sessionUpdated, err)
-
-			// Revert workspace status if we updated it
-			if workspaceUpdated {
-				workspace.CommitStatus = model.CommitStatusNone
-				workspace.CommitError = nil
-				if updateErr := s.store.UpdateWorkspace(ctx, workspace); updateErr != nil {
-					log.Printf("Failed to revert workspace commit status: %v", updateErr)
-				} else {
-					s.publishWorkspaceCommitStatusChanged(ctx, projectID, workspace.ID, model.CommitStatusNone)
-				}
-			}
-
-			// Revert session status if we updated it
-			if sessionUpdated {
-				sess.CommitStatus = model.CommitStatusNone
-				sess.BaseCommit = nil
-				sess.CommitError = nil
-				if updateErr := s.store.UpdateSession(ctx, sess); updateErr != nil {
-					log.Printf("Failed to revert session commit status: %v", updateErr)
-				} else {
-					s.publishCommitStatusChanged(ctx, projectID, sessionID, model.CommitStatusNone)
-				}
-			}
-		}
-	}()
-
-	// Get current workspace commit to use as baseCommit
-	gitStatus, err := s.gitService.Status(ctx, sess.WorkspaceID)
-	if err != nil {
-		return fmt.Errorf("failed to get workspace status: %w", err)
-	}
-	if gitStatus.Commit == "" {
-		return fmt.Errorf("workspace has no commit")
-	}
-
-	// Update workspace with commit info
-	workspace.CommitStatus = model.CommitStatusPending
-	workspace.CommitError = nil // Clear any previous error
-	if err = s.store.UpdateWorkspace(ctx, workspace); err != nil {
-		return fmt.Errorf("failed to update workspace commit status: %w", err)
-	}
-	workspaceUpdated = true
-	s.publishWorkspaceCommitStatusChanged(ctx, projectID, sess.WorkspaceID, model.CommitStatusPending)
-
-	// Update session to track which session initiated the commit
-	sess.CommitStatus = model.CommitStatusPending
-	sess.BaseCommit = ptrString(gitStatus.Commit)
-	sess.AppliedCommit = nil // Clear any previous applied commit
-	sess.CommitError = nil   // Clear any previous error
-	if err = s.store.UpdateSession(ctx, sess); err != nil {
-		return fmt.Errorf("failed to update session commit status: %w", err)
-	}
-	sessionUpdated = true
-	s.publishCommitStatusChanged(ctx, projectID, sessionID, model.CommitStatusPending)
-
-	// Enqueue commit job
+	// Enqueue commit job (multiple jobs for same workspace are allowed and serialized)
 	if err = jobQueue.Enqueue(ctx, jobs.SessionCommitPayload{ProjectID: projectID, SessionID: sessionID, WorkspaceID: sess.WorkspaceID}); err != nil {
 		return fmt.Errorf("failed to enqueue commit job: %w", err)
 	}
@@ -385,16 +304,6 @@ func (s *SessionService) publishCommitStatusChanged(ctx context.Context, project
 		// Send empty string for session status since only commit status changed
 		if err := s.eventBroker.PublishSessionUpdated(ctx, projectID, sessionID, "", commitStatus); err != nil {
 			log.Printf("Failed to publish session commit status event: %v", err)
-		}
-	}
-}
-
-// publishWorkspaceCommitStatusChanged publishes an SSE event for workspace commit status changes.
-func (s *SessionService) publishWorkspaceCommitStatusChanged(ctx context.Context, projectID, workspaceID, commitStatus string) {
-	if s.eventBroker != nil {
-		// Send empty string for workspace status since only commit status changed
-		if err := s.eventBroker.PublishWorkspaceUpdated(ctx, projectID, workspaceID, "", commitStatus); err != nil {
-			log.Printf("Failed to publish workspace commit status event: %v", err)
 		}
 	}
 }
@@ -815,56 +724,53 @@ func ptrString(s string) *string {
 
 // PerformCommit performs the session commit work synchronously.
 // This is called by the dispatcher when processing a session_commit job.
-// The job is idempotent and handles server restart scenarios.
+// Jobs for the same workspace are serialized by the job queue, so no
+// precondition checks on commit status are needed.
 //
 // Flow:
-// 1. If workspace commit changed, update baseCommit and check for existing patches
-// 2. If pending: send /discobot-commit to agent, transition to committing
-// 3. If appliedCommit not set: fetch patches from agent-api, apply to workspace
-// 4. Transition to completed
+// 1. Set workspace/session to committing, get fresh base commit
+// 2. If workspace commit changed, update baseCommit and check for existing patches
+// 3. If pending: send /discobot-commit to agent, transition to committing
+// 4. If appliedCommit not set: fetch patches from agent-api, apply to workspace
+// 5. Transition to completed
 func (s *SessionService) PerformCommit(ctx context.Context, projectID, sessionID string) error {
-	// Get session to check current state
+	// Get session
 	sess, err := s.store.GetSessionByID(ctx, sessionID)
 	if err != nil {
 		return fmt.Errorf("session not found: %w", err)
 	}
 
-	// Get workspace to check and update commit status
+	// Get workspace
 	workspace, err := s.store.GetWorkspaceByID(ctx, sess.WorkspaceID)
 	if err != nil {
 		return fmt.Errorf("workspace not found: %w", err)
 	}
 
-	// Idempotency: Skip if workspace commit already completed
-	if workspace.CommitStatus == model.CommitStatusCompleted {
-		log.Printf("Workspace %s commit already completed, skipping", workspace.ID)
+	// Get current git status and set up session for this commit
+	gitStatus, err := s.gitService.Status(ctx, sess.WorkspaceID)
+	if err != nil {
+		s.setCommitFailed(ctx, projectID, workspace, sess, fmt.Sprintf("Failed to get workspace status: %v", err))
 		return nil
 	}
 
-	// Only proceed if workspace commit status is pending or committing
-	if workspace.CommitStatus != model.CommitStatusPending && workspace.CommitStatus != model.CommitStatusCommitting {
-		log.Printf("Workspace %s is not in pending or committing commit state (current: %s), skipping commit job", workspace.ID, workspace.CommitStatus)
-		return nil
+	sess.CommitStatus = model.CommitStatusPending
+	sess.BaseCommit = ptrString(gitStatus.Commit)
+	sess.AppliedCommit = nil
+	sess.CommitError = nil
+	if err := s.store.UpdateSession(ctx, sess); err != nil {
+		return fmt.Errorf("failed to update session for commit: %w", err)
 	}
-
-	// Verify baseCommit is set
-	if sess.BaseCommit == nil || *sess.BaseCommit == "" {
-		s.setCommitFailed(ctx, projectID, workspace, sess, "No base commit set")
-		return nil
-	}
+	s.publishCommitStatusChanged(ctx, projectID, sess.ID, model.CommitStatusPending)
 
 	// Step 1: Handle workspace commit changes
 	if err := s.syncBaseCommit(ctx, projectID, workspace, sess); err != nil {
 		return err
 	}
-	// syncBaseCommit may have applied patches and set appliedCommit, check for failure
 	if sess.CommitStatus == model.CommitStatusFailed {
 		return nil
 	}
 
 	// Step 1.5: Optimistically check if agent already has patches ready
-	// This runs regardless of whether baseCommit changed, in case the agent
-	// already created patches that we can apply without sending /discobot-commit
 	if sess.CommitStatus == model.CommitStatusPending && (sess.AppliedCommit == nil || *sess.AppliedCommit == "") {
 		if err := s.tryApplyExistingPatches(ctx, projectID, workspace, sess); err != nil {
 			return err
@@ -897,23 +803,12 @@ func (s *SessionService) PerformCommit(ctx context.Context, projectID, sessionID
 	// Step 4: Complete
 	log.Printf("Session %s: commit completed with applied commit %s", sess.ID, *sess.AppliedCommit)
 
-	// Update workspace commit status
-	workspace.CommitStatus = model.CommitStatusCompleted
-	workspace.CommitError = nil
-	if err := s.store.UpdateWorkspace(ctx, workspace); err != nil {
-		return fmt.Errorf("failed to update workspace commit status: %w", err)
-	}
-
-	// Update session commit status
 	sess.CommitStatus = model.CommitStatusCompleted
 	sess.CommitError = nil
 	if err := s.store.UpdateSession(ctx, sess); err != nil {
 		return fmt.Errorf("failed to update session commit status: %w", err)
 	}
-
-	// Publish events
 	s.publishCommitStatusChanged(ctx, projectID, sess.ID, model.CommitStatusCompleted)
-	s.publishWorkspaceCommitStatusChanged(ctx, projectID, workspace.ID, model.CommitStatusCompleted)
 
 	log.Printf("Workspace %s committed successfully via session %s", workspace.ID, sess.ID)
 	return nil
@@ -1063,15 +958,6 @@ func (s *SessionService) fetchAndApplyPatches(ctx context.Context, projectID str
 
 // applyPatches applies the given patches to the workspace and updates the session.
 func (s *SessionService) applyPatches(ctx context.Context, projectID string, workspace *model.Workspace, sess *model.Session, patches string, commitCount int) error {
-	// Transition to committing if not already
-	if workspace.CommitStatus != model.CommitStatusCommitting {
-		workspace.CommitStatus = model.CommitStatusCommitting
-		if err := s.store.UpdateWorkspace(ctx, workspace); err != nil {
-			return fmt.Errorf("failed to update workspace status: %w", err)
-		}
-		s.publishWorkspaceCommitStatusChanged(ctx, projectID, workspace.ID, model.CommitStatusCommitting)
-	}
-
 	if sess.CommitStatus != model.CommitStatusCommitting {
 		sess.CommitStatus = model.CommitStatusCommitting
 		if err := s.store.UpdateSession(ctx, sess); err != nil {
@@ -1099,14 +985,6 @@ func (s *SessionService) applyPatches(ctx context.Context, projectID string, wor
 func (s *SessionService) setCommitFailed(ctx context.Context, projectID string, workspace *model.Workspace, sess *model.Session, errorMsg string) {
 	log.Printf("Workspace %s commit failed (via session %s): %s", workspace.ID, sess.ID, errorMsg)
 
-	// Update workspace commit status
-	workspace.CommitStatus = model.CommitStatusFailed
-	workspace.CommitError = ptrString(errorMsg)
-	if err := s.store.UpdateWorkspace(ctx, workspace); err != nil {
-		log.Printf("Failed to update workspace %s commit status to failed: %v", workspace.ID, err)
-	}
-
-	// Update session commit status
 	sess.CommitStatus = model.CommitStatusFailed
 	sess.CommitError = ptrString(errorMsg)
 	if err := s.store.UpdateSession(ctx, sess); err != nil {
@@ -1114,9 +992,7 @@ func (s *SessionService) setCommitFailed(ctx context.Context, projectID string, 
 		return
 	}
 
-	// Publish events
 	s.publishCommitStatusChanged(ctx, projectID, sess.ID, model.CommitStatusFailed)
-	s.publishWorkspaceCommitStatusChanged(ctx, projectID, workspace.ID, model.CommitStatusFailed)
 }
 
 // buildCommitMessage creates a UIMessage array for the /discobot-commit command.

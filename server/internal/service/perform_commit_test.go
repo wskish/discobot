@@ -291,12 +291,6 @@ func TestPerformCommit_WorkspaceUnchangedNoExistingPatches(t *testing.T) {
 	agent := env.createTestAgent(t, project.ID)
 	workspace, initialCommit := env.createTestWorkspace(t, project.ID)
 
-	// Set workspace commit status to pending
-	workspace.CommitStatus = model.CommitStatusPending
-	if err := env.store.UpdateWorkspace(context.Background(), workspace); err != nil {
-		t.Fatalf("Failed to update workspace: %v", err)
-	}
-
 	session := env.createTestSession(t, project.ID, workspace.ID, agent.ID, initialCommit)
 
 	callCount := 0
@@ -398,12 +392,6 @@ func TestPerformCommit_WorkspaceChangedWithPatches(t *testing.T) {
 	agent := env.createTestAgent(t, project.ID)
 	workspace, initialCommit := env.createTestWorkspace(t, project.ID)
 
-	// Set workspace commit status to pending
-	workspace.CommitStatus = model.CommitStatusPending
-	if err := env.store.UpdateWorkspace(context.Background(), workspace); err != nil {
-		t.Fatalf("Failed to update workspace: %v", err)
-	}
-
 	// Create session with the initial commit
 	session := env.createTestSession(t, project.ID, workspace.ID, agent.ID, initialCommit)
 
@@ -494,12 +482,6 @@ func TestPerformCommit_WorkspaceChangedNoPatches(t *testing.T) {
 	project := env.createTestProject(t)
 	agent := env.createTestAgent(t, project.ID)
 	workspace, initialCommit := env.createTestWorkspace(t, project.ID)
-
-	// Set workspace commit status to pending
-	workspace.CommitStatus = model.CommitStatusPending
-	if err := env.store.UpdateWorkspace(context.Background(), workspace); err != nil {
-		t.Fatalf("Failed to update workspace: %v", err)
-	}
 
 	// Create session with the initial commit
 	session := env.createTestSession(t, project.ID, workspace.ID, agent.ID, initialCommit)
@@ -622,12 +604,6 @@ func TestPerformCommit_WorkspaceChangedGetCommitsError(t *testing.T) {
 	agent := env.createTestAgent(t, project.ID)
 	workspace, initialCommit := env.createTestWorkspace(t, project.ID)
 
-	// Set workspace commit status to pending
-	workspace.CommitStatus = model.CommitStatusPending
-	if err := env.store.UpdateWorkspace(context.Background(), workspace); err != nil {
-		t.Fatalf("Failed to update workspace: %v", err)
-	}
-
 	// Create session with the initial commit
 	session := env.createTestSession(t, project.ID, workspace.ID, agent.ID, initialCommit)
 
@@ -725,96 +701,6 @@ index 0000000..abc123
 	}
 }
 
-// TestPerformCommit_AlreadyCompleted tests idempotency - skips if already completed.
-func TestPerformCommit_AlreadyCompleted(t *testing.T) {
-	env := newTestEnv(t)
-	defer env.cleanup()
-
-	project := env.createTestProject(t)
-	agent := env.createTestAgent(t, project.ID)
-	workspace, initialCommit := env.createTestWorkspace(t, project.ID)
-
-	// Create session that's already completed
-	session := &model.Session{
-		ID:            "test-session",
-		ProjectID:     project.ID,
-		WorkspaceID:   workspace.ID,
-		AgentID:       ptrString(agent.ID),
-		Name:          "Test Session",
-		Status:        model.SessionStatusReady,
-		CommitStatus:  model.CommitStatusCompleted,
-		BaseCommit:    ptrString(initialCommit),
-		AppliedCommit: ptrString("abc123"),
-	}
-	if err := env.store.CreateSession(context.Background(), session); err != nil {
-		t.Fatalf("Failed to create session: %v", err)
-	}
-
-	handler := newMockHandler()
-	env.mockSandbox.HTTPHandler = handler
-
-	sandboxSvc := NewSandboxService(env.store, env.mockSandbox, &config.Config{}, nil, env.eventBroker, nil)
-	sandboxSvc.SetSessionInitializer(&testSessionInitializer{})
-	sessionSvc := NewSessionService(env.store, env.gitService, env.mockSandbox, sandboxSvc, env.eventBroker, nil)
-
-	// Run PerformCommit - should be a no-op
-	err := sessionSvc.PerformCommit(context.Background(), project.ID, session.ID)
-	if err != nil {
-		t.Fatalf("PerformCommit failed: %v", err)
-	}
-
-	// Verify no requests were made
-	if handler.getChatRequestCount() != 0 {
-		t.Errorf("Expected 0 chat requests for completed session, got %d", handler.getChatRequestCount())
-	}
-	if handler.getCommitsRequestCount() != 0 {
-		t.Errorf("Expected 0 commits requests for completed session, got %d", handler.getCommitsRequestCount())
-	}
-}
-
-// TestPerformCommit_NotPendingOrCommitting tests that we skip sessions not in pending/committing state.
-func TestPerformCommit_NotPendingOrCommitting(t *testing.T) {
-	env := newTestEnv(t)
-	defer env.cleanup()
-
-	project := env.createTestProject(t)
-	agent := env.createTestAgent(t, project.ID)
-	workspace, initialCommit := env.createTestWorkspace(t, project.ID)
-
-	// Create session with "none" commit status
-	session := &model.Session{
-		ID:           "test-session",
-		ProjectID:    project.ID,
-		WorkspaceID:  workspace.ID,
-		AgentID:      ptrString(agent.ID),
-		Name:         "Test Session",
-		Status:       model.SessionStatusReady,
-		CommitStatus: model.CommitStatusNone,
-		BaseCommit:   ptrString(initialCommit),
-	}
-	if err := env.store.CreateSession(context.Background(), session); err != nil {
-		t.Fatalf("Failed to create session: %v", err)
-	}
-
-	handler := newMockHandler()
-	env.mockSandbox.HTTPHandler = handler
-
-	sandboxSvc := NewSandboxService(env.store, env.mockSandbox, &config.Config{}, nil, env.eventBroker, nil)
-	sandboxSvc.SetSessionInitializer(&testSessionInitializer{})
-	sessionSvc := NewSessionService(env.store, env.gitService, env.mockSandbox, sandboxSvc, env.eventBroker, nil)
-
-	// Run PerformCommit - should be a no-op
-	err := sessionSvc.PerformCommit(context.Background(), project.ID, session.ID)
-	if err != nil {
-		t.Fatalf("PerformCommit failed: %v", err)
-	}
-
-	// Verify no requests were made
-	if handler.getChatRequestCount() != 0 {
-		t.Errorf("Expected 0 chat requests, got %d", handler.getChatRequestCount())
-	}
-}
-
 // TestPerformCommit_WorkspaceUnchangedWithExistingPatches tests that the optimistic
 // patch check runs even when workspace commit hasn't changed, allowing us to skip
 // the /discobot-commit prompt if the agent already has patches ready.
@@ -825,12 +711,6 @@ func TestPerformCommit_WorkspaceUnchangedWithExistingPatches(t *testing.T) {
 	project := env.createTestProject(t)
 	agent := env.createTestAgent(t, project.ID)
 	workspace, initialCommit := env.createTestWorkspace(t, project.ID)
-
-	// Set workspace commit status to pending
-	workspace.CommitStatus = model.CommitStatusPending
-	if err := env.store.UpdateWorkspace(context.Background(), workspace); err != nil {
-		t.Fatalf("Failed to update workspace: %v", err)
-	}
 
 	// Create session with baseCommit equal to workspace commit (no change scenario)
 	session := env.createTestSession(t, project.ID, workspace.ID, agent.ID, initialCommit)
@@ -947,12 +827,6 @@ func TestPerformCommit_SandboxNotRunning(t *testing.T) {
 	project := env.createTestProject(t)
 	agent := env.createTestAgent(t, project.ID)
 	workspace, initialCommit := env.createTestWorkspace(t, project.ID)
-
-	// Set workspace commit status to pending
-	workspace.CommitStatus = model.CommitStatusPending
-	if err := env.store.UpdateWorkspace(context.Background(), workspace); err != nil {
-		t.Fatalf("Failed to update workspace: %v", err)
-	}
 
 	session := env.createTestSession(t, project.ID, workspace.ID, agent.ID, initialCommit)
 

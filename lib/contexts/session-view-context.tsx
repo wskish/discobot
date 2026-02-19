@@ -1,4 +1,5 @@
 import * as React from "react";
+import { toast } from "sonner";
 import { useSWRConfig } from "swr";
 import type {
 	ConnectionStatus,
@@ -308,6 +309,9 @@ export function SessionViewProvider({
 			}, 100);
 		} catch (error) {
 			console.error("Failed to start commit:", error);
+			toast.error(
+				`Failed to commit: ${error instanceof Error ? error.message : "Unknown error"}`,
+			);
 		} finally {
 			setIsCommitting(false);
 		}

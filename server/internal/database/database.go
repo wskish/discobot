@@ -147,8 +147,31 @@ func (db *DB) Migrate() error {
 		}
 	}
 
-	// Note: workspace.commit column is no longer in the model and will be ignored by GORM.
-	// We don't need to drop it - leaving it in the database is harmless.
+	// Drop obsolete Workspace columns (commit status moved to session-only tracking)
+	obsoleteWorkspaceCols := []string{"commit_status", "commit_error"}
+	var workspaceColsToDrop []string
+	for _, col := range obsoleteWorkspaceCols {
+		if migrator.HasColumn(&model.Workspace{}, col) {
+			workspaceColsToDrop = append(workspaceColsToDrop, col)
+		}
+	}
+	if len(workspaceColsToDrop) > 0 {
+		if db.IsSQLite() {
+			db.Exec("PRAGMA foreign_keys = OFF")
+		}
+		for _, col := range workspaceColsToDrop {
+			log.Printf("Dropping obsolete Workspace.%s column...\n", col)
+			if err := migrator.DropColumn(&model.Workspace{}, col); err != nil {
+				if db.IsSQLite() {
+					db.Exec("PRAGMA foreign_keys = ON")
+				}
+				return fmt.Errorf("failed to drop Workspace.%s: %w", col, err)
+			}
+		}
+		if db.IsSQLite() {
+			db.Exec("PRAGMA foreign_keys = ON")
+		}
+	}
 
 	return nil
 }

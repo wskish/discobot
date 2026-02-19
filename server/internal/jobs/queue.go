@@ -47,16 +47,24 @@ var ErrJobAlreadyExists = errors.New("job already exists for resource")
 // Enqueue enqueues a job from the given payload.
 // The payload determines the job type, resource key for deduplication,
 // and optionally the priority and max attempts.
-// Returns ErrJobAlreadyExists if a pending/running job for this resource already exists.
+// Returns ErrJobAlreadyExists if a pending/running job for this resource already exists,
+// unless the payload implements DuplicateAllower and returns true.
 func (q *Queue) Enqueue(ctx context.Context, payload JobPayload) error {
 	resType, resID := payload.ResourceKey()
 
-	exists, err := q.store.HasActiveJobForResource(ctx, resType, resID)
-	if err != nil {
-		return err
+	// Check for duplicate jobs unless the payload explicitly allows them
+	allowDuplicates := false
+	if d, ok := payload.(DuplicateAllower); ok {
+		allowDuplicates = d.AllowDuplicates()
 	}
-	if exists {
-		return ErrJobAlreadyExists
+	if !allowDuplicates {
+		exists, err := q.store.HasActiveJobForResource(ctx, resType, resID)
+		if err != nil {
+			return err
+		}
+		if exists {
+			return ErrJobAlreadyExists
+		}
 	}
 
 	data, err := json.Marshal(payload)

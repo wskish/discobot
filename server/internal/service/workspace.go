@@ -310,7 +310,7 @@ func (s *WorkspaceService) Initialize(ctx context.Context, workspaceID string) e
 
 	// Emit success event
 	if s.eventBroker != nil {
-		if err := s.eventBroker.PublishWorkspaceUpdated(ctx, ws.ProjectID, workspaceID, model.WorkspaceStatusReady, ""); err != nil {
+		if err := s.eventBroker.PublishWorkspaceUpdated(ctx, ws.ProjectID, workspaceID, model.WorkspaceStatusReady); err != nil {
 			log.Printf("Failed to publish workspace update event: %v", err)
 		}
 	}
@@ -336,7 +336,7 @@ func (s *WorkspaceService) updateStatusWithEvent(ctx context.Context, projectID,
 
 	// Emit SSE event
 	if s.eventBroker != nil {
-		if err := s.eventBroker.PublishWorkspaceUpdated(ctx, projectID, workspaceID, status, ""); err != nil {
+		if err := s.eventBroker.PublishWorkspaceUpdated(ctx, projectID, workspaceID, status); err != nil {
 			log.Printf("Failed to publish workspace update event: %v", err)
 		}
 	}

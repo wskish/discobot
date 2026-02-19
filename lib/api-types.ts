@@ -99,10 +99,6 @@ export interface Workspace {
 	/** Sandbox provider (empty string = use platform default) */
 	provider?: string;
 	status: WorkspaceStatus;
-	/** Commit status (orthogonal to workspace status) */
-	commitStatus?: CommitStatus;
-	/** Error message if commit status is "failed" */
-	commitError?: string;
 	/** Error message if status is "error" */
 	errorMessage?: string;
 	/** Current commit SHA (if git workspace) */

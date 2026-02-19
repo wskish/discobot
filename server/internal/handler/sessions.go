@@ -115,10 +115,6 @@ func (h *Handler) CommitSession(w http.ResponseWriter, r *http.Request) {
 			h.Error(w, http.StatusNotFound, "Session not found")
 			return
 		}
-		if strings.Contains(err.Error(), "already in progress") {
-			h.Error(w, http.StatusConflict, err.Error())
-			return
-		}
 		h.Error(w, http.StatusInternalServerError, "Failed to initiate session commit")
 		return
 	}
