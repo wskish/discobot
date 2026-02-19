@@ -205,9 +205,22 @@ func (s *SessionService) UpdateStatus(ctx context.Context, projectID, sessionID,
 		return nil, fmt.Errorf("failed to get session: %w", err)
 	}
 
+	// If the session is transitioning to running and was previously committed,
+	// clear the commit status so it goes back to an open state.
+	// The actual commit (appliedCommit) is preserved.
+	commitStatusChanged := ""
+	if status == model.SessionStatusRunning && sess.CommitStatus == model.CommitStatusCompleted {
+		sess.CommitStatus = model.CommitStatusNone
+		sess.CommitError = nil
+		if err := s.store.UpdateSession(ctx, sess); err != nil {
+			return nil, fmt.Errorf("failed to clear commit status: %w", err)
+		}
+		commitStatusChanged = model.CommitStatusNone
+	}
+
 	// Always publish SSE event for status changes
 	if s.eventBroker != nil {
-		if err := s.eventBroker.PublishSessionUpdated(ctx, projectID, sessionID, status, ""); err != nil {
+		if err := s.eventBroker.PublishSessionUpdated(ctx, projectID, sessionID, status, commitStatusChanged); err != nil {
 			log.Printf("Failed to publish session update event: %v", err)
 		}
 	}
