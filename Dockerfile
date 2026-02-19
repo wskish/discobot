@@ -141,6 +141,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
     rsync \
     socat \
     sqlite3 \
+    sudo \
     vim \
     && curl -fsSL https://deb.nodesource.com/setup_25.x | bash - \
     && sed -i 's|http://|https://|g' /etc/apt/sources.list.d/nodesource.list 2>/dev/null || true \
@@ -163,6 +164,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
 RUN (useradd -m -s /bin/bash -u 1000 discobot 2>/dev/null \
         || (userdel -r $(getent passwd 1000 | cut -d: -f1) 2>/dev/null; useradd -m -s /bin/bash -u 1000 discobot) \
         || useradd -m -s /bin/bash discobot)
+
+# Explicitly deny sudo access for discobot user
+RUN echo 'discobot ALL=(ALL) !ALL' > /etc/sudoers.d/discobot-deny \
+    && chmod 440 /etc/sudoers.d/discobot-deny
 
 # Install rustup for discobot user (Rust toolchain manager)
 # Must be done after user creation so rust tools are owned by discobot
