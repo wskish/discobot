@@ -1680,8 +1680,21 @@ func eventLoop(cmd *exec.Cmd, dockerCmd, proxyCmd *exec.Cmd, signals chan os.Sig
 			if err != nil {
 				var exitErr *exec.ExitError
 				if errors.As(err, &exitErr) {
-					exitCode = exitErr.ExitCode()
-					fmt.Printf("discobot-agent: child exited with code %d\n", exitCode)
+					if status, ok := exitErr.Sys().(syscall.WaitStatus); ok && status.Signaled() {
+						// Child was killed by a signal
+						if shuttingDown {
+							// We intentionally forwarded the signal during shutdown — this is clean
+							fmt.Printf("discobot-agent: child terminated by signal %d during shutdown\n", status.Signal())
+							exitCode = 0
+						} else {
+							// Unexpected signal death — use conventional 128+signal exit code
+							exitCode = 128 + int(status.Signal())
+							fmt.Printf("discobot-agent: child killed by signal %d (exit code %d)\n", status.Signal(), exitCode)
+						}
+					} else {
+						exitCode = exitErr.ExitCode()
+						fmt.Printf("discobot-agent: child exited with code %d\n", exitCode)
+					}
 				} else {
 					fmt.Fprintf(os.Stderr, "discobot-agent: child error: %v\n", err)
 					exitCode = 1
