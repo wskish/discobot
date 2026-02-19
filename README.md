@@ -20,6 +20,10 @@ Discobot is a coding agent session manager. It lets you run, monitor, and manage
 
 Download the macOS app from [Releases](https://github.com/obot-platform/discobot/releases).
 
+## Community
+
+Join the [#discobot channel](https://discord.gg/z2WcjDfw) on the Obot AI Discord.
+
 ## License
 
 Apache-2.0
