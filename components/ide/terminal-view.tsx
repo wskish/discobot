@@ -437,7 +437,7 @@ export const TerminalView = React.forwardRef<
 				</div>
 			)}
 
-			<div className="flex-1 min-h-0 overflow-hidden p-2">
+			<div className="flex-1 min-h-0 overflow-hidden">
 				<div ref={terminalRef} className="h-full w-full" />
 			</div>
 		</div>

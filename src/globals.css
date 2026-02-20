@@ -663,7 +663,9 @@ body {
 	app-region: no-drag;
 }
 
-/* Terminal padding - adds space around terminal content */
-.xterm-screen {
+/* Terminal padding - adds space around terminal content.
+   Must be on .xterm (not .xterm-screen) so FitAddon accounts for it
+   when calculating how many rows fit. */
+.xterm {
 	padding: 8px;
 }
