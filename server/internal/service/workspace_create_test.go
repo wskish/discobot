@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -218,7 +219,7 @@ func TestExpandPath(t *testing.T) {
 		{
 			name:       "leaves absolute path unchanged",
 			input:      "/var/www/site",
-			wantPrefix: "/var/www/site",
+			wantPrefix: filepath.FromSlash("/var/www/site"),
 		},
 		{
 			name:       "cleans relative path",
@@ -257,8 +258,12 @@ func TestCreatedDirectoryPermissions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to stat directory: %v", err)
 	}
-	if info.Mode().Perm() != 0755 {
-		t.Errorf("expected permissions 0755, got %v", info.Mode().Perm())
+	wantPerm := os.FileMode(0755)
+	if runtime.GOOS == "windows" {
+		wantPerm = 0777 // Windows does not support Unix permission bits
+	}
+	if info.Mode().Perm() != wantPerm {
+		t.Errorf("expected permissions %04o, got %v", wantPerm, info.Mode().Perm())
 	}
 }
 
