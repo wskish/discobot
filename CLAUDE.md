@@ -154,5 +154,6 @@ When making changes, update the relevant docs:
 ## Known Quirks
 
 1. **ResizeObserver errors**: Suppressed globally via `ResizeObserverFix` component
-2. **Terminal resize**: Uses debounced `requestAnimationFrame` to avoid loops
-3. **Icon rendering**: SVGs with `currentColor` must be inlined, not used as `<img>`
+2. **Monaco Editor errors**: Internal cursor tracking errors suppressed via `MonacoEditorFix` component
+3. **Terminal resize**: Uses debounced `requestAnimationFrame` to avoid loops
+4. **Icon rendering**: SVGs with `currentColor` must be inlined, not used as `<img>`

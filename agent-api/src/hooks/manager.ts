@@ -18,7 +18,7 @@
  */
 
 import { exec } from "node:child_process";
-import { stat, utimes, writeFile } from "node:fs/promises";
+import { readdir, stat, utimes, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import picomatch from "picomatch";
@@ -113,6 +113,73 @@ export class HookManager {
 	}
 
 	/**
+	 * Reload hooks from disk: re-discover all hooks and re-install pre-commit hooks.
+	 */
+	private async reloadHooks(): Promise<void> {
+		const hooksDir = join(this.workspaceRoot, HOOKS_DIR);
+		const allHooks = await discoverHooks(hooksDir);
+
+		this.fileHooks = allHooks.filter((h) => h.type === "file");
+		this.preCommitHooks = allHooks.filter((h) => h.type === "pre-commit");
+
+		console.log(
+			`[hooks] Reloaded hooks: ${this.fileHooks.length} file, ${this.preCommitHooks.length} pre-commit`,
+		);
+
+		if (this.preCommitHooks.length > 0) {
+			await installPreCommitHook(
+				this.workspaceRoot,
+				this.preCommitHooks,
+				this.sessionId,
+			);
+		}
+	}
+
+	/**
+	 * Check if any file in .discobot/hooks/ has changed since the last
+	 * evaluation marker, and reload hooks if so.
+	 *
+	 * Checks both the directory mtime (detects file add/remove) and
+	 * individual file mtimes (detects content edits).
+	 */
+	private async checkAndReloadHooks(): Promise<void> {
+		const hooksDir = join(this.workspaceRoot, HOOKS_DIR);
+		const markerPath = getLastEvalMarkerPath(this.hooksDataDir);
+
+		let markerMtime: number | null = null;
+		try {
+			const markerStat = await stat(markerPath);
+			markerMtime = markerStat.mtimeMs;
+		} catch {
+			// No marker — first evaluation, hooks were just loaded in init()
+			return;
+		}
+
+		try {
+			// Check directory mtime (catches file additions/removals)
+			const dirStat = await stat(hooksDir);
+			if (dirStat.mtimeMs > markerMtime) {
+				await this.reloadHooks();
+				return;
+			}
+
+			// Check individual file mtimes (catches content edits)
+			const entries = await readdir(hooksDir, { withFileTypes: true });
+			for (const entry of entries) {
+				if (entry.isDirectory() || entry.name.startsWith(".")) continue;
+				const filePath = join(hooksDir, entry.name);
+				const fileStat = await stat(filePath);
+				if (fileStat.mtimeMs > markerMtime) {
+					await this.reloadHooks();
+					return;
+				}
+			}
+		} catch {
+			// Directory doesn't exist or can't be read — nothing to reload
+		}
+	}
+
+	/**
 	 * Check if there are any file hooks to evaluate.
 	 */
 	hasFileHooks(): boolean {
@@ -196,6 +263,9 @@ export class HookManager {
 			llmMessage: null,
 			failedResult: null,
 		};
+
+		// Reload hooks if any file in .discobot/hooks/ changed since last eval
+		await this.checkAndReloadHooks();
 
 		if (this.fileHooks.length === 0) {
 			return noAction;

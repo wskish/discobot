@@ -348,7 +348,11 @@ export function createApp(options: AppOptions) {
 			if (pending && pending.toolUseID === toolUseID) {
 				return c.json({ status: "pending", question: pending });
 			}
-			return c.json({ status: "answered", question: null });
+			// Distinguish answered (user submitted) vs expired (cancelled/cleared)
+			if (questionManager.wasAnswered(toolUseID)) {
+				return c.json({ status: "answered", question: null });
+			}
+			return c.json({ status: "expired", question: null });
 		}
 
 		// Legacy: return whatever is pending (no status field)

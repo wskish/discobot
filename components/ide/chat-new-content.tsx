@@ -88,13 +88,16 @@ export function ChatNewContent({
 				// Notify parent of the current selection
 				onWorkspaceChange(localSelectedWorkspaceId);
 				hasNotifiedWorkspaceRef.current = true;
-			} else {
-				// Workspace doesn't exist, fall back to first
+			} else if (!initialWorkspaceId) {
+				// Workspace doesn't exist and wasn't explicitly requested via navigation,
+				// fall back to first (e.g. persisted ID from a deleted workspace)
 				const workspaceToSelect = workspaces[0];
 				setLocalSelectedWorkspaceId(workspaceToSelect.id);
 				onWorkspaceChange(workspaceToSelect.id);
 				hasNotifiedWorkspaceRef.current = true;
 			}
+			// If initialWorkspaceId is set but not in the list yet, wait for
+			// the workspace list to update (e.g. after creating a new workspace)
 		} else if (!localSelectedWorkspaceId && workspaces.length > 0) {
 			// No workspace selected, auto-select first
 			const workspaceToSelect = workspaces[0];
@@ -102,7 +105,12 @@ export function ChatNewContent({
 			onWorkspaceChange(workspaceToSelect.id);
 			hasNotifiedWorkspaceRef.current = true;
 		}
-	}, [localSelectedWorkspaceId, workspaces, onWorkspaceChange]);
+	}, [
+		localSelectedWorkspaceId,
+		workspaces,
+		initialWorkspaceId,
+		onWorkspaceChange,
+	]);
 
 	// Handle workspace deletion after initial notification
 	React.useEffect(() => {

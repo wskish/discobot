@@ -16,6 +16,10 @@ Discobot is a coding agent session manager. It lets you run, monitor, and manage
 - **Integrated Lightweight Tools** — Built-in terminal, diff viewer, and editor for quick edits
 - **Workspaces** — Organize sessions around git repositories or local folders
 
+## Customization
+
+Automate session setup, enforce code quality, and run dev servers with [`.discobot/hooks/` and `.discobot/services/`](docs/CUSTOMIZATION.md).
+
 ## Install
 
 Download the macOS app from [Releases](https://github.com/obot-platform/discobot/releases).

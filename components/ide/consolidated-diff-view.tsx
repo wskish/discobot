@@ -147,6 +147,23 @@ function FileDiffSection({
 		fileEditRef.current = fileEdit;
 	}, [fileEdit]);
 
+	// Track editor instance for cleanup
+	const editorRef = React.useRef<{ dispose: () => void } | null>(null);
+
+	// Clean up editor when component unmounts
+	React.useEffect(() => {
+		return () => {
+			if (editorRef.current) {
+				try {
+					editorRef.current.dispose();
+					editorRef.current = null;
+				} catch (error) {
+					// Ignore disposal errors
+					console.warn("Error disposing Monaco editor:", error);
+				}
+			}
+		};
+	}, []);
 	// File is reviewed if the stored hash matches the current patch hash
 	const isReviewed = patchHash !== null && patchHash === currentPatchHash;
 
@@ -432,6 +449,9 @@ function FileDiffSection({
 									fontSize: 13,
 								}}
 								onMount={(editor) => {
+									// Store editor reference for cleanup
+									editorRef.current = editor;
+
 									// Get the modified (right-side) editor
 									const modifiedEditor = editor.getModifiedEditor();
 
@@ -450,7 +470,9 @@ function FileDiffSection({
 									);
 
 									// Clean up on unmount
-									return () => disposable.dispose();
+									return () => {
+										disposable.dispose();
+									};
 								}}
 							/>
 						</Suspense>

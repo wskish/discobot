@@ -189,6 +189,7 @@ RUN mkdir -p /home/discobot/.npm-global/bin \
 # Copy container-specific agent configuration (Claude Code commands, etc.)
 # These are placed in /home/discobot/.claude/ for user-level availability
 COPY --chown=discobot:discobot container-assets/claude /home/discobot/.claude
+COPY --chown=discobot:discobot container-assets/docs.txt /discobot/docs.txt
 
 # Create directory structure per filesystem design
 # /.data      - persistent storage (Docker volume or VZ disk)

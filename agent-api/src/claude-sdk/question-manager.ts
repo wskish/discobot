@@ -35,6 +35,7 @@ interface PendingQuestion {
 class QuestionManager {
 	private static instance: QuestionManager | null = null;
 	private pending: PendingQuestion | null = null;
+	private answeredToolUseIDs = new Set<string>();
 
 	private constructor() {}
 
@@ -95,8 +96,18 @@ class QuestionManager {
 		}
 		const { resolve } = this.pending;
 		this.pending = null;
+		this.answeredToolUseIDs.add(toolUseID);
 		resolve(answers);
 		return true;
+	}
+
+	/**
+	 * Check if a specific toolUseID was answered via submitAnswer().
+	 * Used by the GET /chat/question endpoint to distinguish
+	 * "answered" from "expired" (cancelled/cleared without answer).
+	 */
+	wasAnswered(toolUseID: string): boolean {
+		return this.answeredToolUseIDs.has(toolUseID);
 	}
 
 	/**

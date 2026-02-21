@@ -679,7 +679,7 @@ export interface PendingQuestion {
 
 /** Response from GET /chat/{sessionId}/question?toolUseID=xxx */
 export interface PendingQuestionResponse {
-	status: "pending" | "answered";
+	status: "pending" | "answered" | "expired";
 	question: PendingQuestion | null;
 }
 

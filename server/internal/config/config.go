@@ -166,7 +166,7 @@ func Load() (*Config, error) {
 
 	// Sandbox runtime settings
 	cfg.SandboxImage = getEnv("SANDBOX_IMAGE", DefaultSandboxImage())
-	cfg.SandboxIdleTimeout = getEnvDuration("SANDBOX_IDLE_TIMEOUT", 30*time.Minute)
+	cfg.SandboxIdleTimeout = getEnvDuration("SANDBOX_IDLE_TIMEOUT", 1*time.Hour)
 	cfg.IdleCheckInterval = getEnvDuration("IDLE_CHECK_INTERVAL", 5*time.Minute)
 
 	// Docker-specific settings

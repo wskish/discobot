@@ -69,7 +69,12 @@ function AskUserQuestionActive({ part }: { part: DynamicToolPart }) {
 				if (result.status === "pending" && result.question) {
 					setQuestion(result.question);
 					setStatus("pending");
+				} else if (result.status === "expired") {
+					// Question expired without user answer — reject the tool approval
+					setStatus("answered");
+					addToolApprovalResponse({ id: approvalId, approved: false });
 				} else {
+					// status === "answered" — user already submitted an answer
 					setStatus("answered");
 					addToolApprovalResponse({ id: approvalId, approved: true });
 				}

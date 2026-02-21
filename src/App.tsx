@@ -1,6 +1,7 @@
 import { lazy, type ReactNode, Suspense, useEffect } from "react";
 import { Route, Routes } from "react-router";
 import { AppShell } from "@/components/app-shell";
+import { MonacoEditorFix } from "@/components/monaco-editor-fix";
 import { ResizeObserverFix } from "@/components/resize-observer-fix";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
@@ -41,6 +42,7 @@ export function App() {
 		>
 			<TooltipProvider delayDuration={700}>
 				<ResizeObserverFix />
+				<MonacoEditorFix />
 				<Toaster />
 				<MaybeUpdateProvider>
 					<AppShell>

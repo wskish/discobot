@@ -20,8 +20,14 @@ export function useWorkspaces() {
 
 	const createWorkspace = async (data: CreateWorkspaceRequest) => {
 		const workspace = await api.createWorkspace(data);
-		// Don't await - revalidate in background to avoid blocking
-		mutate();
+		// Immediately update cache with the new workspace so it's available
+		// when navigating to the new session screen, then revalidate in background
+		mutate(
+			(current) => ({
+				workspaces: [...(current?.workspaces || []), workspace],
+			}),
+			{ revalidate: true },
+		);
 		return workspace;
 	};
 

@@ -746,7 +746,7 @@ func ptrString(s string) *string {
 // 3. If pending: send /discobot-commit to agent, transition to committing
 // 4. If appliedCommit not set: fetch patches from agent-api, apply to workspace
 // 5. Transition to completed
-func (s *SessionService) PerformCommit(ctx context.Context, projectID, sessionID string) error {
+func (s *SessionService) PerformCommit(ctx context.Context, projectID, sessionID string) (retErr error) {
 	// Get session
 	sess, err := s.store.GetSessionByID(ctx, sessionID)
 	if err != nil {
@@ -758,6 +758,18 @@ func (s *SessionService) PerformCommit(ctx context.Context, projectID, sessionID
 	if err != nil {
 		return fmt.Errorf("workspace not found: %w", err)
 	}
+
+	// If PerformCommit returns an error (e.g. context deadline exceeded),
+	// mark the commit as failed so it doesn't get stuck in "pending" or "committing".
+	// Use a background context since the original ctx may have been cancelled.
+	defer func() {
+		if retErr != nil {
+			failCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			s.setCommitFailed(failCtx, projectID, workspace, sess, retErr.Error())
+			retErr = nil
+		}
+	}()
 
 	// Get current git status and set up session for this commit
 	gitStatus, err := s.gitService.Status(ctx, sess.WorkspaceID)

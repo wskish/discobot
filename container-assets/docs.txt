@@ -1,0 +1,141 @@
+# Discobot Workspace Customization
+
+Users can customize their workspace by adding files to `.discobot/` at the workspace root.
+
+## .discobot/hooks/
+
+Executable scripts with YAML front matter that run at lifecycle points.
+
+Requirements: executable bit, shebang line, `type` field in front matter.
+Files run in alphabetical order — prefix with numbers for ordering.
+
+### Front matter format
+
+Use `#---` / `#---` delimiters with `# key: value` lines inside:
+
+```bash
+#!/bin/bash
+#---
+# name: Display Name
+# type: session
+#---
+echo "script body"
+```
+
+Also supports `//---` (slash-prefixed) and plain `---` delimiters.
+
+### Hook types
+
+SESSION (type: session)
+  Runs once at container startup before the agent starts.
+  Fields: name, type, description, run_as (root|user, default: user)
+  Env: DISCOBOT_SESSION_ID, DISCOBOT_WORKSPACE, DISCOBOT_HOOK_TYPE=session
+  5-minute timeout. Failures are logged but don't block startup.
+
+FILE (type: file)
+  Runs after each LLM turn when matching files changed.
+  Fields: name, type, description, pattern (required, glob), notify_llm (default: true)
+  Env: DISCOBOT_CHANGED_FILES (space-separated paths), DISCOBOT_SESSION_ID, DISCOBOT_HOOK_TYPE=file
+  If notify_llm is true and hook fails, the LLM is re-prompted (max 3 retries).
+  If notify_llm is false, runs silently (useful for auto-fixers).
+  Glob uses picomatch: "*.go", "src/**/*.ts", "*.{ts,tsx}", "{package.json,pnpm*.yaml}"
+
+PRE-COMMIT (type: pre-commit)
+  Installed as git pre-commit hook. Blocks commit on failure.
+  Fields: name, type, description
+  Existing .git/hooks/pre-commit is preserved as pre-commit.original.
+
+### Examples
+
+```bash
+#!/bin/bash
+#---
+# name: Install system deps
+# type: session
+# run_as: root
+#---
+apt-get update && apt-get install -y postgresql-client
+```
+
+```bash
+#!/bin/bash
+#---
+# name: Go format check
+# type: file
+# pattern: "*.go"
+#---
+gofmt -l $DISCOBOT_CHANGED_FILES
+```
+
+```bash
+#!/bin/bash
+#---
+# name: ESLint autofix
+# type: file
+# pattern: "*.{ts,tsx}"
+# notify_llm: false
+#---
+npx eslint --fix $DISCOBOT_CHANGED_FILES
+```
+
+```bash
+#!/bin/bash
+#---
+# name: CI
+# type: pre-commit
+#---
+pnpm run ci
+```
+
+## .discobot/services/
+
+Background processes with optional HTTP proxying.
+
+### Executable services
+
+Executable scripts that Discobot starts/stops as child processes.
+Requirements: executable bit, shebang line, script body.
+
+Fields: name, description, http (port number), https (port number), path (URL path for preview)
+
+Service ID is derived from filename: extensions stripped (.sh,.py,.js,etc), lowercase, non-alphanumeric removed.
+
+```bash
+#!/bin/bash
+#---
+# name: Dev Server
+# description: Vite development server
+# http: 3000
+#---
+pnpm dev
+```
+
+```bash
+#!/bin/bash
+#---
+# name: SQLite GUI
+# description: Database browser
+# http: 8080
+#---
+exec uvx --from sqlite-web sqlite_web "$HOME/app.db" --port 8080 --host 0.0.0.0 --no-browser
+```
+
+### Passive services
+
+Declare an HTTP port for an externally-managed service (no script body needed).
+Does not need executable bit or shebang. Must have http or https and empty body.
+
+```yaml
+---
+name: Web App
+description: Started by devcontainer
+http: 3000
+---
+```
+
+### HTTP proxy
+
+Services with http/https get automatic proxying via subdomain URLs:
+  {session-id}-svc-{service-id}.{base-domain}
+Non-passive services auto-start on first HTTP request.
+The `path` field sets the default URL path in the web preview.
